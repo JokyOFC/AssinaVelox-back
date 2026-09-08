@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+</style>
+</helmet>
+<div style="min-height: 100vh; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe; padding: 48px clamp(24px, 5vw, 64px);">
+  <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <img src="assets/logo.png" alt="AssinaVelox" style="height: 34px; width: auto; display: block; margin-bottom: 20px;" />
+        <p style="margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #8a96ad;">Sistema · design das telas</p>
+        <h1 style="margin: 0; font-size: 30px; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: -.01em; line-height: 1;">Mapa de telas</h1>
+        <p style="margin: 12px 0 0; font-size: 14px; color: #47536b; max-width: 620px; line-height: 1.6;">Padrão shadcn/ui (cards, tabelas, badges, tabs, dialogs) com a identidade AssinaVelox: Exo 2, navy #0b1f42, azul #1257c9. Shell com sidebar clara; cada tela é um arquivo e os links entre elas funcionam.</p>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="App - Login.dc.html" style="display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 8px; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600;" style-hover="background: #0f4bb0; color: #ffffff;">Começar pelo login →</a>
+        <a href="Home.dc.html" style="display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 600; color: #0b1f42;" style-hover="background: #f4f8fe; color: #0b1f42;">Site institucional</a>
+      </div>
+    </div>
+
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+      <section style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 12px;"><h2 style="margin: 0; font-size: 16px; font-weight: 700;">{{ g.title }}</h2><span style="font-size: 12.5px; color: #8a96ad;">{{ g.sub }}</span></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;">
+          <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+            <a href="{{ it.href }}" style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); color: #0b1f42;" style-hover="border-color: #1257c9; color: #0b1f42; box-shadow: 0 8px 24px rgba(11,31,66,.08);">
+              <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">{{ it.name }}</span><span style="font-size: 11px; font-weight: 700; color: #1257c9; background: #e8f0fd; border-radius: 6px; padding: 2px 7px; white-space: nowrap;">{{ it.tag }}</span></span>
+              <span style="font-size: 12.5px; color: #47536b; line-height: 1.5;">{{ it.desc }}</span>
+            </a>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <div style="padding: 18px 20px; border-radius: 12px; background: #ffffff; border: 1px solid #e6eaf2; font-size: 13px; color: #47536b; line-height: 1.6;">
+      <b style="color: #0b1f42;">Para o time de front (React + Vite + shadcn/ui):</b> tokens sugeridos em <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">globals.css</code> — <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--primary: #1257c9</code>, <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--foreground: #0b1f42</code>, <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--muted-foreground: #47536b</code>, <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--border: #e6eaf2</code>, <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--accent: #f4f8fe</code>, <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--sidebar: #f7f9fc</code>, <code style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">--radius: 0.5rem</code>; fonte Exo 2 via Google Fonts; ícones Lucide. Componentes usados: Sidebar, Breadcrumb, Card, Table, Badge, Tabs, Button, Input, Checkbox, Switch, Dialog, DropdownMenu, Progress, Separator, Command (⌘K).
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const I = (name, href, tag, desc) => ({ name, href, tag, desc });
+    return {
+      groups: [
+        { title: "Autenticação", sub: "layout dividido, painel navy com a marca", items: [
+          I("Login", "App - Login.dc.html", "tela", "E-mail e senha, mostrar senha, entrar com certificado digital"),
+          I("Criar conta", "App - Criar conta.dc.html", "tela", "Cadastro com empresa/CNPJ, força de senha e aceite dos termos"),
+          I("Recuperar senha", "App - Recuperar senha.dc.html", "tela + estado", "Envio do link e confirmação")
+        ] },
+        { title: "Aplicação do cliente", sub: "sidebar clara · cabeçalho com breadcrumb e busca ⌘K", items: [
+          I("Dashboard", "App - Dashboard.dc.html", "tela", "KPIs, assinaturas por dia, pendências, uso do plano, documentos recentes"),
+          I("Documentos", "App - Documentos.dc.html", "tela + filtros", "Pastas, abas por status, seleção em lote, paginação"),
+          I("Detalhe do documento", "App - Documento.dc.html", "tela + abas", "Preview, signatários, trilha de auditoria e detalhes"),
+          I("Nova solicitação", "App - Nova solicitacao.dc.html", "wizard", "Upload/modelo → signatários → campos → revisar e enviar"),
+          I("Assinaturas", "App - Assinaturas.dc.html", "tela + filtros", "Uma linha por signatário: canal, autenticação, status, evidências"),
+          I("Modelos", "App - Modelos.dc.html", "tela", "Galeria por categoria, usar/editar modelo"),
+          I("Usuários", "App - Usuarios.dc.html", "tela + dialog", "Membros, funções e permissões, convite"),
+          I("API — documentação", "App - API.dc.html", "tela", "Endpoints, parâmetros, exemplos cURL/PHP/JS, webhooks, erros"),
+          I("API — chaves e webhooks", "App - Integracoes.dc.html", "tela", "Chaves, endpoints de webhook, entregas recentes, segredo"),
+          I("Configurações", "App - Configuracoes.dc.html", "tela + abas", "Empresa, segurança, padrões de assinatura, notificações"),
+          I("Plano e cobrança", "App - Cobranca.dc.html", "tela", "Plano atual, uso, pagamento, faturas e NF-e")
+        ] },
+        { title: "Signatário (público)", sub: "sem login · funciona no celular", items: [
+          I("Página de assinatura", "Assinar - Pagina publica.dc.html", "fluxo", "Token SMS + selfie → desenhar/digitar/certificado → comprovante")
+        ] },
+        { title: "Painel interno AssinaVelox", sub: "equipe da plataforma", items: [
+          I("Clientes", "Admin - Clientes.dc.html", "tela + filtros", "Contas, plano, uso, MRR, status, acessar como cliente")
+        ] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

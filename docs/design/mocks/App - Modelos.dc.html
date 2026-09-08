@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input { font-family: inherit; }
+input::placeholder { color: #8a96ad; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="modelos" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap;">
+      <a href="App - Dashboard.dc.html" style="color: #8a96ad;">Imobiliária Horizonte</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42;">Modelos</span>
+    </nav>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Modelos de documentos</h1>
+        <p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">Documentos com campos e signatários pré-configurados. Use-os para enviar em segundos.</p>
+      </div>
+      <button style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Novo modelo</button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px; height: 34px; flex: 1 1 220px; max-width: 320px; padding: 0 10px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; color: #8a96ad;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input placeholder="Buscar modelo" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13.5px; color: #0b1f42;" />
+      </div>
+      <sc-for list="{{ cats }}" as="c" hint-placeholder-count="5">
+        <button onClick="{{ c.select }}" style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid {{ c.bd }}; background: {{ c.bg }}; color: {{ c.fg }}; font-size: 12.5px; font-weight: 600; cursor: pointer;">{{ c.label }}</button>
+      </sc-for>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;">
+      <sc-for list="{{ items }}" as="t" hint-placeholder-count="8">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); display: flex; flex-direction: column; overflow: hidden;" style-hover="border-color: #c9d4e6; box-shadow: 0 8px 24px rgba(11,31,66,.08);">
+          <div style="height: 120px; background: #eef2f9; display: flex; align-items: flex-end; justify-content: center; padding: 16px 24px 0; position: relative;">
+            <div style="width: 100%; background: #ffffff; border-radius: 4px 4px 0 0; box-shadow: 0 -2px 12px rgba(11,31,66,.08); padding: 12px 14px 0; display: flex; flex-direction: column; gap: 5px;"><div style="height: 5px; width: 60%; background: #0b1f42; border-radius: 3px; opacity: .8;"></div><div style="height: 4px; background: #eef2f9; border-radius: 3px;"></div><div style="height: 4px; width: 90%; background: #eef2f9; border-radius: 3px;"></div><div style="height: 4px; width: 70%; background: #eef2f9; border-radius: 3px;"></div><div style="display: flex; gap: 6px; margin-top: 6px;"><div style="flex: 1; height: 14px; border: 1px dashed #1257c9; border-radius: 3px; background: rgba(18,87,201,.06);"></div><div style="flex: 1; height: 14px; border: 1px dashed #d59b2a; border-radius: 3px; background: rgba(213,155,42,.08);"></div></div></div>
+            <span style="position: absolute; top: 10px; left: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: #ffffff; color: #47536b; border: 1px solid #e6eaf2;">{{ t.cat }}</span>
+          </div>
+          <div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1;">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.3;">{{ t.name }}</div>
+            <div style="font-size: 12.5px; color: #8a96ad;">{{ t.meta }}</div>
+            <div style="font-size: 12px; color: #47536b; margin-top: auto; padding-top: 8px;">Usado {{ t.uses }} vezes · atualizado {{ t.updated }}</div>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid #f1f4f9;">
+            <a href="App - Nova solicitacao.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; background: #1257c9; color: #ffffff; font-size: 13px; font-weight: 600;" style-hover="background: #0f4bb0; color: #ffffff;">Usar modelo</a>
+            <span style="display: flex; gap: 4px;"><button title="Editar" style="width: 32px; height: 32px; border: 1px solid #d5dce9; border-radius: 8px; background: #ffffff; color: #47536b; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></button><button style="width: 32px; height: 32px; border: 1px solid #d5dce9; border-radius: 8px; background: #ffffff; color: #47536b; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></span>
+          </div>
+        </div>
+      </sc-for>
+      <button style="min-height: 280px; border: 1.5px dashed #c9d4e6; border-radius: 12px; background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #47536b;" style-hover="border-color: #1257c9; color: #1257c9; background: #f4f8fe;">
+        <span style="width: 44px; height: 44px; border-radius: 12px; background: #e8f0fd; color: #1257c9; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span>
+        <span style="font-size: 14px; font-weight: 600;">Criar modelo a partir de um PDF</span>
+        <span style="font-size: 12.5px; color: #8a96ad;">Defina campos e papéis uma vez, reutilize sempre</span>
+      </button>
+    </div>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sidebarOpen: true, cat: "Todos" };
+  renderVals() {
+    const cat = this.state.cat;
+    const all = [
+      ["Contrato de locação residencial v3", "Locação", "2 signatários · 5 campos · 6 págs", 148, "há 3 dias"],
+      ["Termo de vistoria de entrada", "Locação", "3 signatários · 8 campos · 12 págs", 96, "há 1 semana"],
+      ["Proposta comercial", "Vendas", "2 signatários · 3 campos · 3 págs", 64, "há 2 semanas"],
+      ["Autorização de venda com exclusividade", "Vendas", "1 signatário · 4 campos · 3 págs", 41, "há 1 mês"],
+      ["Contrato de administração de imóvel", "Administrativo", "2 signatários · 6 campos · 9 págs", 52, "há 5 dias"],
+      ["Aditivo contratual — reajuste", "Locação", "2 signatários · 3 campos · 4 págs", 37, "ontem"],
+      ["Procuração simples", "Jurídico", "1 signatário · 2 campos · 1 pág", 22, "há 2 meses"],
+      ["Acordo de confidencialidade (NDA)", "Jurídico", "2 signatários · 4 campos · 5 págs", 9, "há 3 semanas"]
+    ].map(([name, cat, meta, uses, updated]) => ({ name, cat, meta, uses, updated }));
+    return {
+      sidebarOpen: this.state.sidebarOpen, toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      cats: ["Todos", "Locação", "Vendas", "Administrativo", "Jurídico"].map(c => ({ label: c, bd: c === cat ? "#1257c9" : "#d5dce9", bg: c === cat ? "#e8f0fd" : "#ffffff", fg: c === cat ? "#1257c9" : "#47536b", select: () => this.setState({ cat: c }) })),
+      items: all.filter(t => cat === "Todos" || t.cat === cat)
+    };
+  }
+}
+</script>
+</body>
+</html>

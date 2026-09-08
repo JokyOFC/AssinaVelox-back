@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input { font-family: inherit; }
+code, pre, kbd { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="api" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap;">
+      <a href="App - Dashboard.dc.html" style="color: #8a96ad;">Imobiliária Horizonte</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42;">API e integrações</span>
+    </nav>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px; background: #e6f7ee; color: #12784a; font-size: 12px; font-weight: 600;"><span style="width: 7px; height: 7px; border-radius: 999px; background: #1fb865;"></span>API operacional · v1.8</span>
+    </div>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Documentação da API</h1>
+        <p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">REST · JSON · HTTPS. Integre a assinatura ao seu sistema em poucas chamadas.</p>
+      </div>
+      <div style="display: inline-flex; background: #eef2f9; border-radius: 8px; padding: 3px; gap: 2px;">
+        <span style="padding: 5px 12px; border-radius: 6px; background: #ffffff; box-shadow: 0 1px 2px rgba(11,31,66,.08); font-size: 12.5px; font-weight: 600; color: #0b1f42;">Documentação</span>
+        <a href="App - Integracoes.dc.html" style="padding: 5px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: #47536b;" style-hover="color: #0b1f42;">Chaves e webhooks</a>
+        <a href="App - Integracoes.dc.html" style="padding: 5px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: #47536b;" style-hover="color: #0b1f42;">Logs</a>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 24px; align-items: flex-start;">
+      <nav style="flex: 0 0 200px; position: sticky; top: 80px; display: flex; flex-direction: column; gap: 14px; font-size: 13px;">
+        <div>
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #8a96ad; padding: 0 10px 6px;">Começando</div>
+          <a href="#intro" style="display: block; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #1257c9; background: #e8f0fd;">Introdução</a>
+          <a href="#auth" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Autenticação</a>
+          <a href="#erros" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Erros e limites</a>
+        </div>
+        <div>
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #8a96ad; padding: 0 10px 6px;">Documentos</div>
+          <a href="#criar" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Criar documento</a>
+          <a href="#signatarios" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Adicionar signatários</a>
+          <a href="#enviar" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Enviar para assinatura</a>
+          <a href="#enviar" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Consultar e baixar</a>
+        </div>
+        <div>
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #8a96ad; padding: 0 10px 6px;">Eventos</div>
+          <a href="#webhooks" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">Webhooks</a>
+          <a href="#sdks" style="display: block; padding: 6px 10px; border-radius: 6px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;">SDKs</a>
+        </div>
+      </nav>
+
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 28px;">
+        <section id="intro" style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
+            <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12px; font-weight: 600; color: #8a96ad;">Base URL</span><code style="font-size: 13px; color: #0b1f42; word-break: break-all;">https://api.assinavelox.com.br/v1</code><span style="font-size: 12px; color: #8a96ad;">Sandbox: <code>https://sandbox.assinavelox.com.br/v1</code></span></div>
+            <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12px; font-weight: 600; color: #8a96ad;">Sua chave de produção</span><span style="display: flex; align-items: center; gap: 8px;"><code style="font-size: 13px; color: #0b1f42;">av_live_••••••••••••4f2a</code><button title="Copiar" style="width: 26px; height: 26px; border: 0; border-radius: 6px; background: #f1f4f9; color: #47536b; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #e8f0fd; color: #1257c9;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></span><a href="App - Integracoes.dc.html" style="font-size: 12px; font-weight: 600; color: #1257c9;">Gerenciar chaves →</a></div>
+            <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12px; font-weight: 600; color: #8a96ad;">Limites</span><span style="font-size: 13px; font-weight: 600;">600 req/min · arquivos até 25 MB</span><span style="font-size: 12px; color: #8a96ad;">Cabeçalhos <code>X-RateLimit-Remaining</code> em toda resposta</span></div>
+          </div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.65; color: #47536b; max-width: 760px;">A API da AssinaVelox segue REST. Todas as requisições e respostas usam JSON em UTF-8 e exigem HTTPS. Identificadores começam com um prefixo do recurso (<code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">doc_</code>, <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">sig_</code>, <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">evt_</code>). Use o ambiente sandbox para testar sem consumir documentos do plano.</p>
+        </section>
+
+        <section id="auth" style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+          <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 700;">Autenticação</h2>
+            <p style="margin: 0; font-size: 14px; line-height: 1.65; color: #47536b;">Envie a chave no cabeçalho <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">Authorization</code> como Bearer token. Chaves <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">av_test_</code> operam no sandbox e <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">av_live_</code> em produção. Nunca exponha a chave no front-end: faça as chamadas pelo seu back-end Laravel.</p>
+            <div style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 10px; background: #fff4e0; border: 1px solid #f5dfae; font-size: 13px; color: #9a5b00; line-height: 1.5;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>Chaves comprometidas podem ser revogadas a qualquer momento em Chaves e webhooks. A revogação é imediata.</div>
+          </div>
+          <div style="flex: 1 1 360px; min-width: 0; background: #0b1f42; border-radius: 12px; overflow: hidden;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 12px; color: #8fa3c7;"><span>Requisição autenticada</span><span>cURL</span></div>
+<pre style="margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.6; color: #dbe6fb; overflow-x: auto;">curl https://api.assinavelox.com.br/v1/documents \
+  -H <span style="color: #9be7b6;">"Authorization: Bearer av_live_sua_chave"</span> \
+  -H <span style="color: #9be7b6;">"Content-Type: application/json"</span></pre>
+          </div>
+        </section>
+
+        <section id="criar" style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;"><span style="font-size: 11.5px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border-radius: 6px; background: #e6f7ee; color: #12784a;">POST</span><code style="font-size: 14px; font-weight: 600;">/documents</code><h2 style="margin: 0 0 0 6px; font-size: 18px; font-weight: 700;">Criar documento</h2></div>
+          <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+            <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+              <p style="margin: 0; font-size: 14px; line-height: 1.65; color: #47536b;">Cria um documento em rascunho a partir de um PDF (base64 ou URL pública) ou de um modelo. O documento só consome o plano quando enviado.</p>
+              <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+                <div style="padding: 10px 16px; border-bottom: 1px solid #f1f4f9; font-size: 12px; font-weight: 600; color: #8a96ad;">Parâmetros do corpo</div>
+                <sc-for list="{{ createParams }}" as="p" hint-placeholder-count="6">
+                  <div style="display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13px;"><span><code style="font-size: 12.5px; font-weight: 600;">{{ p.name }}</code><span style="display: block; font-size: 11px; color: {{ p.reqColor }}; margin-top: 2px;">{{ p.type }} · {{ p.req }}</span></span><span style="color: #47536b; line-height: 1.5;">{{ p.desc }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+              <div style="background: #0b1f42; border-radius: 12px; overflow: hidden;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 14px; border-bottom: 1px solid rgba(255,255,255,.08);">
+                  <span style="font-size: 12px; color: #8fa3c7;">Exemplo</span>
+                  <div style="display: inline-flex; background: rgba(255,255,255,.06); border-radius: 6px; padding: 2px; gap: 2px;"><sc-for list="{{ langs }}" as="l" hint-placeholder-count="3"><button onClick="{{ l.select }}" style="padding: 3px 10px; border-radius: 5px; border: 0; cursor: pointer; font-size: 12px; font-weight: 600; background: {{ l.bg }}; color: {{ l.fg }};">{{ l.label }}</button></sc-for></div>
+                </div>
+                <sc-if value="{{ isCurl }}" hint-placeholder-val="{{ true }}">
+<pre style="margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.6; color: #dbe6fb; overflow-x: auto;">curl -X POST https://api.assinavelox.com.br/v1/documents \
+  -H <span style="color: #9be7b6;">"Authorization: Bearer av_live_sua_chave"</span> \
+  -H <span style="color: #9be7b6;">"Content-Type: application/json"</span> \
+  -d <span style="color: #9be7b6;">'{
+    "name": "Contrato de locação — Apto 302",
+    "file_url": "https://cdn.horizonte.com.br/contratos/302.pdf",
+    "folder_id": "fld_locacao",
+    "expires_in_days": 15,
+    "reminders": { "enabled": true, "every_days": 2 },
+    "message": "Segue o contrato para assinatura."
+  }'</span></pre>
+                </sc-if>
+                <sc-if value="{{ isPhp }}" hint-placeholder-val="{{ false }}">
+<pre style="margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.6; color: #dbe6fb; overflow-x: auto;"><span style="color: #6f87b8;">// Laravel · Illuminate\Support\Facades\Http</span>
+$response = Http::withToken(config(<span style="color: #9be7b6;">'services.assinavelox.key'</span>))
+    ->post(<span style="color: #9be7b6;">'https://api.assinavelox.com.br/v1/documents'</span>, [
+        <span style="color: #9be7b6;">'name'</span>            => <span style="color: #9be7b6;">'Contrato de locação — Apto 302'</span>,
+        <span style="color: #9be7b6;">'file_url'</span>        => $contrato->url(),
+        <span style="color: #9be7b6;">'folder_id'</span>       => <span style="color: #9be7b6;">'fld_locacao'</span>,
+        <span style="color: #9be7b6;">'expires_in_days'</span> => 15,
+        <span style="color: #9be7b6;">'reminders'</span>       => [<span style="color: #9be7b6;">'enabled'</span> => true, <span style="color: #9be7b6;">'every_days'</span> => 2],
+    ]);
+
+$documentId = $response->json(<span style="color: #9be7b6;">'id'</span>); <span style="color: #6f87b8;">// doc_9f2a7c1e</span></pre>
+                </sc-if>
+                <sc-if value="{{ isJs }}" hint-placeholder-val="{{ false }}">
+<pre style="margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.6; color: #dbe6fb; overflow-x: auto;"><span style="color: #6f87b8;">// Node.js / servidor (nunca no navegador)</span>
+const res = await fetch(<span style="color: #9be7b6;">"https://api.assinavelox.com.br/v1/documents"</span>, {
+  method: <span style="color: #9be7b6;">"POST"</span>,
+  headers: {
+    Authorization: <span style="color: #9be7b6;">`Bearer ${process.env.ASSINAVELOX_KEY}`</span>,
+    <span style="color: #9be7b6;">"Content-Type"</span>: <span style="color: #9be7b6;">"application/json"</span>,
+  },
+  body: JSON.stringify({
+    name: <span style="color: #9be7b6;">"Contrato de locação — Apto 302"</span>,
+    file_url: <span style="color: #9be7b6;">"https://cdn.horizonte.com.br/contratos/302.pdf"</span>,
+    expires_in_days: 15,
+  }),
+});
+const document = await res.json(); <span style="color: #6f87b8;">// { id: "doc_9f2a7c1e", status: "draft", ... }</span></pre>
+                </sc-if>
+              </div>
+              <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; overflow: hidden;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #f1f4f9; font-size: 12px; color: #8a96ad;"><span>Resposta</span><span style="font-weight: 700; color: #12784a;">201 Created</span></div>
+<pre style="margin: 0; padding: 14px 16px; font-size: 12.5px; line-height: 1.6; color: #0b1f42; overflow-x: auto; background: #fbfcfe;">{
+  "id": "doc_9f2a7c1e",
+  "name": "Contrato de locação — Apto 302",
+  "status": "draft",
+  "pages": 6,
+  "folder_id": "fld_locacao",
+  "expires_at": "2026-09-18T23:59:59-03:00",
+  "signers": [],
+  "created_at": "2026-09-03T09:44:12-03:00"
+}</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="signatarios" style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;"><span style="font-size: 11.5px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border-radius: 6px; background: #e6f7ee; color: #12784a;">POST</span><code style="font-size: 14px; font-weight: 600;">/documents/{id}/signers</code><h2 style="margin: 0 0 0 6px; font-size: 18px; font-weight: 700;">Adicionar signatários</h2></div>
+          <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+            <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+              <p style="margin: 0; font-size: 14px; line-height: 1.65; color: #47536b;">Adiciona um signatário e define canal de envio, métodos de autenticação e campos. Os campos usam coordenadas relativas (0–1) por página, ou âncoras de texto como <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">{{ sigAnchor }}</code> no PDF.</p>
+              <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+                <div style="padding: 10px 16px; border-bottom: 1px solid #f1f4f9; font-size: 12px; font-weight: 600; color: #8a96ad;">Parâmetros do corpo</div>
+                <sc-for list="{{ signerParams }}" as="p" hint-placeholder-count="7">
+                  <div style="display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13px;"><span><code style="font-size: 12.5px; font-weight: 600;">{{ p.name }}</code><span style="display: block; font-size: 11px; color: {{ p.reqColor }}; margin-top: 2px;">{{ p.type }} · {{ p.req }}</span></span><span style="color: #47536b; line-height: 1.5;">{{ p.desc }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex: 1 1 360px; min-width: 0; background: #0b1f42; border-radius: 12px; overflow: hidden;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 12px; color: #8fa3c7;"><span>Corpo da requisição</span><span>JSON</span></div>
+<pre style="margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.6; color: #dbe6fb; overflow-x: auto;">{
+  <span style="color: #9be7b6;">"name"</span>: <span style="color: #9be7b6;">"Maria A. Souza"</span>,
+  <span style="color: #9be7b6;">"email"</span>: <span style="color: #9be7b6;">"maria.souza@gmail.com"</span>,
+  <span style="color: #9be7b6;">"phone"</span>: <span style="color: #9be7b6;">"+5511988771234"</span>,
+  <span style="color: #9be7b6;">"role"</span>: <span style="color: #9be7b6;">"Locatária"</span>,
+  <span style="color: #9be7b6;">"channel"</span>: <span style="color: #9be7b6;">"whatsapp"</span>,
+  <span style="color: #9be7b6;">"auth"</span>: [<span style="color: #9be7b6;">"token_sms"</span>, <span style="color: #9be7b6;">"selfie"</span>],
+  <span style="color: #9be7b6;">"order"</span>: 1,
+  <span style="color: #9be7b6;">"fields"</span>: [
+    { <span style="color: #9be7b6;">"type"</span>: <span style="color: #9be7b6;">"signature"</span>, <span style="color: #9be7b6;">"page"</span>: 6, <span style="color: #9be7b6;">"x"</span>: 0.12, <span style="color: #9be7b6;">"y"</span>: 0.78 },
+    { <span style="color: #9be7b6;">"type"</span>: <span style="color: #9be7b6;">"initials"</span>, <span style="color: #9be7b6;">"pages"</span>: <span style="color: #9be7b6;">"all"</span> },
+    { <span style="color: #9be7b6;">"type"</span>: <span style="color: #9be7b6;">"date"</span>, <span style="color: #9be7b6;">"anchor"</span>: <span style="color: #9be7b6;">"{{ sigAnchorDate }}"</span> }
+  ]
+}</pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="enviar" style="display: flex; flex-direction: column; gap: 12px;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 700;">Enviar, consultar e baixar</h2>
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+            <sc-for list="{{ endpoints }}" as="e" hint-placeholder-count="6">
+              <div style="display: grid; grid-template-columns: 70px minmax(0, 1.4fr) minmax(0, 2fr); gap: 12px; align-items: center; padding: 11px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13px;" style-hover="background: #f7f9fd;"><span style="font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 0; border-radius: 6px; text-align: center; background: {{ e.bg }}; color: {{ e.fg }};">{{ e.method }}</span><code style="font-size: 12.5px; font-weight: 600; word-break: break-all;">{{ e.path }}</code><span style="color: #47536b;">{{ e.desc }}</span></div>
+            </sc-for>
+          </div>
+        </section>
+
+        <section id="webhooks" style="display: flex; flex-direction: column; gap: 14px;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 700;">Webhooks</h2>
+          <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+            <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+              <p style="margin: 0; font-size: 14px; line-height: 1.65; color: #47536b;">Cadastre uma URL HTTPS em Chaves e webhooks. Cada evento é enviado como POST com o cabeçalho <code style="font-size: 12.5px; background: #f1f4f9; padding: 1px 5px; border-radius: 4px;">X-AssinaVelox-Signature</code> (HMAC SHA-256 do corpo com o segredo do endpoint). Respondemos com novas tentativas por até 24 horas se seu servidor não retornar 2xx.</p>
+              <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+                <sc-for list="{{ events }}" as="ev" hint-placeholder-count="8">
+                  <div style="display: grid; grid-template-columns: minmax(150px, 190px) 1fr; gap: 12px; padding: 9px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13px;"><code style="font-size: 12.5px; font-weight: 600; color: #1257c9;">{{ ev.name }}</code><span style="color: #47536b;">{{ ev.desc }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex: 1 1 360px; min-width: 0; background: #0b1f42; border-radius: 12px; overflow: hidden;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 12px; color: #8fa3c7;"><span>Payload · signer.signed</span><span>JSON</span></div>
+<pre style="margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.6; color: #dbe6fb; overflow-x: auto;">{
+  <span style="color: #9be7b6;">"id"</span>: <span style="color: #9be7b6;">"evt_01j7x9"</span>,
+  <span style="color: #9be7b6;">"type"</span>: <span style="color: #9be7b6;">"signer.signed"</span>,
+  <span style="color: #9be7b6;">"created_at"</span>: <span style="color: #9be7b6;">"2026-09-02T14:32:08-03:00"</span>,
+  <span style="color: #9be7b6;">"data"</span>: {
+    <span style="color: #9be7b6;">"document_id"</span>: <span style="color: #9be7b6;">"doc_9f2a7c1e"</span>,
+    <span style="color: #9be7b6;">"signer_id"</span>: <span style="color: #9be7b6;">"sig_4b0d8a63"</span>,
+    <span style="color: #9be7b6;">"name"</span>: <span style="color: #9be7b6;">"Maria A. Souza"</span>,
+    <span style="color: #9be7b6;">"auth"</span>: [<span style="color: #9be7b6;">"token_sms"</span>, <span style="color: #9be7b6;">"selfie"</span>],
+    <span style="color: #9be7b6;">"ip"</span>: <span style="color: #9be7b6;">"187.12.44.9"</span>,
+    <span style="color: #9be7b6;">"remaining_signers"</span>: 1
+  }
+}</pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="erros" style="display: flex; flex-direction: column; gap: 12px;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 700;">Erros e limites</h2>
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+            <sc-for list="{{ errors }}" as="er" hint-placeholder-count="7">
+              <div style="display: grid; grid-template-columns: 60px minmax(0, 1fr) minmax(0, 2fr); gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13px;"><code style="font-size: 12.5px; font-weight: 700; color: {{ er.color }};">{{ er.code }}</code><span style="font-weight: 600;">{{ er.name }}</span><span style="color: #47536b;">{{ er.desc }}</span></div>
+            </sc-for>
+          </div>
+        </section>
+
+        <section id="sdks" style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 700;">SDKs e exemplos</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <a href="#" style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;" style-hover="border-color: #1257c9; color: #0b1f42;"><span style="font-size: 14px; font-weight: 600;">PHP / Laravel</span><code style="font-size: 12px; color: #47536b;">composer require assinavelox/laravel</code><span style="font-size: 12px; color: #8a96ad;">Facade, jobs de webhook e validação de assinatura</span></a>
+            <a href="#" style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;" style-hover="border-color: #1257c9; color: #0b1f42;"><span style="font-size: 14px; font-weight: 600;">Node.js</span><code style="font-size: 12px; color: #47536b;">npm i @assinavelox/sdk</code><span style="font-size: 12px; color: #8a96ad;">Tipado em TypeScript</span></a>
+            <a href="#" style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;" style-hover="border-color: #1257c9; color: #0b1f42;"><span style="font-size: 14px; font-weight: 600;">Python</span><code style="font-size: 12px; color: #47536b;">pip install assinavelox</code><span style="font-size: 12px; color: #8a96ad;">Cliente síncrono e assíncrono</span></a>
+            <a href="#" style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px;" style-hover="border-color: #1257c9; color: #0b1f42;"><span style="font-size: 14px; font-weight: 600;">Coleção Postman</span><code style="font-size: 12px; color: #47536b;">OpenAPI 3.1</code><span style="font-size: 12px; color: #8a96ad;">Todos os endpoints com exemplos</span></a>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sidebarOpen: true, lang: "curl" };
+  renderVals() {
+    const lang = this.state.lang;
+    const req = "obrigatório", opt = "opcional", rc = "#b42323", oc = "#8a96ad";
+    const P = (name, type, r, desc) => ({ name, type, req: r ? req : opt, reqColor: r ? rc : oc, desc });
+    const M = { GET: ["#e8f0fd", "#1257c9"], POST: ["#e6f7ee", "#12784a"], DELETE: ["#fdeaea", "#b42323"] };
+    return {
+      sidebarOpen: this.state.sidebarOpen, toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      langs: [["curl", "cURL"], ["php", "PHP"], ["js", "JavaScript"]].map(([k, label]) => ({ label, bg: k === lang ? "#ffffff" : "transparent", fg: k === lang ? "#0b1f42" : "#8fa3c7", select: () => this.setState({ lang: k }) })),
+      isCurl: lang === "curl", isPhp: lang === "php", isJs: lang === "js",
+      sigAnchor: "{{assinatura_locataria}}", sigAnchorDate: "{{data_locataria}}",
+      createParams: [
+        P("name", "string", true, "Nome exibido aos signatários e na lista de documentos."),
+        P("file_url", "string", false, "URL pública do PDF/DOCX. Alternativa: file_base64 ou template_id."),
+        P("template_id", "string", false, "Cria a partir de um modelo com campos e signatários pré-configurados."),
+        P("folder_id", "string", false, "Pasta de destino. Padrão: raiz da conta."),
+        P("expires_in_days", "integer", false, "Prazo para assinatura (1–90). Padrão: 30."),
+        P("reminders", "object", false, "{ enabled, every_days }. Lembretes automáticos aos pendentes."),
+        P("message", "string", false, "Mensagem incluída nos convites de assinatura."),
+        P("metadata", "object", false, "Chaves e valores livres (até 20) devolvidos nos webhooks.")
+      ],
+      signerParams: [
+        P("name", "string", true, "Nome completo do signatário."),
+        P("email", "string", false, "Obrigatório quando channel = email ou auth inclui token_email."),
+        P("phone", "string", false, "E.164. Obrigatório para whatsapp, sms ou token_sms."),
+        P("role", "string", false, "Papel exibido no documento: Locatária, Fiador, Testemunha…"),
+        P("channel", "enum", true, "email · whatsapp · sms"),
+        P("auth", "array", true, "token_email · token_sms · selfie · icp_brasil · drawn (um ou mais)."),
+        P("order", "integer", false, "Ordem sequencial. Omitido = assina em paralelo."),
+        P("fields", "array", true, "Campos: signature, initials, name, cpf, date, text, checkbox. Posição por x/y (0–1) e page, ou anchor.")
+      ],
+      endpoints: [
+        ["POST", "/documents/{id}/send", "Envia os convites e bloqueia edições. Consome 1 documento do plano."],
+        ["GET", "/documents/{id}", "Status geral, signatários e eventos resumidos."],
+        ["GET", "/documents", "Lista paginada. Filtros: status, folder_id, created_after, q."],
+        ["GET", "/documents/{id}/download?type=signed", "PDF assinado (signed), original ou certificado de conclusão (certificate)."],
+        ["POST", "/documents/{id}/signers/{signer_id}/remind", "Reenvia o convite pelo canal configurado."],
+        ["POST", "/documents/{id}/cancel", "Cancela o documento e notifica os signatários pendentes."],
+        ["DELETE", "/documents/{id}", "Exclui rascunhos. Documentos enviados só podem ser cancelados."]
+      ].map(([method, path, desc]) => ({ method, path, desc, bg: M[method][0], fg: M[method][1] })),
+      events: [
+        ["document.sent", "Convites enviados a todos ou ao primeiro da ordem"], ["signer.viewed", "Signatário abriu o link do documento"], ["signer.authenticated", "Token, selfie ou certificado validados"],
+        ["signer.signed", "Signatário concluiu a assinatura"], ["signer.refused", "Signatário recusou, com motivo em data.reason"], ["document.completed", "Todos assinaram; PDF final e certificado disponíveis"],
+        ["document.expired", "Prazo encerrado com pendências"], ["document.cancelled", "Cancelado pela conta ou via API"]
+      ].map(([name, desc]) => ({ name, desc })),
+      errors: [
+        ["400", "bad_request", "JSON inválido ou parâmetro com tipo incorreto.", "#b42323"], ["401", "unauthorized", "Chave ausente, inválida ou revogada.", "#b42323"],
+        ["402", "plan_limit_reached", "Documentos do plano esgotados no ciclo atual.", "#9a5b00"], ["404", "not_found", "Recurso inexistente ou de outra conta.", "#47536b"],
+        ["409", "invalid_state", "Ação incompatível com o status atual (ex.: editar documento enviado).", "#9a5b00"], ["422", "validation_error", "Campos obrigatórios ausentes; detalhes em errors[].", "#b42323"],
+        ["429", "rate_limited", "Acima de 600 req/min. Aguarde Retry-After segundos.", "#9a5b00"]
+      ].map(([code, name, desc, color]) => ({ code, name, desc, color }))
+    };
+  }
+}
+</script>
+</body>
+</html>

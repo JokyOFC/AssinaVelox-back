@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #eef2f9; }
+* { box-sizing: border-box; }
+a { color: #1257c9; text-decoration: none; }
+a:hover { color: #0b1f42; }
+button, input { font-family: inherit; }
+input::placeholder { color: #8a96ad; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #eef2f9;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 60px; display: flex; align-items: center; gap: 16px; padding: 0 24px; background: #ffffff; border-bottom: 1px solid #e6eaf2;">
+    <span style="display: flex; align-items: center; gap: 10px;"><span style="width: 34px; height: 34px; border-radius: 8px; background: #0b1f42; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px;">IH</span><span><span style="display: block; font-size: 13.5px; font-weight: 600;">Imobiliária Horizonte</span><span style="display: block; font-size: 11.5px; color: #8a96ad;">solicita sua assinatura</span></span></span>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 4px;">
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{ s.bg }}; color: {{ s.fg }};"><span style="width: 16px; height: 16px; border-radius: 999px; background: {{ s.dotBg }}; color: {{ s.dotFg }}; display: inline-flex; align-items: center; justify-content: center; font-size: 10px;">{{ s.mark }}</span>{{ s.label }}</span>
+      </sc-for>
+    </div>
+    <span style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #8a96ad; padding-left: 12px; border-left: 1px solid #e6eaf2;">via <img src="assets/logo.png" alt="AssinaVelox" style="height: 18px; width: auto;" /></span>
+  </header>
+
+  <div style="flex: 1; display: flex; gap: 20px; padding: 20px 24px 40px; align-items: flex-start; flex-wrap: wrap; max-width: 1200px; width: 100%; margin: 0 auto;">
+    <div style="flex: 1.5 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 10px; font-size: 13px; color: #47536b; flex-wrap: wrap;">
+        <span style="display: flex; align-items: center; gap: 10px; min-width: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1257c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><b style="color: #0b1f42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Contrato de locação — Apto 302</b><span style="white-space: nowrap;">· 6 páginas</span></span>
+        <span style="display: flex; gap: 6px;"><button style="height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12.5px; font-weight: 600; color: #0b1f42; cursor: pointer;">Baixar PDF</button><button style="height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12.5px; font-weight: 600; color: #0b1f42; cursor: pointer;">Ampliar</button></span>
+      </div>
+      <div style="width: 100%; max-width: 680px; margin: 0 auto; aspect-ratio: 1 / 1.3; background: #ffffff; box-shadow: 0 8px 30px rgba(11,31,66,.1); padding: 8% 9%; display: flex; flex-direction: column; gap: 14px; position: relative;">
+        <div style="font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; text-align: center;">Contrato de locação residencial</div>
+        <div style="display: flex; flex-direction: column; gap: 7px; margin-top: 6px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 96%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 88%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 62%;"></div></div>
+        <div style="font-size: 10px; font-weight: 700; color: #47536b;">CLÁUSULA 1ª — DO OBJETO</div>
+        <div style="display: flex; flex-direction: column; gap: 7px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 93%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 97%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 40%;"></div></div>
+        <div style="font-size: 10px; font-weight: 700; color: #47536b;">CLÁUSULA 2ª — DO PRAZO</div>
+        <div style="display: flex; flex-direction: column; gap: 7px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 90%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 74%;"></div></div>
+        <div style="margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div style="border: 1.5px {{ fieldBorder }}; background: {{ fieldBg }}; border-radius: 6px; padding: 10px 10px 6px; position: relative; min-height: 54px; display: flex; flex-direction: column; justify-content: center;">
+            <span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: {{ fieldLabelFg }}; background: {{ fieldBg }}; padding: 0 4px;">Locatária · você</span>
+            <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}"><span style="font-size: 10px; font-weight: 600; color: #1257c9;">Clique para assinar aqui</span></sc-if>
+            <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}"><span style="font-family: 'Caveat', cursive; font-size: 24px; line-height: 1; color: #0b1f42; transform: rotate(-2deg);">Maria A. Souza</span><span style="font-size: 8.5px; color: #12784a; margin-top: 4px;">✓ Assinado em 03/09/2026 09:52</span></sc-if>
+          </div>
+          <div style="border: 1.5px dashed #d5dce9; background: #fbfcfe; border-radius: 6px; padding: 10px; position: relative; min-height: 54px; display: flex; flex-direction: column; justify-content: center;"><span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8a96ad; background: #fbfcfe; padding: 0 4px;">Fiador</span><span style="font-size: 10px; color: #8a96ad;">Carlos Mendes · assina depois de você</span></div>
+        </div>
+        <div style="position: absolute; right: 12px; bottom: 10px; font-size: 8px; color: #8a96ad;">pág. 6/6</div>
+      </div>
+    </div>
+
+    <aside style="flex: 1 1 320px; min-width: 0; max-width: 420px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 80px;">
+      <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ true }}">
+      <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 1px 2px rgba(11,31,66,.04);">
+        <div><p style="margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #8a96ad;">Olá, Maria</p><h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; line-height: 1.25;">Confirme sua identidade para assinar</h1><p style="margin: 8px 0 0; font-size: 13.5px; color: #47536b; line-height: 1.55;">Ana Ribeiro (Imobiliária Horizonte) enviou este documento para você em 1 set. Prazo: <b style="color: #0b1f42;">15 set 2026</b>.</p></div>
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 10px; background: #f7f9fc; border: 1px solid #e6eaf2;">
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 13px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1257c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg><span>Enviamos um código por SMS para <b>•••• ••••-1234</b></span></div>
+          <div style="display: flex; gap: 8px;"><sc-for list="{{ otp }}" as="d" hint-placeholder-count="6"><input defaultValue="{{ d }}" maxLength="1" style="flex: 1; min-width: 0; height: 48px; text-align: center; font-size: 20px; font-weight: 700; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; color: #0b1f42; outline: none; font-variant-numeric: tabular-nums;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></sc-for></div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; color: #8a96ad;"><span>Código válido por 10 min</span><a href="#" style="font-weight: 600;">Reenviar código</a></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 12.5px; font-weight: 600; color: #47536b;">Também será solicitado</span>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e6eaf2; border-radius: 10px;"><span style="width: 34px; height: 34px; border-radius: 8px; background: #e8f0fd; color: #1257c9; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></span><span style="flex: 1;"><span style="display: block; font-size: 13px; font-weight: 600;">Selfie de verificação</span><span style="display: block; font-size: 12px; color: #8a96ad;">Uma foto do seu rosto, comparada ao documento. Não é armazenada em redes sociais.</span></span></div>
+        </div>
+        <button onClick="{{ toSign }}" style="height: 44px; border-radius: 10px; border: 0; background: #1257c9; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;">Confirmar código e continuar</button>
+        <p style="margin: 0; font-size: 12px; color: #8a96ad; line-height: 1.5; text-align: center;">Ao continuar você concorda com os <a href="Termos.dc.html">termos de assinatura eletrônica</a>. Seus dados são tratados conforme a LGPD.</p>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isSign }}" hint-placeholder-val="{{ false }}">
+      <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 1px 2px rgba(11,31,66,.04);">
+        <div><div style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #12784a; background: #e6f7ee; border-radius: 6px; padding: 3px 8px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Identidade confirmada</div><h1 style="margin: 12px 0 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em;">Sua assinatura</h1><p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">Escolha como quer assinar. Ela será aplicada em 1 campo e nas rubricas.</p></div>
+        <div style="display: inline-flex; background: #eef2f9; border-radius: 8px; padding: 3px; gap: 2px;">
+          <sc-for list="{{ modes }}" as="m" hint-placeholder-count="3"><button onClick="{{ m.select }}" style="flex: 1; padding: 6px 10px; border-radius: 6px; border: 0; cursor: pointer; background: {{ m.bg }}; box-shadow: {{ m.shadow }}; font-size: 12.5px; font-weight: 600; color: {{ m.fg }};">{{ m.label }}</button></sc-for>
+        </div>
+        <sc-if value="{{ isDraw }}" hint-placeholder-val="{{ true }}">
+        <div style="position: relative; height: 150px; border: 1.5px dashed #c9d4e6; border-radius: 10px; background: #fbfcfe; display: flex; align-items: center; justify-content: center; cursor: crosshair;">
+          <span style="font-family: 'Caveat', cursive; font-size: 40px; color: #0b1f42; transform: rotate(-3deg);">Maria A. Souza</span>
+          <span style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 1px; background: #d5dce9;"></span>
+          <span style="position: absolute; left: 16px; bottom: 10px; font-size: 11px; color: #8a96ad;">Desenhe com o dedo ou mouse</span>
+          <button style="position: absolute; right: 10px; top: 10px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 11.5px; font-weight: 600; color: #47536b; cursor: pointer;">Limpar</button>
+        </div>
+        </sc-if>
+        <sc-if value="{{ isType }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 10px;"><input defaultValue="Maria A. Souza" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /><div style="height: 100px; border: 1px solid #e6eaf2; border-radius: 10px; background: #fbfcfe; display: flex; align-items: center; justify-content: center;"><span style="font-family: 'Caveat', cursive; font-size: 40px; color: #0b1f42;">Maria A. Souza</span></div></div>
+        </sc-if>
+        <sc-if value="{{ isCert }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid #e6eaf2; border-radius: 10px; background: #fbfcfe; font-size: 13px; color: #47536b; line-height: 1.55;"><b style="color: #0b1f42;">Certificado digital ICP-Brasil</b>Conecte seu token/cartão (A3) ou use o certificado em nuvem. O AssinaVelox Signer será aberto para concluir.<button style="align-self: flex-start; margin-top: 4px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12.5px; font-weight: 600; color: #0b1f42; cursor: pointer;">Selecionar certificado</button></div>
+        </sc-if>
+        <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; color: #47536b; line-height: 1.5; cursor: pointer;"><input type="checkbox" defaultChecked="{{ true }}" style="width: 16px; height: 16px; accent-color: #1257c9; margin: 2px 0 0;" /><span>Declaro que li o documento e concordo em assiná-lo eletronicamente, com a mesma validade de uma assinatura manuscrita (Lei 14.063/2020).</span></label>
+        <button onClick="{{ toDone }}" style="height: 44px; border-radius: 10px; border: 0; background: #1257c9; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;">Assinar documento</button>
+        <a href="#" style="text-align: center; font-size: 12.5px; font-weight: 600; color: #8a96ad;">Recusar assinatura</a>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+      <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 1px 2px rgba(11,31,66,.04);">
+        <span style="width: 52px; height: 52px; border-radius: 14px; background: #e6f7ee; color: #1fb865; display: flex; align-items: center; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <div><h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em;">Documento assinado</h1><p style="margin: 8px 0 0; font-size: 13.5px; color: #47536b; line-height: 1.55;">Sua assinatura foi registrada em 03/09/2026 às 09:52. Você receberá o PDF final por WhatsApp quando Carlos Mendes também assinar.</p></div>
+        <div style="padding: 12px 14px; border-radius: 10px; background: #f7f9fc; border: 1px solid #e6eaf2; font-size: 12px; color: #47536b; line-height: 1.6;"><b style="color: #0b1f42;">Comprovante</b><br />ID AV-00148 · hash 9f2a…c41e<br />Autenticação: token SMS + selfie · IP 187.12.44.9</div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;"><button style="flex: 1; height: 40px; border-radius: 10px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 600; color: #0b1f42; cursor: pointer;">Baixar cópia</button><button onClick="{{ restart }}" style="flex: 1; height: 40px; border-radius: 10px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer;">Concluir</button></div>
+        <p style="margin: 0; font-size: 12px; color: #8a96ad; text-align: center;">Quer assinar seus próprios documentos? <a href="Home.dc.html" style="font-weight: 600;">Conheça a AssinaVelox</a></p>
+      </div>
+      </sc-if>
+
+      <div style="display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 11.5px; color: #8a96ad;"><span>Criptografia TLS</span><span>·</span><span>Trilha de auditoria</span><span>·</span><a href="Privacidade.dc.html" style="color: #8a96ad;">Privacidade</a></div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { phase: "auth", mode: "draw" };
+  renderVals() {
+    const { phase, mode } = this.state;
+    const order = ["auth", "sign", "done"];
+    const idx = order.indexOf(phase);
+    const steps = [["Confirmar identidade"], ["Assinar"], ["Concluído"]].map(([label], i) => {
+      const done = i < idx, cur = i === idx;
+      return { label, mark: done ? "✓" : String(i + 1), bg: cur ? "#e8f0fd" : "transparent", fg: cur ? "#1257c9" : done ? "#12784a" : "#8a96ad", dotBg: done ? "#1fb865" : cur ? "#1257c9" : "#e6eaf2", dotFg: done || cur ? "#ffffff" : "#8a96ad" };
+    });
+    return {
+      steps, isAuth: phase === "auth", isSign: phase === "sign", isDone: phase === "done", notDone: phase !== "done",
+      fieldBorder: phase === "done" ? "solid #1fb865" : "dashed #1257c9", fieldBg: phase === "done" ? "#e6f7ee" : "#e8f0fd", fieldLabelFg: phase === "done" ? "#12784a" : "#1257c9",
+      otp: ["4", "8", "2", "", "", ""],
+      toSign: () => this.setState({ phase: "sign" }), toDone: () => this.setState({ phase: "done" }), restart: () => this.setState({ phase: "auth" }),
+      modes: [["draw", "Desenhar"], ["type", "Digitar"], ["cert", "Certificado"]].map(([k, label]) => ({ label, bg: k === mode ? "#ffffff" : "transparent", shadow: k === mode ? "0 1px 2px rgba(11,31,66,.08)" : "none", fg: k === mode ? "#0b1f42" : "#47536b", select: () => this.setState({ mode: k }) })),
+      isDraw: mode === "draw", isType: mode === "type", isCert: mode === "cert"
+    };
+  }
+}
+</script>
+</body>
+</html>

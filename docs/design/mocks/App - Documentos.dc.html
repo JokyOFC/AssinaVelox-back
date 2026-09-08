@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input, select { font-family: inherit; }
+input::placeholder { color: #8a96ad; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="documentos" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap;">
+      <a href="App - Dashboard.dc.html" style="color: #8a96ad;">Imobiliária Horizonte</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42;">Documentos</span>
+    </nav>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 6px;">
+      <a href="App - API.dc.html" style="width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #47536b;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></a>
+      <button style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span style="position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 999px; background: #e5484d; border: 2px solid #fbfcfe;"></span></button>
+    </div>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Documentos</h1>
+        <p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">312 documentos · 23 aguardando assinatura · 2,4 GB usados</p>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 500; color: #0b1f42; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.04);" style-hover="background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>Importar</button>
+        <a href="App - Nova solicitacao.dc.html" style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0; color: #ffffff;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Nova solicitação</a>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 0 0 200px; display: flex; flex-direction: column; gap: 4px;">
+        <div style="height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #8a96ad;">Pastas<button title="Nova pasta" style="width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: #8a96ad; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button></div>
+        <sc-for list="{{ folders }}" as="f" hint-placeholder-count="6">
+          <button onClick="{{ f.select }}" style="display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 8px; border: 0; cursor: pointer; text-align: left; font-size: 13.5px; font-weight: {{ f.w }}; color: {{ f.fg }}; background: {{ f.bg }};" style-hover="background: #eef2f9;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span style="flex: 1;">{{ f.name }}</span><span style="font-size: 12px; color: #8a96ad; font-variant-numeric: tabular-nums;">{{ f.count }}</span></button>
+        </sc-for>
+        <div style="margin: 12px 10px 0; padding: 12px; border-radius: 10px; background: #e8f0fd; font-size: 12.5px; color: #1257c9; line-height: 1.5;"><b>Dica:</b> arraste documentos para uma pasta para organizá-los. Pastas podem ter permissões por usuário.</div>
+      </div>
+
+      <div style="flex: 1 1 520px; min-width: 0; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04);">
+        <div style="display: flex; align-items: center; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid #e6eaf2; overflow-x: auto;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+            <button onClick="{{ t.select }}" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border: 0; border-bottom: 2px solid {{ t.line }}; background: transparent; font-size: 13.5px; font-weight: {{ t.w }}; color: {{ t.fg }}; cursor: pointer; white-space: nowrap; margin-bottom: -1px;" style-hover="color: #0b1f42;">{{ t.label }}<span style="font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: {{ t.badgeBg }}; color: {{ t.badgeFg }};">{{ t.count }}</span></button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ noneSelected }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px; height: 34px; flex: 1 1 220px; max-width: 320px; padding: 0 10px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; color: #8a96ad;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input placeholder="Buscar por nome, signatário ou ID" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13.5px; color: #0b1f42;" />
+          </div>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px dashed #c9d4e6; background: #ffffff; font-size: 13px; font-weight: 500; color: #47536b; cursor: pointer;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>Período</button>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px dashed #c9d4e6; background: #ffffff; font-size: 13px; font-weight: 500; color: #47536b; cursor: pointer;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>Signatário</button>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px dashed #c9d4e6; background: #ffffff; font-size: 13px; font-weight: 500; color: #47536b; cursor: pointer;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Criado por</button>
+          <button style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13px; font-weight: 500; color: #0b1f42; cursor: pointer;" style-hover="background: #f4f8fe;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg>Atualização recente</button>
+        </div>
+        </sc-if>
+        <sc-if value="{{ anySelected }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #e8f0fd; border-bottom: 1px solid #c9dbf7; flex-wrap: wrap;">
+          <span style="font-size: 13.5px; font-weight: 600; color: #1257c9; margin-right: 8px;">{{ selectedLabel }}</span>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #c9dbf7; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="border-color: #1257c9;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Baixar</button>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #c9dbf7; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="border-color: #1257c9;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>Mover para pasta</button>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #c9dbf7; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="border-color: #1257c9;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Reenviar lembrete</button>
+          <button style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #f5c2c2; background: #ffffff; font-size: 13px; font-weight: 600; color: #b42323; cursor: pointer;" style-hover="background: #fdeaea;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>Cancelar</button>
+          <button onClick="{{ clearSelection }}" style="margin-left: auto; height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; font-size: 13px; font-weight: 600; color: #1257c9; cursor: pointer;">Limpar seleção</button>
+        </div>
+        </sc-if>
+
+        <div style="display: grid; grid-template-columns: 36px minmax(0, 2.6fr) 1fr 1.2fr 1.1fr 1fr 1fr 44px; align-items: center; padding: 0 16px; height: 38px; border-top: 1px solid #f1f4f9; border-bottom: 1px solid #f1f4f9; background: #fbfcfe; font-size: 12px; font-weight: 600; color: #8a96ad;">
+          <span style="display: flex;"><input type="checkbox" checked="{{ allChecked }}" onChange="{{ toggleAll }}" style="width: 15px; height: 15px; accent-color: #1257c9; margin: 0; cursor: pointer;" /></span><span>Documento</span><span>Pasta</span><span>Signatários</span><span>Status</span><span>Criado por</span><span>Atualizado</span><span></span>
+        </div>
+        <sc-for list="{{ rows }}" as="d" hint-placeholder-count="8">
+          <div style="display: grid; grid-template-columns: 36px minmax(0, 2.6fr) 1fr 1.2fr 1.1fr 1fr 1fr 44px; align-items: center; padding: 9px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13.5px; background: {{ d.rowBg }};" style-hover="background: #f7f9fd;">
+            <span style="display: flex;"><input type="checkbox" checked="{{ d.checked }}" onChange="{{ d.toggle }}" style="width: 15px; height: 15px; accent-color: #1257c9; margin: 0; cursor: pointer;" /></span>
+            <div style="display: flex; align-items: center; gap: 12px; min-width: 0; padding-right: 12px;">
+              <span style="width: 36px; height: 36px; border-radius: 8px; background: #f4f8fe; color: #1257c9; display: flex; align-items: center; justify-content: center; flex: none;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
+              <span style="min-width: 0;"><a href="App - Documento.dc.html" style="display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ d.title }}</a><span style="display: block; font-size: 12px; color: #8a96ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;">{{ d.id }} · {{ d.meta }}</span></span>
+            </div>
+            <span style="font-size: 13px; color: #47536b;">{{ d.folder }}</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="display: flex; padding-left: 6px;"><sc-for list="{{ d.signers }}" as="s" hint-placeholder-count="2"><span style="width: 26px; height: 26px; border-radius: 7px; background: #e8f0fd; color: #1257c9; border: 2px solid #ffffff; margin-left: -6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;">{{ s }}</span></sc-for></div>
+              <span style="font-size: 12.5px; color: #47536b; white-space: nowrap;">{{ d.progress }}</span>
+            </div>
+            <div><span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: {{ d.status.bg }}; color: {{ d.status.fg }}; border: 1px solid {{ d.status.bd }}; white-space: nowrap;"><span style="width: 6px; height: 6px; border-radius: 999px; background: currentColor;"></span>{{ d.status.label }}</span></div>
+            <span style="font-size: 13px; color: #47536b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ d.owner }}</span>
+            <span style="font-size: 13px; color: #47536b; white-space: nowrap;">{{ d.updated }}</span>
+            <div style="display: flex; justify-content: flex-end;"><button style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: #8a96ad; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 48px 20px; text-align: center; color: #8a96ad; font-size: 13.5px;">Nenhum documento nesta combinação de pasta e status.</div>
+        </sc-if>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; font-size: 12.5px; color: #8a96ad; flex-wrap: wrap;">
+          <span>{{ showingLabel }}</span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="display: inline-flex; align-items: center; gap: 8px;">Linhas por página<span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #0b1f42; font-weight: 600;">10<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></span>
+            <span style="display: inline-flex; gap: 4px;">
+              <button style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #c9d4e6; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+              <span style="height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; background: #0b1f42; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 600;">1</span>
+              <span style="height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #0b1f42; display: flex; align-items: center; justify-content: center; font-weight: 600;">2</span>
+              <span style="height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #0b1f42; display: flex; align-items: center; justify-content: center; font-weight: 600;">3</span>
+              <span style="height: 30px; display: flex; align-items: center; padding: 0 4px;">…</span>
+              <span style="height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #0b1f42; display: flex; align-items: center; justify-content: center; font-weight: 600;">32</span>
+              <button style="width: 30px; height: 30px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #0b1f42; display: flex; align-items: center; justify-content: center; cursor: pointer;" style-hover="background: #f4f8fe;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sidebarOpen: true, tab: "all", folder: "Todos", selected: [] };
+  renderVals() {
+    const st = {
+      wait: { label: "Aguardando", bg: "#fff4e0", fg: "#9a5b00", bd: "#f5dfae" },
+      prog: { label: "Em andamento", bg: "#e8f0fd", fg: "#1257c9", bd: "#c9dbf7" },
+      done: { label: "Assinado", bg: "#e6f7ee", fg: "#12784a", bd: "#bfe9d1" },
+      ref: { label: "Recusado", bg: "#fdeaea", fg: "#b42323", bd: "#f5c2c2" },
+      exp: { label: "Expirado", bg: "#f1f4f9", fg: "#6b7891", bd: "#e6eaf2" },
+      draft: { label: "Rascunho", bg: "#f1f4f9", fg: "#47536b", bd: "#e6eaf2" }
+    };
+    const all = [
+      { id: "AV-00148", title: "Contrato de locação — Apto 302", meta: "PDF · 6 págs", folder: "Locação", signers: ["MS", "CM"], progress: "1 de 2", s: "wait", owner: "Ana Ribeiro", updated: "Hoje, 09:12" },
+      { id: "AV-00147", title: "Proposta comercial — Loja Centro", meta: "PDF · 3 págs", folder: "Vendas", signers: ["AR", "FT"], progress: "2 de 2", s: "done", owner: "Ana Ribeiro", updated: "Hoje, 08:40" },
+      { id: "AV-00146", title: "Termo de vistoria — Casa Jardim Europa", meta: "PDF · 12 págs", folder: "Locação", signers: ["RS", "MO", "AR"], progress: "2 de 3", s: "prog", owner: "Bruno Costa", updated: "Ontem, 17:25" },
+      { id: "AV-00145", title: "Distrato — Apto 1104, Torre B", meta: "PDF · 2 págs", folder: "Locação", signers: ["PB"], progress: "0 de 1", s: "ref", owner: "Ana Ribeiro", updated: "Ontem, 11:03" },
+      { id: "AV-00144", title: "Aditivo contratual — Reajuste anual", meta: "Modelo · 4 págs", folder: "Locação", signers: ["LF", "AR"], progress: "0 de 2", s: "draft", owner: "Camila Duarte", updated: "28 ago, 16:48" },
+      { id: "AV-00143", title: "Autorização de venda — Cobertura Praia Brava", meta: "PDF · 3 págs", folder: "Vendas", signers: ["JP"], progress: "0 de 1", s: "wait", owner: "Bruno Costa", updated: "27 ago, 10:15" },
+      { id: "AV-00142", title: "Contrato de administração — Ed. Solar das Palmeiras", meta: "PDF · 9 págs", folder: "Administrativo", signers: ["RM", "AR"], progress: "2 de 2", s: "done", owner: "Ana Ribeiro", updated: "26 ago, 14:02" },
+      { id: "AV-00141", title: "Ficha cadastral — Locatário", meta: "PDF · 2 págs", folder: "Locação", signers: ["TN"], progress: "0 de 1", s: "exp", owner: "Camila Duarte", updated: "20 ago, 09:30" },
+      { id: "AV-00140", title: "Procuração — Representação em assembleia", meta: "PDF · 1 pág", folder: "Jurídico", signers: ["HG", "AR"], progress: "2 de 2", s: "done", owner: "Diego Nunes", updated: "19 ago, 18:11" },
+      { id: "AV-00139", title: "Acordo de confidencialidade — Parceria XPTO", meta: "PDF · 5 págs", folder: "Jurídico", signers: ["KL", "AR"], progress: "1 de 2", s: "prog", owner: "Diego Nunes", updated: "18 ago, 15:47" }
+    ];
+    const tabDefs = [
+      { key: "all", label: "Todos", count: 312, match: () => true },
+      { key: "wait", label: "Aguardando", count: 23, match: d => d.s === "wait" },
+      { key: "prog", label: "Em andamento", count: 12, match: d => d.s === "prog" },
+      { key: "done", label: "Concluídos", count: 251, match: d => d.s === "done" },
+      { key: "draft", label: "Rascunhos", count: 8, match: d => d.s === "draft" },
+      { key: "refexp", label: "Recusados / expirados", count: 18, match: d => d.s === "ref" || d.s === "exp" }
+    ];
+    const folderDefs = [["Todos", 312], ["Locação", 148], ["Vendas", 64], ["Administrativo", 52], ["Jurídico", 31], ["Arquivados", 17]];
+    const { tab, folder, selected } = this.state;
+    const tabDef = tabDefs.find(t => t.key === tab);
+    const rows = all.filter(d => tabDef.match(d) && (folder === "Todos" || d.folder === folder)).map(d => ({
+      ...d, status: st[d.s], checked: selected.includes(d.id), rowBg: selected.includes(d.id) ? "#f4f8fe" : "transparent",
+      toggle: () => this.setState(s => ({ selected: s.selected.includes(d.id) ? s.selected.filter(x => x !== d.id) : [...s.selected, d.id] }))
+    }));
+    const n = selected.length;
+    return {
+      sidebarOpen: this.state.sidebarOpen,
+      toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      folders: folderDefs.map(([name, count]) => ({ name, count, w: name === folder ? 600 : 500, fg: name === folder ? "#1257c9" : "#47536b", bg: name === folder ? "#e8f0fd" : "transparent", select: () => this.setState({ folder: name, selected: [] }) })),
+      tabs: tabDefs.map(t => ({ label: t.label, count: t.count, w: t.key === tab ? 600 : 500, fg: t.key === tab ? "#1257c9" : "#47536b", line: t.key === tab ? "#1257c9" : "transparent", badgeBg: t.key === tab ? "#e8f0fd" : "#f1f4f9", badgeFg: t.key === tab ? "#1257c9" : "#8a96ad", select: () => this.setState({ tab: t.key, selected: [] }) })),
+      rows, isEmpty: rows.length === 0,
+      noneSelected: n === 0, anySelected: n > 0,
+      selectedLabel: n === 1 ? "1 documento selecionado" : `${n} documentos selecionados`,
+      allChecked: rows.length > 0 && rows.every(r => r.checked),
+      toggleAll: () => this.setState(s => ({ selected: rows.every(r => s.selected.includes(r.id)) ? [] : rows.map(r => r.id) })),
+      clearSelection: () => this.setState({ selected: [] }),
+      showingLabel: `Mostrando ${rows.length} de ${tab === "all" && folder === "Todos" ? 312 : tabDef.count} documentos`
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #1257c9; text-decoration: none; }
+a:hover { color: #0b1f42; }
+button, input { font-family: inherit; }
+input::placeholder { color: #8a96ad; }
+@keyframes signWipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 -8% 0 0); } }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+
+  <aside style="flex: 0 0 44%; min-width: 360px; background: #0b1f42; color: #ffffff; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 48px; position: relative; overflow: hidden;">
+    <div style="position: absolute; right: -120px; top: -120px; width: 420px; height: 420px; border-radius: 999px; background: radial-gradient(circle, rgba(46,123,239,.35), rgba(46,123,239,0) 70%);"></div>
+    <a href="Home.dc.html" style="position: relative;"><img src="assets/logo.png" alt="AssinaVelox" style="height: 34px; width: auto; filter: brightness(0) invert(1);" /></a>
+    <div style="position: relative;">
+      <p style="margin: 0 0 16px; font-size: 11px; font-weight: 600; letter-spacing: .24em; text-transform: uppercase; color: #6f87b8;">Plataforma de assinatura digital</p>
+      <h2 style="margin: 0; font-style: italic; font-weight: 800; text-transform: uppercase; letter-spacing: -.015em; line-height: .95; font-size: clamp(36px, 4vw, 56px);">Assine documentos<br />em <span style="color: #2e7bef;">minutos</span></h2>
+      <div style="margin: 36px 0 0; max-width: 360px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 18px 20px 14px;">
+        <div style="font-size: 9.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6f87b8; margin-bottom: 8px;">Assinatura</div>
+        <div style="font-family: 'Caveat', cursive; font-size: 34px; line-height: 1; color: #ffffff; transform: rotate(-2deg); animation: signWipe 1.6s ease-out .6s both;">Maria A. Souza</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,.14); font-size: 12px; color: #b9c7de;"><span>Contrato de locação · Apto 302</span><span style="color: #1fb865; font-weight: 700;">Assinado ✓</span></div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px 24px; margin-top: 28px; font-size: 12.5px; font-weight: 600; color: #b9c7de;">
+        <span>✓ Validade jurídica</span><span>✓ Conforme LGPD</span><span>✓ ICP-Brasil</span><span>✓ Trilha de auditoria</span>
+      </div>
+    </div>
+    <div style="position: relative; display: flex; gap: 20px; font-size: 12px; color: #6f87b8;"><a href="Termos.dc.html" style="color: #6f87b8;">Termos de uso</a><a href="Privacidade.dc.html" style="color: #6f87b8;">Privacidade</a><a href="Contato.dc.html" style="color: #6f87b8;">Suporte</a></div>
+  </aside>
+
+  <main style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px;">
+    <div style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 24px;">
+
+      <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em;">Entrar</h1>
+        <p style="margin: 8px 0 0; font-size: 14px; color: #47536b;">Acesse sua conta AssinaVelox.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">E-mail</span><input type="email" placeholder="voce@empresa.com.br" defaultValue="ana@horizonte.com.br" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none; box-shadow: 0 1px 2px rgba(11,31,66,.04);" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+        <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Senha</span>
+          <span style="position: relative; display: flex;"><input type="{{ passType }}" placeholder="Sua senha" defaultValue="senha-segura-2026" style="flex: 1; height: 40px; padding: 0 44px 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none; box-shadow: 0 1px 2px rgba(11,31,66,.04);" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /><button type="button" onClick="{{ togglePass }}" title="Mostrar senha" style="position: absolute; right: 4px; top: 4px; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: #8a96ad; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
+        </label>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;">
+          <label style="display: flex; align-items: center; gap: 8px; color: #47536b; cursor: pointer;"><input type="checkbox" defaultChecked="{{ true }}" style="width: 16px; height: 16px; accent-color: #1257c9; margin: 0;" />Manter conectado</label>
+          <a href="App - Recuperar senha.dc.html" style="font-weight: 600;">Esqueci minha senha</a>
+        </div>
+        <a href="App - Dashboard.dc.html" style="display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; background: #1257c9; color: #ffffff; font-size: 14px; font-weight: 600; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0; color: #ffffff;">Entrar</a>
+        <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #8a96ad;"><span style="flex: 1; height: 1px; background: #e6eaf2;"></span>ou<span style="flex: 1; height: 1px; background: #e6eaf2;"></span></div>
+        <button style="display: flex; align-items: center; justify-content: center; gap: 10px; height: 40px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; font-weight: 600; color: #0b1f42; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.04);" style-hover="background: #f4f8fe; border-color: #1257c9;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1257c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Entrar com certificado digital</button>
+      </div>
+      <p style="margin: 0; font-size: 13.5px; color: #47536b; text-align: center;">Não tem conta? <a href="App - Criar conta.dc.html" style="font-weight: 600;">Criar conta grátis</a></p>
+      </sc-if>
+
+      <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em;">Criar conta</h1>
+        <p style="margin: 8px 0 0; font-size: 14px; color: #47536b;">Grátis, sem cartão de crédito. Leva menos de 2 minutos.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Nome completo</span><input placeholder="Seu nome" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+        <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">E-mail corporativo</span><input type="email" placeholder="voce@empresa.com.br" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Empresa</span><input placeholder="Razão social" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+          <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">CNPJ <span style="font-weight: 400; color: #8a96ad;">(opcional)</span></span><input placeholder="00.000.000/0000-00" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+        </div>
+        <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Senha</span>
+          <span style="position: relative; display: flex;"><input type="{{ passType }}" placeholder="Mínimo de 8 caracteres" style="flex: 1; height: 40px; padding: 0 44px 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /><button type="button" onClick="{{ togglePass }}" style="position: absolute; right: 4px; top: 4px; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: #8a96ad; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
+          <span style="display: flex; gap: 4px; margin-top: 2px;"><span style="flex: 1; height: 4px; border-radius: 999px; background: #1fb865;"></span><span style="flex: 1; height: 4px; border-radius: 999px; background: #1fb865;"></span><span style="flex: 1; height: 4px; border-radius: 999px; background: #1fb865;"></span><span style="flex: 1; height: 4px; border-radius: 999px; background: #eef2f9;"></span></span>
+          <span style="font-size: 12px; color: #8a96ad;">Use letras, números e um símbolo.</span>
+        </label>
+        <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #47536b; cursor: pointer; line-height: 1.5;"><input type="checkbox" style="width: 16px; height: 16px; accent-color: #1257c9; margin: 2px 0 0;" /><span>Li e aceito os <a href="Termos.dc.html" style="font-weight: 600;">Termos de uso</a> e a <a href="Privacidade.dc.html" style="font-weight: 600;">Política de Privacidade</a>.</span></label>
+        <a href="App - Dashboard.dc.html" style="display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; background: #1257c9; color: #ffffff; font-size: 14px; font-weight: 600; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0; color: #ffffff;">Criar conta grátis</a>
+      </div>
+      <p style="margin: 0; font-size: 13.5px; color: #47536b; text-align: center;">Já tem conta? <a href="App - Login.dc.html" style="font-weight: 600;">Entrar</a></p>
+      </sc-if>
+
+      <sc-if value="{{ isRecover }}" hint-placeholder-val="{{ false }}">
+      <a href="App - Login.dc.html" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #47536b;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Voltar para o login</a>
+      <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em;">Recuperar senha</h1>
+        <p style="margin: 8px 0 0; font-size: 14px; color: #47536b; line-height: 1.55;">Informe o e-mail da sua conta. Enviaremos um link para redefinir a senha, válido por 30 minutos.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">E-mail</span><input type="email" placeholder="voce@empresa.com.br" defaultValue="ana@horizonte.com.br" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+        <button onClick="{{ send }}" style="display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;">Enviar link de redefinição</button>
+      </div>
+      </sc-if>
+      <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid #bfe9d1; background: #e6f7ee; border-radius: 12px;">
+        <span style="width: 40px; height: 40px; border-radius: 10px; background: #1fb865; color: #ffffff; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <div><h1 style="margin: 0; font-size: 20px; font-weight: 700;">Verifique seu e-mail</h1><p style="margin: 8px 0 0; font-size: 14px; color: #12784a; line-height: 1.55;">Enviamos um link para <b>ana@horizonte.com.br</b>. Se não aparecer em alguns minutos, confira a pasta de spam.</p></div>
+        <button onClick="{{ reset }}" style="align-self: flex-start; height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #bfe9d1; background: #ffffff; font-size: 13px; font-weight: 600; color: #12784a; cursor: pointer;">Reenviar link</button>
+      </div>
+      </sc-if>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;login&quot;,&quot;options&quot;:[&quot;login&quot;,&quot;cadastro&quot;,&quot;recuperar&quot;],&quot;tsType&quot;:&quot;'login' | 'cadastro' | 'recuperar'&quot;,&quot;section&quot;:&quot;Tela&quot;}}">
+class Component extends DCLogic {
+  state = { showPass: false, sent: false };
+  renderVals() {
+    const view = this.props.view ?? "login";
+    return {
+      isLogin: view === "login", isSignup: view === "cadastro", isRecover: view === "recuperar",
+      passType: this.state.showPass ? "text" : "password",
+      togglePass: () => this.setState(s => ({ showPass: !s.showPass })),
+      sent: this.state.sent, notSent: !this.state.sent,
+      send: () => this.setState({ sent: true }),
+      reset: () => this.setState({ sent: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input, select, textarea { font-family: inherit; }
+input::placeholder, textarea::placeholder { color: #8a96ad; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="documentos" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap;">
+      <a href="App - Documentos.dc.html" style="color: #8a96ad;">Documentos</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42;">Nova solicitação</span>
+    </nav>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 12.5px; color: #8a96ad;">Rascunho salvo às 09:41</span>
+      <a href="App - Documentos.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42;" style-hover="background: #f4f8fe; color: #0b1f42;">Sair</a>
+    </div>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 1040px; margin: 0 auto;">
+
+    <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Nova solicitação de assinatura</h1>
+      <p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">Envie o documento, defina quem assina, posicione os campos e revise antes de enviar.</p>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 12px 16px; overflow-x: auto;">
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+        <button onClick="{{ s.go }}" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 4px 8px; border: 0; background: transparent; cursor: pointer; text-align: left;">
+          <span style="width: 28px; height: 28px; border-radius: 999px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; background: {{ s.bg }}; color: {{ s.fg }}; border: 1.5px solid {{ s.bd }};">{{ s.mark }}</span>
+          <span style="min-width: 0;"><span style="display: block; font-size: 13px; font-weight: 600; color: {{ s.titleFg }}; white-space: nowrap;">{{ s.title }}</span><span style="display: block; font-size: 11.5px; color: #8a96ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.sub }}</span></span>
+          <span style="flex: 1; height: 2px; background: {{ s.lineBg }}; margin: 0 8px; min-width: 16px;"></span>
+        </button>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ is1 }}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 1.3 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 36px 20px; border: 1.5px dashed #c9d4e6; border-radius: 12px; background: #fbfcfe; text-align: center; cursor: pointer;" style-hover="border-color: #1257c9; background: #f4f8fe;">
+            <span style="width: 44px; height: 44px; border-radius: 12px; background: #e8f0fd; color: #1257c9; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span>
+            <div style="font-size: 14px; font-weight: 600;">Arraste o arquivo aqui ou <span style="color: #1257c9;">selecione no computador</span></div>
+            <div style="font-size: 12.5px; color: #8a96ad;">PDF ou DOCX · até 25 MB · vários arquivos são unidos em um só envelope</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e6eaf2; border-radius: 10px;">
+            <span style="width: 36px; height: 36px; border-radius: 8px; background: #fdeaea; color: #b42323; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; flex: none;">PDF</span>
+            <span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">contrato-apto-302.pdf</span><span style="display: block; font-size: 12px; color: #8a96ad;">412 KB · 6 páginas · enviado agora</span></span>
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #12784a;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Pronto</span>
+            <button style="width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #8a96ad; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #fdeaea; color: #b42323;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="font-size: 15px; font-weight: 600;">Informações do documento</div>
+          <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Nome do documento</span><input defaultValue="Contrato de locação — Apto 302" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Pasta</span><span style="display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px;">Locação<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Prazo para assinatura</span><span style="display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px;">15 dias (até 18 set)<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Idioma dos signatários</span><span style="display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px;">Português (Brasil)<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></label>
+          </div>
+          <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid #e6eaf2; border-radius: 10px; cursor: pointer;"><span><span style="display: block; font-size: 13.5px; font-weight: 600;">Lembretes automáticos</span><span style="display: block; font-size: 12.5px; color: #8a96ad;">Reenviar a cada 2 dias para quem ainda não assinou</span></span><span style="width: 40px; height: 22px; border-radius: 999px; background: #1257c9; position: relative; flex: none;"><span style="position: absolute; top: 2px; left: 20px; width: 18px; height: 18px; border-radius: 999px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,.2);"></span></span></label>
+        </div>
+      </div>
+      <div style="flex: 1 1 280px; min-width: 0; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+        <div><div style="font-size: 15px; font-weight: 600;">Ou comece por um modelo</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 3px;">Campos e signatários já configurados</div></div>
+        <sc-for list="{{ templates }}" as="t" hint-placeholder-count="4">
+          <button style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e6eaf2; border-radius: 10px; background: #ffffff; cursor: pointer; text-align: left;" style-hover="border-color: #1257c9; background: #f4f8fe;"><span style="width: 32px; height: 32px; border-radius: 8px; background: #f4f8fe; color: #1257c9; display: flex; align-items: center; justify-content: center; flex: none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></svg></span><span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.name }}</span><span style="display: block; font-size: 12px; color: #8a96ad;">{{ t.meta }}</span></span></button>
+        </sc-for>
+        <a href="App - Modelos.dc.html" style="font-size: 13px; font-weight: 600; color: #1257c9; margin-top: 4px;">Ver todos os modelos →</a>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ is2 }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 14px 20px;">
+        <div><div style="font-size: 14px; font-weight: 600;">Ordem de assinatura</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 2px;">{{ orderHint }}</div></div>
+        <div style="display: inline-flex; background: #eef2f9; border-radius: 8px; padding: 3px; gap: 2px;">
+          <button onClick="{{ setSeq }}" style="padding: 5px 12px; border-radius: 6px; border: 0; cursor: pointer; font-size: 12.5px; background: {{ seqBg }}; box-shadow: {{ seqShadow }}; font-weight: 600; color: {{ seqFg }};">Sequencial</button>
+          <button onClick="{{ setPar }}" style="padding: 5px 12px; border-radius: 6px; border: 0; cursor: pointer; font-size: 12.5px; background: {{ parBg }}; box-shadow: {{ parShadow }}; font-weight: 600; color: {{ parFg }};">Todos ao mesmo tempo</button>
+        </div>
+      </div>
+      <sc-for list="{{ signers }}" as="sg" hint-placeholder-count="2">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="width: 28px; height: 28px; border-radius: 8px; background: {{ sg.bg }}; color: {{ sg.fg }}; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700;">{{ sg.n }}</span>
+            <span style="font-size: 14px; font-weight: 600; flex: 1;">{{ sg.heading }}</span>
+            <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12.5px; font-weight: 600;">{{ sg.role }}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            <button onClick="{{ sg.remove }}" title="Remover" style="width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #8a96ad; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #fdeaea; color: #b42323;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12.5px; font-weight: 600;">Nome completo</span><input defaultValue="{{ sg.name }}" placeholder="Nome do signatário" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12.5px; font-weight: 600;">E-mail</span><input defaultValue="{{ sg.email }}" placeholder="email@exemplo.com" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12.5px; font-weight: 600;">Celular (WhatsApp / SMS)</span><input defaultValue="{{ sg.phone }}" placeholder="+55 (11) 90000-0000" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+          </div>
+          <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12.5px; font-weight: 600;">Enviar por</span>
+              <div style="display: inline-flex; background: #eef2f9; border-radius: 8px; padding: 3px; gap: 2px;"><sc-for list="{{ sg.channels }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.select }}" style="padding: 5px 12px; border-radius: 6px; border: 0; cursor: pointer; font-size: 12.5px; font-weight: 600; background: {{ c.bg }}; box-shadow: {{ c.shadow }}; color: {{ c.fg }};">{{ c.label }}</button></sc-for></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;"><span style="font-size: 12.5px; font-weight: 600;">Como o signatário se autentica</span>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;"><sc-for list="{{ sg.auth }}" as="a" hint-placeholder-count="5"><button onClick="{{ a.toggle }}" style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid {{ a.bd }}; background: {{ a.bg }}; color: {{ a.fg }}; font-size: 12.5px; font-weight: 600; cursor: pointer;">{{ a.mark }}{{ a.label }}</button></sc-for></div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button onClick="{{ addSigner }}" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 10px; border: 1px dashed #c9d4e6; background: transparent; font-size: 13px; font-weight: 600; color: #47536b; cursor: pointer;" style-hover="border-color: #1257c9; color: #1257c9; background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6"/><path d="M22 19h-6"/></svg>Adicionar signatário</button>
+        <button onClick="{{ addWitness }}" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 10px; border: 1px dashed #c9d4e6; background: transparent; font-size: 13px; font-weight: 600; color: #47536b; cursor: pointer;" style-hover="border-color: #1257c9; color: #1257c9; background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>Adicionar testemunha</button>
+        <button style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 10px; border: 1px dashed #c9d4e6; background: transparent; font-size: 13px; font-weight: 600; color: #47536b; cursor: pointer;" style-hover="border-color: #1257c9; color: #1257c9; background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Importar dos contatos</button>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ is3 }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 0 0 72px; display: flex; flex-direction: column; gap: 8px;">
+        <sc-for list="{{ pages }}" as="pg" hint-placeholder-count="6">
+          <div style="width: 72px; aspect-ratio: 1 / 1.3; background: #ffffff; border: 2px solid {{ pg.bd }}; border-radius: 4px; padding: 8px 7px; display: flex; flex-direction: column; gap: 4px; position: relative; cursor: pointer;"><div style="height: 3px; background: #eef2f9; border-radius: 2px;"></div><div style="height: 3px; background: #eef2f9; border-radius: 2px; width: 80%;"></div><div style="height: 3px; background: #eef2f9; border-radius: 2px;"></div><div style="height: 3px; background: #eef2f9; border-radius: 2px; width: 60%;"></div><span style="position: absolute; bottom: 4px; right: 5px; font-size: 9px; color: #8a96ad; font-variant-numeric: tabular-nums;">{{ pg.n }}</span><sc-if value="{{ pg.hasFields }}" hint-placeholder-val="{{ false }}"><span style="position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 999px; background: #1257c9;"></span></sc-if></div>
+        </sc-for>
+      </div>
+      <div style="flex: 1.5 1 380px; min-width: 0; background: #eef2f9; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; justify-content: center;">
+        <div style="width: 100%; max-width: 520px; aspect-ratio: 1 / 1.3; background: #ffffff; box-shadow: 0 8px 30px rgba(11,31,66,.12); padding: 8% 9%; display: flex; flex-direction: column; gap: 12px; position: relative;">
+          <div style="font-size: 10px; font-weight: 700; color: #47536b;">CLÁUSULA 12ª — DAS DISPOSIÇÕES FINAIS</div>
+          <div style="display: flex; flex-direction: column; gap: 7px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 94%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 98%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 55%;"></div></div>
+          <div style="font-size: 9px; color: #8a96ad; margin-top: 8px;">São Paulo, ____ de ____________ de 2026.</div>
+          <div style="margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div style="border: 1.5px solid #1257c9; background: rgba(18,87,201,.08); border-radius: 6px; padding: 14px 10px 8px; position: relative; cursor: move;"><span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #ffffff; background: #1257c9; padding: 1px 6px; border-radius: 4px;">Maria · Assinatura</span><div style="height: 22px;"></div><span style="position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; border-radius: 3px; background: #ffffff; border: 1.5px solid #1257c9;"></span></div>
+            <div style="border: 1.5px solid #d59b2a; background: rgba(213,155,42,.1); border-radius: 6px; padding: 14px 10px 8px; position: relative; cursor: move;"><span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #ffffff; background: #d59b2a; padding: 1px 6px; border-radius: 4px;">Carlos · Assinatura</span><div style="height: 22px;"></div></div>
+            <div style="border: 1.5px solid #1257c9; background: rgba(18,87,201,.08); border-radius: 6px; padding: 8px 10px; position: relative; font-size: 9px; color: #1257c9;"><span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #ffffff; background: #1257c9; padding: 1px 6px; border-radius: 4px;">Maria · Data</span>DD/MM/AAAA</div>
+            <div style="border: 1.5px solid #d59b2a; background: rgba(213,155,42,.1); border-radius: 6px; padding: 8px 10px; position: relative; font-size: 9px; color: #9a5b00;"><span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #ffffff; background: #d59b2a; padding: 1px 6px; border-radius: 4px;">Carlos · CPF</span>000.000.000-00</div>
+          </div>
+          <div style="position: absolute; right: 12px; bottom: 10px; font-size: 8px; color: #8a96ad;">pág. 6/6</div>
+        </div>
+      </div>
+      <div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="font-size: 13px; font-weight: 600;">Adicionar campo para</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; background: #1257c9; color: #ffffff; font-size: 12.5px; font-weight: 600;"><span style="width: 8px; height: 8px; border-radius: 999px; background: #ffffff;"></span>Maria A. Souza</span>
+            <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid #d5dce9; color: #0b1f42; font-size: 12.5px; font-weight: 600; cursor: pointer;" style-hover="border-color: #d59b2a;"><span style="width: 8px; height: 8px; border-radius: 999px; background: #d59b2a;"></span>Carlos Mendes</span>
+          </div>
+          <div style="font-size: 12px; color: #8a96ad;">Arraste um tipo de campo para a página ou clique para inserir na posição padrão.</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <sc-for list="{{ fieldTypes }}" as="ft" hint-placeholder-count="8">
+              <button style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px; border: 1px solid #e6eaf2; border-radius: 8px; background: #ffffff; font-size: 12.5px; font-weight: 600; color: #0b1f42; cursor: grab; text-align: left;" style-hover="border-color: #1257c9; background: #f4f8fe;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #1257c9;"></span>{{ ft }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 13px; font-weight: 600;">Campos inseridos</span><span style="font-size: 12px; color: #8a96ad;">5</span></div>
+          <sc-for list="{{ placed }}" as="pf" hint-placeholder-count="5">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 0; border-top: 1px solid #f1f4f9;"><span style="width: 8px; height: 8px; border-radius: 999px; background: {{ pf.color }}; flex: none;"></span><span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ pf.label }}</span><span style="color: #8a96ad; white-space: nowrap;">{{ pf.page }}</span></div>
+          </sc-for>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #47536b; margin-top: 4px; cursor: pointer;"><input type="checkbox" defaultChecked="{{ true }}" style="width: 15px; height: 15px; accent-color: #1257c9; margin: 0;" />Rubrica em todas as páginas</label>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ is4 }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 1.3 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 15px; font-weight: 600;">Documento</span><button onClick="{{ go1 }}" style="border: 0; background: transparent; font-size: 13px; font-weight: 600; color: #1257c9; cursor: pointer;">Editar</button></div>
+          <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 40px; height: 40px; border-radius: 8px; background: #fdeaea; color: #b42323; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; flex: none;">PDF</span><span><span style="display: block; font-size: 14px; font-weight: 600;">Contrato de locação — Apto 302</span><span style="display: block; font-size: 12.5px; color: #8a96ad;">contrato-apto-302.pdf · 6 páginas · Pasta Locação · expira em 18 set 2026</span></span></div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 15px; font-weight: 600;">Signatários <span style="color: #8a96ad; font-weight: 500;">· {{ orderLabel }}</span></span><button onClick="{{ go2 }}" style="border: 0; background: transparent; font-size: 13px; font-weight: 600; color: #1257c9; cursor: pointer;">Editar</button></div>
+          <sc-for list="{{ signers }}" as="sg" hint-placeholder-count="2">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #f1f4f9;">
+              <span style="width: 32px; height: 32px; border-radius: 8px; background: {{ sg.bg }}; color: {{ sg.fg }}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none;">{{ sg.n }}</span>
+              <span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 600;">{{ sg.displayName }} <span style="font-weight: 500; color: #8a96ad;">· {{ sg.role }}</span></span><span style="display: block; font-size: 12.5px; color: #47536b;">{{ sg.summary }}</span></span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 15px; font-weight: 600;">Mensagem aos signatários</span>
+          <textarea rows="4" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none; resize: vertical; line-height: 1.5;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" defaultValue="Olá! Segue o contrato do Apto 302 para assinatura. Qualquer dúvida, estou à disposição."></textarea>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #47536b; cursor: pointer;"><input type="checkbox" defaultChecked="{{ true }}" style="width: 15px; height: 15px; accent-color: #1257c9; margin: 0;" />Enviar cópia do documento assinado para todos ao concluir</label>
+        </div>
+      </div>
+      <div style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 15px; font-weight: 600;">Resumo</span>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-top: 1px solid #f1f4f9;"><span style="color: #47536b;">Campos</span><span style="font-weight: 600;">5 em 1 página + rubricas</span></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-top: 1px solid #f1f4f9;"><span style="color: #47536b;">Lembretes</span><span style="font-weight: 600;">A cada 2 dias</span></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-top: 1px solid #f1f4f9;"><span style="color: #47536b;">Validade</span><span style="font-weight: 600;">15 dias</span></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-top: 1px solid #f1f4f9;"><span style="color: #47536b;">Consumo do plano</span><span style="font-weight: 600;">1 documento (149 / 500)</span></div>
+        </div>
+        <div style="padding: 14px 16px; border-radius: 12px; background: #e8f0fd; border: 1px solid #c9dbf7; font-size: 12.5px; color: #1257c9; line-height: 1.55;">Ao enviar, os signatários recebem um link exclusivo. O documento fica bloqueado para edição e cada evento passa a ser registrado na trilha de auditoria.</div>
+      </div>
+    </div>
+    </sc-if>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0 8px; border-top: 1px solid #e6eaf2; flex-wrap: wrap;">
+      <button onClick="{{ back }}" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 600; color: {{ backFg }}; cursor: pointer;" style-hover="background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Voltar</button>
+      <div style="display: flex; gap: 8px;">
+        <a href="App - Documentos.dc.html" style="display: inline-flex; align-items: center; height: 38px; padding: 0 14px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: #47536b;" style-hover="color: #0b1f42;">Salvar rascunho</a>
+        <button onClick="{{ next }}" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;">{{ nextLabel }}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width: 560px; margin: 40px auto 0; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px;">
+      <span style="width: 64px; height: 64px; border-radius: 18px; background: #e6f7ee; color: #1fb865; display: flex; align-items: center; justify-content: center;"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <div><h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em;">Enviado para assinatura</h1><p style="margin: 10px 0 0; font-size: 14px; color: #47536b; line-height: 1.6;">Maria A. Souza recebeu o link por WhatsApp. Carlos Mendes será notificado por e-mail assim que Maria assinar (ordem sequencial). Você acompanha tudo pelo detalhe do documento.</p></div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+        <a href="App - Documento.dc.html" style="display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 8px; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600;" style-hover="background: #0f4bb0; color: #ffffff;">Ver documento</a>
+        <button onClick="{{ restart }}" style="display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="background: #f4f8fe;">Criar outra solicitação</button>
+      </div>
+      <div style="font-size: 12.5px; color: #8a96ad; font-variant-numeric: tabular-nums;">ID AV-00149 · 3 set 2026, 09:44</div>
+    </div>
+    </sc-if>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    sidebarOpen: true, step: 1, sent: false, order: "seq",
+    signers: [
+      { name: "Maria A. Souza", email: "maria.souza@gmail.com", phone: "+55 11 98877-1234", role: "Locatária", channel: "WhatsApp", auth: ["Token SMS", "Selfie"] },
+      { name: "Carlos Mendes", email: "carlos.mendes@outlook.com", phone: "", role: "Fiador", channel: "E-mail", auth: ["Certificado ICP-Brasil"] }
+    ]
+  };
+  renderVals() {
+    const { step, order, signers } = this.state;
+    const stepDefs = [["Documento", "Upload ou modelo"], ["Signatários", "Quem assina e como"], ["Campos", "Posição das assinaturas"], ["Revisar", "Mensagem e envio"]];
+    const steps = stepDefs.map(([title, sub], i) => {
+      const n = i + 1, done = n < step, cur = n === step;
+      return { title, sub, mark: done ? "✓" : String(n), bg: done ? "#1257c9" : cur ? "#ffffff" : "#ffffff", fg: done ? "#ffffff" : cur ? "#1257c9" : "#8a96ad", bd: done || cur ? "#1257c9" : "#d5dce9", titleFg: cur || done ? "#0b1f42" : "#8a96ad", lineBg: i === 3 ? "transparent" : done ? "#1257c9" : "#e6eaf2", go: () => this.setState({ step: n }) };
+    });
+    const palette = [["#e8f0fd", "#1257c9"], ["#fff4e0", "#9a5b00"], ["#e6f7ee", "#12784a"], ["#f1f4f9", "#47536b"]];
+    const channelsAll = ["E-mail", "WhatsApp", "SMS"];
+    const authAll = ["Token e-mail", "Token SMS", "Selfie", "Certificado ICP-Brasil", "Assinatura desenhada"];
+    const upd = (i, patch) => this.setState(s => ({ signers: s.signers.map((x, j) => j === i ? { ...x, ...patch } : x) }));
+    const sgs = signers.map((sg, i) => {
+      const [bg, fg] = palette[i % palette.length];
+      return {
+        ...sg, n: i + 1, bg, fg, heading: sg.name || `Signatário ${i + 1}`, displayName: sg.name || "(sem nome)",
+        summary: `${sg.channel} · ${sg.auth.length ? sg.auth.join(" + ") : "sem autenticação extra"}`,
+        remove: () => this.setState(s => ({ signers: s.signers.filter((_, j) => j !== i) })),
+        channels: channelsAll.map(c => ({ label: c, bg: c === sg.channel ? "#ffffff" : "transparent", shadow: c === sg.channel ? "0 1px 2px rgba(11,31,66,.08)" : "none", fg: c === sg.channel ? "#0b1f42" : "#47536b", select: () => upd(i, { channel: c }) })),
+        auth: authAll.map(a => { const on = sg.auth.includes(a); return { label: a, mark: on ? "✓ " : "", bd: on ? "#1257c9" : "#d5dce9", bg: on ? "#e8f0fd" : "#ffffff", fg: on ? "#1257c9" : "#47536b", toggle: () => upd(i, { auth: on ? sg.auth.filter(x => x !== a) : [...sg.auth, a] }) }; })
+      };
+    });
+    const seg = (on) => ({ bg: on ? "#ffffff" : "transparent", shadow: on ? "0 1px 2px rgba(11,31,66,.08)" : "none", fg: on ? "#0b1f42" : "#47536b" });
+    const s1 = seg(order === "seq"), s2 = seg(order === "par");
+    return {
+      sidebarOpen: this.state.sidebarOpen, toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      steps, is1: step === 1, is2: step === 2, is3: step === 3, is4: step === 4, sent: this.state.sent, notSent: !this.state.sent,
+      templates: [{ name: "Contrato de locação residencial v3", meta: "2 signatários · 5 campos" }, { name: "Proposta comercial", meta: "2 signatários · 3 campos" }, { name: "Termo de vistoria", meta: "3 signatários · 8 campos" }, { name: "Procuração simples", meta: "1 signatário · 2 campos" }],
+      signers: sgs, addSigner: () => this.setState(s => ({ signers: [...s.signers, { name: "", email: "", phone: "", role: "Parte", channel: "E-mail", auth: ["Token e-mail"] }] })),
+      addWitness: () => this.setState(s => ({ signers: [...s.signers, { name: "", email: "", phone: "", role: "Testemunha", channel: "E-mail", auth: ["Token e-mail"] }] })),
+      orderHint: order === "seq" ? "Cada signatário recebe o documento após o anterior assinar." : "Todos recebem o documento imediatamente.",
+      orderLabel: order === "seq" ? "ordem sequencial" : "todos ao mesmo tempo",
+      setSeq: () => this.setState({ order: "seq" }), setPar: () => this.setState({ order: "par" }),
+      seqBg: s1.bg, seqShadow: s1.shadow, seqFg: s1.fg, parBg: s2.bg, parShadow: s2.shadow, parFg: s2.fg,
+      pages: [1, 2, 3, 4, 5, 6].map(n => ({ n, bd: n === 6 ? "#1257c9" : "#e6eaf2", hasFields: n === 6 })),
+      fieldTypes: ["Assinatura", "Rubrica", "Nome completo", "CPF", "Data", "Texto livre", "Caixa de seleção", "Carimbo"],
+      placed: [{ color: "#1257c9", label: "Maria · Assinatura", page: "pág. 6" }, { color: "#d59b2a", label: "Carlos · Assinatura", page: "pág. 6" }, { color: "#1257c9", label: "Maria · Data", page: "pág. 6" }, { color: "#d59b2a", label: "Carlos · CPF", page: "pág. 6" }, { color: "#1257c9", label: "Maria · Rubrica", page: "todas" }],
+      back: () => this.setState(s => ({ step: Math.max(1, s.step - 1) })), backFg: step === 1 ? "#c9d4e6" : "#0b1f42",
+      next: () => step === 4 ? this.setState({ sent: true }) : this.setState(s => ({ step: s.step + 1 })),
+      nextLabel: step === 4 ? "Enviar para assinatura" : "Continuar",
+      go1: () => this.setState({ step: 1 }), go2: () => this.setState({ step: 2 }),
+      restart: () => this.setState({ step: 1, sent: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

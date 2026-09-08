@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input, select { font-family: inherit; }
+input::placeholder { color: #8a96ad; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="configuracoes" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap;">
+      <a href="App - Dashboard.dc.html" style="color: #8a96ad;">Imobiliária Horizonte</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42;">Configurações</span>
+    </nav>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div>
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Configurações</h1>
+      <p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">Conta, padrões de assinatura, notificações e plano.</p>
+    </div>
+
+    <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+      <nav style="flex: 0 0 200px; display: flex; flex-direction: column; gap: 2px;">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <button onClick="{{ t.select }}" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border-radius: 8px; border: 0; cursor: pointer; text-align: left; font-size: 13.5px; font-weight: {{ t.w }}; color: {{ t.fg }}; background: {{ t.bg }};" style-hover="background: #eef2f9;">{{ t.label }}</button>
+        </sc-for>
+      </nav>
+
+      <div style="flex: 1 1 480px; min-width: 0; max-width: 820px; display: flex; flex-direction: column; gap: 16px;">
+
+        <sc-if value="{{ isGeral }}" hint-placeholder-val="{{ true }}">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div><div style="font-size: 15px; font-weight: 600;">Empresa</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 3px;">Aparece nos convites, no certificado de conclusão e nas notas fiscais.</div></div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Razão social</span><input defaultValue="Horizonte Negócios Imobiliários Ltda." style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Nome de exibição</span><input defaultValue="Imobiliária Horizonte" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">CNPJ</span><input defaultValue="12.345.678/0001-90" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">E-mail de contato</span><input defaultValue="contato@horizonte.com.br" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /></label>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 14px; border: 1px solid #e6eaf2; border-radius: 10px;">
+            <span style="width: 56px; height: 56px; border-radius: 10px; background: #0b1f42; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px;">IH</span>
+            <span style="flex: 1;"><span style="display: block; font-size: 13.5px; font-weight: 600;">Logo da empresa</span><span style="display: block; font-size: 12.5px; color: #8a96ad;">PNG ou SVG, fundo transparente, mínimo 200×200. Usado nos e-mails e na página de assinatura.</span></span>
+            <button style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="background: #f4f8fe;">Enviar logo</button>
+          </div>
+          <div style="display: flex; justify-content: flex-end;"><button style="height: 36px; padding: 0 16px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer;" style-hover="background: #0f4bb0;">Salvar alterações</button></div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="margin-bottom: 10px;"><div style="font-size: 15px; font-weight: 600;">Segurança</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 3px;">Políticas aplicadas a todos os usuários da conta.</div></div>
+          <sc-for list="{{ security }}" as="s" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #f1f4f9;"><span><span style="display: block; font-size: 13.5px; font-weight: 600;">{{ s.title }}</span><span style="display: block; font-size: 12.5px; color: #8a96ad; margin-top: 2px;">{{ s.desc }}</span></span><button onClick="{{ s.toggle }}" style="width: 40px; height: 22px; border-radius: 999px; border: 0; background: {{ s.bg }}; position: relative; flex: none; cursor: pointer;"><span style="position: absolute; top: 2px; left: {{ s.knob }}; width: 18px; height: 18px; border-radius: 999px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .15s ease;"></span></button></div>
+          </sc-for>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #f5c2c2; border-radius: 12px; padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <span><span style="display: block; font-size: 15px; font-weight: 600; color: #b42323;">Excluir conta</span><span style="display: block; font-size: 12.5px; color: #47536b; margin-top: 3px;">Remove todos os usuários e documentos após 30 dias. Documentos assinados continuam válidos para quem os baixou.</span></span>
+          <button style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #f5c2c2; background: #ffffff; font-size: 13px; font-weight: 600; color: #b42323; cursor: pointer;" style-hover="background: #fdeaea;">Solicitar exclusão</button>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isAssinatura }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div><div style="font-size: 15px; font-weight: 600;">Padrões de novas solicitações</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 3px;">Podem ser alterados em cada envio.</div></div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Prazo para assinatura</span><span style="display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px;">15 dias<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Lembretes automáticos</span><span style="display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px;">A cada 2 dias<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Ordem de assinatura</span><span style="display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px;">Sequencial<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></label>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Autenticação padrão dos signatários</span><div style="display: flex; gap: 6px; flex-wrap: wrap;"><sc-for list="{{ authDefaults }}" as="a" hint-placeholder-count="5"><button onClick="{{ a.toggle }}" style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid {{ a.bd }}; background: {{ a.bg }}; color: {{ a.fg }}; font-size: 12.5px; font-weight: 600; cursor: pointer;">{{ a.mark }}{{ a.label }}</button></sc-for></div><span style="font-size: 12px; color: #8a96ad;">Certificado ICP-Brasil e selfie aumentam a robustez jurídica; token é o mínimo recomendado.</span></div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="margin-bottom: 10px;"><div style="font-size: 15px; font-weight: 600;">Canais e recursos</div></div>
+          <sc-for list="{{ channels }}" as="s" hint-placeholder-count="5">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #f1f4f9;"><span><span style="display: block; font-size: 13.5px; font-weight: 600;">{{ s.title }}</span><span style="display: block; font-size: 12.5px; color: #8a96ad; margin-top: 2px;">{{ s.desc }}</span></span><button onClick="{{ s.toggle }}" style="width: 40px; height: 22px; border-radius: 999px; border: 0; background: {{ s.bg }}; position: relative; flex: none; cursor: pointer;"><span style="position: absolute; top: 2px; left: {{ s.knob }}; width: 18px; height: 18px; border-radius: 999px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .15s ease;"></span></button></div>
+          </sc-for>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isNotif }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+          <div style="padding: 20px 20px 12px;"><div style="font-size: 15px; font-weight: 600;">Notificações</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 3px;">Escolha como quer ser avisado sobre cada evento. Notificações no app aparecem no sino.</div></div>
+          <div style="display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(3, 90px); align-items: center; padding: 0 20px; height: 38px; border-top: 1px solid #f1f4f9; border-bottom: 1px solid #f1f4f9; background: #fbfcfe; font-size: 12px; font-weight: 600; color: #8a96ad;"><span>Evento</span><span style="text-align: center;">E-mail</span><span style="text-align: center;">WhatsApp</span><span style="text-align: center;">No app</span></div>
+          <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="8">
+            <div style="display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(3, 90px); align-items: center; padding: 11px 20px; border-bottom: 1px solid #f1f4f9; font-size: 13.5px;" style-hover="background: #f7f9fd;">
+              <span style="min-width: 0;"><span style="display: block; font-weight: 500;">{{ n.title }}</span><span style="display: block; font-size: 12px; color: #8a96ad;">{{ n.desc }}</span></span>
+              <sc-for list="{{ n.cells }}" as="c" hint-placeholder-count="3"><span style="display: flex; justify-content: center;"><input type="checkbox" checked="{{ c.on }}" onChange="{{ c.toggle }}" style="width: 16px; height: 16px; accent-color: #1257c9; margin: 0; cursor: pointer;" /></span></sc-for>
+            </div>
+          </sc-for>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; flex-wrap: wrap;"><span style="font-size: 12.5px; color: #8a96ad;">Resumo diário de pendências enviado às 08:00 (America/Sao_Paulo).</span><button style="height: 34px; padding: 0 14px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;" style-hover="background: #0f4bb0;">Salvar preferências</button></div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isCobranca }}" hint-placeholder-val="{{ false }}">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+          <div style="background: #0b1f42; color: #ffffff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6f87b8;">Plano atual</span><span style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #1fb865; color: #ffffff;">Ativo</span></div>
+            <div style="display: flex; align-items: baseline; gap: 8px;"><span style="font-size: 26px; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: -.01em;">Profissional</span><span style="font-size: 14px; color: #b9c7de;">R$ 49/mês</span></div>
+            <div style="font-size: 13px; color: #b9c7de; line-height: 1.55;">500 documentos/mês · 10 usuários · WhatsApp e SMS · API e webhooks · suporte prioritário</div>
+            <div style="display: flex; gap: 8px; margin-top: 4px;"><a href="Planos.dc.html" style="height: 34px; padding: 0 12px; border-radius: 8px; background: #ffffff; color: #0b1f42; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center;" style-hover="background: #e8f0fd; color: #0b1f42;">Alterar plano</a><button style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: transparent; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;">Cancelar renovação</button></div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 15px; font-weight: 600;">Uso no ciclo</span><span style="font-size: 12.5px; color: #8a96ad;">03 set → 15 out</span></div>
+            <div><div style="display: flex; justify-content: space-between; font-size: 12.5px; color: #47536b;"><span>Documentos</span><span style="font-variant-numeric: tabular-nums;"><b style="color: #0b1f42;">148</b> / 500</span></div><div style="height: 8px; border-radius: 999px; background: #eef2f9; margin-top: 6px; overflow: hidden;"><div style="height: 100%; width: 29.6%; background: #1257c9; border-radius: 999px;"></div></div></div>
+            <div><div style="display: flex; justify-content: space-between; font-size: 12.5px; color: #47536b;"><span>Usuários</span><span style="font-variant-numeric: tabular-nums;"><b style="color: #0b1f42;">6</b> / 10</span></div><div style="height: 8px; border-radius: 999px; background: #eef2f9; margin-top: 6px; overflow: hidden;"><div style="height: 100%; width: 60%; background: #1257c9; border-radius: 999px;"></div></div></div>
+            <div><div style="display: flex; justify-content: space-between; font-size: 12.5px; color: #47536b;"><span>Mensagens WhatsApp/SMS</span><span style="font-variant-numeric: tabular-nums;"><b style="color: #0b1f42;">212</b> / 1.000</span></div><div style="height: 8px; border-radius: 999px; background: #eef2f9; margin-top: 6px; overflow: hidden;"><div style="height: 100%; width: 21%; background: #1257c9; border-radius: 999px;"></div></div></div>
+            <span style="font-size: 12px; color: #8a96ad;">Excedentes: R$ 0,90 por documento · R$ 0,25 por mensagem.</span>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 15px; font-weight: 600;">Forma de pagamento</span><button style="border: 0; background: transparent; font-size: 13px; font-weight: 600; color: #1257c9; cursor: pointer;">Alterar</button></div>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e6eaf2; border-radius: 10px;"><span style="width: 44px; height: 30px; border-radius: 6px; background: #0b1f42; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; letter-spacing: .06em;">VISA</span><span style="flex: 1;"><span style="display: block; font-size: 13.5px; font-weight: 600;">•••• •••• •••• 4242</span><span style="display: block; font-size: 12px; color: #8a96ad;">Validade 08/28 · próxima cobrança em 15 out</span></span></div>
+            <span style="font-size: 12.5px; color: #47536b;">Também aceitamos boleto e Pix no plano anual.</span>
+          </div>
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 15px; font-weight: 600;">Dados de faturamento</span><button style="border: 0; background: transparent; font-size: 13px; font-weight: 600; color: #1257c9; cursor: pointer;">Editar</button></div>
+            <div style="font-size: 13px; color: #47536b; line-height: 1.7;">Horizonte Negócios Imobiliários Ltda.<br />CNPJ 12.345.678/0001-90<br />Av. Paulista, 1000 · cj. 1201 · São Paulo/SP · 01310-100<br />financeiro@horizonte.com.br</div>
+          </div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px;">
+          <div style="padding: 18px 20px 12px; display: flex; align-items: center; justify-content: space-between;"><span style="font-size: 15px; font-weight: 600;">Faturas</span><span style="font-size: 12.5px; color: #8a96ad;">NF-e emitida automaticamente</span></div>
+          <div style="display: grid; grid-template-columns: 1fr minmax(0, 2fr) 1fr 1fr 100px; align-items: center; padding: 0 20px; height: 38px; border-top: 1px solid #f1f4f9; border-bottom: 1px solid #f1f4f9; background: #fbfcfe; font-size: 12px; font-weight: 600; color: #8a96ad;"><span>Data</span><span>Descrição</span><span>Valor</span><span>Status</span><span></span></div>
+          <sc-for list="{{ invoices }}" as="i" hint-placeholder-count="5">
+            <div style="display: grid; grid-template-columns: 1fr minmax(0, 2fr) 1fr 1fr 100px; align-items: center; padding: 11px 20px; border-bottom: 1px solid #f1f4f9; font-size: 13.5px;" style-hover="background: #f7f9fd;"><span style="font-variant-numeric: tabular-nums; color: #47536b;">{{ i.date }}</span><span style="font-weight: 500;">{{ i.desc }}</span><span style="font-variant-numeric: tabular-nums; font-weight: 600;">{{ i.amount }}</span><span><span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #e6f7ee; color: #12784a; border: 1px solid #bfe9d1;">Paga</span></span><span style="display: flex; justify-content: flex-end; gap: 6px;"><a href="#" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12px; font-weight: 600; color: #0b1f42; display: inline-flex; align-items: center;" style-hover="background: #f4f8fe; color: #0b1f42;">PDF</a><a href="#" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12px; font-weight: 600; color: #0b1f42; display: inline-flex; align-items: center;" style-hover="background: #f4f8fe; color: #0b1f42;">NF-e</a></span></div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;cobranca&quot;,&quot;options&quot;:[&quot;geral&quot;,&quot;assinatura&quot;,&quot;notif&quot;,&quot;cobranca&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Tela&quot;}}">
+class Component extends DCLogic {
+  state = {
+    sidebarOpen: true, tab: null,
+    sec: { tfa: true, sso: false, sessions: true, ipAllow: false },
+    ch: { email: true, whatsapp: true, sms: true, drawn: true, initials: false },
+    auth: ["Token e-mail", "Token SMS"],
+    notif: [[1,0,1],[1,1,1],[1,1,1],[1,0,1],[1,0,0],[1,0,1],[1,0,1],[0,0,1]]
+  };
+  renderVals() {
+    const tab = this.state.tab ?? this.props.tab ?? "cobranca";
+    const T = (on) => ({ bg: on ? "#1257c9" : "#c9d4e6", knob: on ? "20px" : "2px" });
+    const secDefs = [["tfa", "Exigir autenticação em duas etapas", "Todos os usuários precisam configurar 2FA no próximo acesso"], ["sso", "Login único (SSO / SAML)", "Disponível no plano Empresarial"], ["sessions", "Encerrar sessões após 12 h inativas", "Recomendado para computadores compartilhados"], ["ipAllow", "Restringir acesso por IP", "Somente a partir dos endereços da empresa"]];
+    const chDefs = [["email", "Envio por e-mail", "Convites e lembretes por e-mail"], ["whatsapp", "Envio por WhatsApp", "Requer celular do signatário · R$ 0,25/mensagem além da franquia"], ["sms", "Envio por SMS", "Alternativa ao WhatsApp"], ["drawn", "Permitir assinatura desenhada", "O signatário desenha a assinatura no celular ou computador"], ["initials", "Rubrica automática em todas as páginas", "Adiciona campo de rubrica ao criar solicitações"]];
+    const authAll = ["Token e-mail", "Token SMS", "Selfie", "Certificado ICP-Brasil", "Assinatura desenhada"];
+    const notifDefs = [["Signatário assinou", "A cada assinatura concluída"], ["Documento concluído", "Todos assinaram; PDF final disponível"], ["Signatário recusou", "Inclui o motivo informado"], ["Documento expira em 48 h", "Ainda com pendências"], ["Resumo diário de pendências", "Um e-mail por dia útil"], ["Convite de usuário aceito", "Novo membro entrou na conta"], ["Falha em webhook", "Após a 3ª tentativa sem sucesso"], ["Novidades do produto", "Lançamentos e melhorias, no máximo 1×/mês"]];
+    return {
+      sidebarOpen: this.state.sidebarOpen, toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      tabs: [["geral", "Geral e segurança"], ["assinatura", "Padrões de assinatura"], ["notif", "Notificações"], ["cobranca", "Plano e cobrança"]].map(([k, label]) => ({ label, w: k === tab ? 600 : 500, fg: k === tab ? "#1257c9" : "#47536b", bg: k === tab ? "#e8f0fd" : "transparent", select: () => this.setState({ tab: k }) })),
+      isGeral: tab === "geral", isAssinatura: tab === "assinatura", isNotif: tab === "notif", isCobranca: tab === "cobranca",
+      security: secDefs.map(([k, title, desc]) => ({ title, desc, ...T(this.state.sec[k]), toggle: () => this.setState(s => ({ sec: { ...s.sec, [k]: !s.sec[k] } })) })),
+      channels: chDefs.map(([k, title, desc]) => ({ title, desc, ...T(this.state.ch[k]), toggle: () => this.setState(s => ({ ch: { ...s.ch, [k]: !s.ch[k] } })) })),
+      authDefaults: authAll.map(a => { const on = this.state.auth.includes(a); return { label: a, mark: on ? "✓ " : "", bd: on ? "#1257c9" : "#d5dce9", bg: on ? "#e8f0fd" : "#ffffff", fg: on ? "#1257c9" : "#47536b", toggle: () => this.setState(s => ({ auth: on ? s.auth.filter(x => x !== a) : [...s.auth, a] })) }; }),
+      notifs: notifDefs.map(([title, desc], r) => ({ title, desc, cells: this.state.notif[r].map((v, c) => ({ on: !!v, toggle: () => this.setState(s => ({ notif: s.notif.map((row, i) => i === r ? row.map((x, j) => j === c ? (x ? 0 : 1) : x) : row) })) })) })),
+      invoices: [["15 ago 2026", "Plano Profissional · ago/26", "R$ 49,00"], ["15 jul 2026", "Plano Profissional · jul/26 + 12 documentos excedentes", "R$ 59,80"], ["15 jun 2026", "Plano Profissional · jun/26", "R$ 49,00"], ["15 mai 2026", "Plano Profissional · mai/26", "R$ 49,00"], ["15 abr 2026", "Plano Profissional · abr/26 + 2 assentos extras", "R$ 69,00"]].map(([date, desc, amount]) => ({ date, desc, amount }))
+    };
+  }
+}
+</script>
+</body>
+</html>

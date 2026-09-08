@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input, textarea { font-family: inherit; }
+input::placeholder, textarea::placeholder { color: #8a96ad; }
+@keyframes dialogIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="usuarios" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap;">
+      <a href="App - Dashboard.dc.html" style="color: #8a96ad;">Imobiliária Horizonte</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42;">Usuários</span>
+    </nav>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Usuários da conta</h1>
+        <p style="margin: 6px 0 0; font-size: 13.5px; color: #47536b;">6 de 10 assentos do plano Profissional em uso · 1 convite pendente</p>
+      </div>
+      <button onClick="{{ openInvite }}" style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6"/><path d="M22 19h-6"/></svg>Convidar usuário</button>
+    </div>
+
+    <div style="display: inline-flex; background: #eef2f9; border-radius: 8px; padding: 3px; gap: 2px; align-self: flex-start;">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="2">
+        <button onClick="{{ t.select }}" style="padding: 5px 12px; border-radius: 6px; border: 0; cursor: pointer; background: {{ t.bg }}; box-shadow: {{ t.shadow }}; font-size: 12.5px; font-weight: {{ t.w }}; color: {{ t.fg }};">{{ t.label }}</button>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ isMembers }}" hint-placeholder-val="{{ true }}">
+    <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04);">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px; height: 34px; flex: 1 1 220px; max-width: 320px; padding: 0 10px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; color: #8a96ad;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input placeholder="Buscar por nome ou e-mail" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13.5px; color: #0b1f42;" />
+        </div>
+        <button style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px dashed #c9d4e6; background: #ffffff; font-size: 13px; font-weight: 500; color: #47536b; cursor: pointer;" style-hover="background: #f4f8fe; color: #0b1f42;">Função</button>
+        <button style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px dashed #c9d4e6; background: #ffffff; font-size: 13px; font-weight: 500; color: #47536b; cursor: pointer;" style-hover="background: #f4f8fe; color: #0b1f42;">Status</button>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) 1.2fr 1.2fr .9fr 1.1fr 44px; align-items: center; padding: 0 16px; height: 38px; border-top: 1px solid #f1f4f9; border-bottom: 1px solid #f1f4f9; background: #fbfcfe; font-size: 12px; font-weight: 600; color: #8a96ad;"><span>Usuário</span><span>Função</span><span>Status</span><span>2FA</span><span>Último acesso</span><span></span></div>
+      <sc-for list="{{ members }}" as="m" hint-placeholder-count="6">
+        <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) 1.2fr 1.2fr .9fr 1.1fr 44px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f1f4f9; font-size: 13.5px;" style-hover="background: #f7f9fd;">
+          <div style="display: flex; align-items: center; gap: 12px; min-width: 0; padding-right: 10px;">
+            <span style="width: 36px; height: 36px; border-radius: 8px; background: {{ m.bg }}; color: {{ m.fg }}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none;">{{ m.initials }}</span>
+            <span style="min-width: 0;"><span style="display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ m.name }} <span style="font-weight: 500; color: #8a96ad;">{{ m.you }}</span></span><span style="display: block; font-size: 12px; color: #8a96ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ m.email }}</span></span>
+          </div>
+          <span><span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap;">{{ m.role }}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></span>
+          <div><span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: {{ m.status.bg }}; color: {{ m.status.fg }}; border: 1px solid {{ m.status.bd }}; white-space: nowrap;"><span style="width: 6px; height: 6px; border-radius: 999px; background: currentColor;"></span>{{ m.status.label }}</span></div>
+          <span style="font-size: 12.5px; font-weight: 600; color: {{ m.tfaColor }};">{{ m.tfa }}</span>
+          <span style="font-size: 13px; color: #47536b; white-space: nowrap;">{{ m.last }}</span>
+          <div style="display: flex; justify-content: flex-end;"><button style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: #8a96ad; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div>
+        </div>
+      </sc-for>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; font-size: 12.5px; color: #8a96ad;"><span>6 usuários · 4 assentos disponíveis</span><a href="App - Cobranca.dc.html" style="font-weight: 600; color: #1257c9;">Adicionar assentos ao plano</a></div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isRoles }}" hint-placeholder-val="{{ false }}">
+    <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04);">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 12px; flex-wrap: wrap;">
+        <div><div style="font-size: 15px; font-weight: 600;">Funções e permissões</div><div style="font-size: 13px; color: #8a96ad; margin-top: 4px;">Funções padrão do sistema. Crie funções personalizadas no plano Empresarial.</div></div>
+        <button style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="background: #f4f8fe;">Nova função personalizada</button>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(4, minmax(0, 1fr)); align-items: center; padding: 0 20px; height: 40px; border-top: 1px solid #f1f4f9; border-bottom: 1px solid #f1f4f9; background: #fbfcfe; font-size: 12px; font-weight: 600; color: #8a96ad;"><span>Permissão</span><span style="text-align: center;">Administrador</span><span style="text-align: center;">Gerente</span><span style="text-align: center;">Operador</span><span style="text-align: center;">Somente leitura</span></div>
+      <sc-for list="{{ perms }}" as="p" hint-placeholder-count="8">
+        <div style="display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(4, minmax(0, 1fr)); align-items: center; padding: 11px 20px; border-bottom: 1px solid #f1f4f9; font-size: 13.5px;" style-hover="background: #f7f9fd;">
+          <span style="min-width: 0;"><span style="display: block; font-weight: 500;">{{ p.name }}</span><span style="display: block; font-size: 12px; color: #8a96ad;">{{ p.desc }}</span></span>
+          <sc-for list="{{ p.cells }}" as="c" hint-placeholder-count="4"><span style="display: flex; justify-content: center;"><span style="width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: {{ c.bg }}; color: {{ c.fg }}; font-size: 12px; font-weight: 700;">{{ c.mark }}</span></span></sc-for>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+  </div>
+</main>
+
+<sc-if value="{{ inviteOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeInvite }}" style="position: fixed; inset: 0; background: rgba(11,31,66,.45); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px;">
+  <div onClick="{{ stop }}" style="width: 100%; max-width: 460px; background: #ffffff; border-radius: 14px; box-shadow: 0 24px 60px rgba(11,31,66,.25); padding: 24px; display: flex; flex-direction: column; gap: 16px; animation: dialogIn .18s ease-out both;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+      <div><h2 style="margin: 0; font-size: 18px; font-weight: 700;">Convidar usuário</h2><p style="margin: 4px 0 0; font-size: 13px; color: #47536b;">O convite expira em 7 dias. Você tem 4 assentos disponíveis.</p></div>
+      <button onClick="{{ closeInvite }}" style="width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #8a96ad; cursor: pointer; display: flex; align-items: center; justify-content: center;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">E-mails</span><input placeholder="nome@horizonte.com.br, outro@horizonte.com.br" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 14px; color: #0b1f42; outline: none;" style-focus="border-color: #1257c9; box-shadow: 0 0 0 3px rgba(18,87,201,.18);" /><span style="font-size: 12px; color: #8a96ad;">Separe vários e-mails por vírgula.</span></label>
+    <div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Função</span>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <sc-for list="{{ roleOptions }}" as="r" hint-placeholder-count="4">
+          <button onClick="{{ r.select }}" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 8px; border: 1px solid {{ r.bd }}; background: {{ r.bg }}; text-align: left; cursor: pointer;"><span style="font-size: 13px; font-weight: 600; color: #0b1f42;">{{ r.name }}</span><span style="font-size: 11.5px; color: #8a96ad; line-height: 1.4;">{{ r.desc }}</span></button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-weight: 600;">Pastas com acesso</span><div style="display: flex; gap: 6px; flex-wrap: wrap;"><span style="height: 28px; padding: 0 10px; border-radius: 999px; background: #e8f0fd; color: #1257c9; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center;">✓ Todas as pastas</span><span style="height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid #d5dce9; color: #47536b; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center;">Locação</span><span style="height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid #d5dce9; color: #47536b; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center;">Vendas</span><span style="height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid #d5dce9; color: #47536b; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center;">Jurídico</span></div></div>
+    <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px;">
+      <button onClick="{{ closeInvite }}" style="height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="background: #f4f8fe;">Cancelar</button>
+      <button onClick="{{ closeInvite }}" style="height: 36px; padding: 0 16px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer;" style-hover="background: #0f4bb0;">Enviar convite</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sidebarOpen: true, tab: "members", inviteOpen: false, role: "Operador" };
+  renderVals() {
+    const { tab, role } = this.state;
+    const st = {
+      on: { label: "Ativo", bg: "#e6f7ee", fg: "#12784a", bd: "#bfe9d1" },
+      inv: { label: "Convite pendente", bg: "#fff4e0", fg: "#9a5b00", bd: "#f5dfae" },
+      off: { label: "Inativo", bg: "#f1f4f9", fg: "#6b7891", bd: "#e6eaf2" }
+    };
+    const pal = [["#e8f0fd", "#1257c9"], ["#e6f7ee", "#12784a"], ["#fff4e0", "#9a5b00"], ["#f1f4f9", "#47536b"]];
+    const members = [
+      ["AR", "Ana Ribeiro", "(você)", "ana@horizonte.com.br", "Administrador", "on", true, "Agora"],
+      ["BC", "Bruno Costa", "", "bruno@horizonte.com.br", "Gerente", "on", true, "Hoje, 08:20"],
+      ["CD", "Camila Duarte", "", "camila@horizonte.com.br", "Operador", "on", false, "Ontem, 18:02"],
+      ["DN", "Diego Nunes", "", "diego@horizonte.com.br", "Gerente", "on", true, "01 set, 16:40"],
+      ["EP", "Elisa Prado", "", "elisa@horizonte.com.br", "Somente leitura", "off", false, "12 jul, 09:15"],
+      ["FA", "Felipe Aragão", "", "felipe@horizonte.com.br", "Operador", "inv", false, "Convite enviado 02 set"]
+    ].map(([initials, name, you, email, role, s, tfa, last], i) => ({ initials, name, you, email, role, status: st[s], last, bg: pal[i % 4][0], fg: pal[i % 4][1], tfa: tfa ? "Ativa" : (s === "inv" ? "—" : "Inativa"), tfaColor: tfa ? "#12784a" : (s === "inv" ? "#8a96ad" : "#b42323") }));
+    const permDefs = [
+      ["Criar e enviar documentos", "Upload, modelos e solicitações", [1, 1, 1, 0]],
+      ["Cancelar documentos", "Inclusive de outros usuários", [1, 1, 0, 0]],
+      ["Ver todos os documentos da conta", "Sem restrição por pasta", [1, 1, 0, 0]],
+      ["Gerenciar pastas e modelos", "Criar, editar e excluir", [1, 1, 0, 0]],
+      ["Convidar e remover usuários", "E alterar funções", [1, 0, 0, 0]],
+      ["Acessar API e webhooks", "Gerar chaves e ver logs", [1, 0, 0, 0]],
+      ["Ver plano e faturamento", "Notas fiscais e uso", [1, 0, 0, 0]],
+      ["Exportar trilha de auditoria", "Relatórios em PDF/CSV", [1, 1, 1, 1]]
+    ];
+    const roleDefs = [["Administrador", "Acesso total, inclusive cobrança e API"], ["Gerente", "Gerencia documentos, pastas e modelos"], ["Operador", "Cria e envia documentos nas pastas permitidas"], ["Somente leitura", "Visualiza e exporta, sem editar"]];
+    return {
+      sidebarOpen: this.state.sidebarOpen, toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      tabs: [["members", "Membros (6)"], ["roles", "Funções e permissões"]].map(([k, label]) => ({ label, bg: k === tab ? "#ffffff" : "transparent", shadow: k === tab ? "0 1px 2px rgba(11,31,66,.08)" : "none", w: k === tab ? 600 : 500, fg: k === tab ? "#0b1f42" : "#47536b", select: () => this.setState({ tab: k }) })),
+      isMembers: tab === "members", isRoles: tab === "roles",
+      members,
+      perms: permDefs.map(([name, desc, cells]) => ({ name, desc, cells: cells.map(v => v ? { mark: "✓", bg: "#e6f7ee", fg: "#12784a" } : { mark: "–", bg: "#f1f4f9", fg: "#8a96ad" }) })),
+      inviteOpen: this.state.inviteOpen, openInvite: () => this.setState({ inviteOpen: true }), closeInvite: () => this.setState({ inviteOpen: false }), stop: (e) => e.stopPropagation(),
+      roleOptions: roleDefs.map(([name, desc]) => ({ name, desc, bd: name === role ? "#1257c9" : "#e6eaf2", bg: name === role ? "#e8f0fd" : "#ffffff", select: () => this.setState({ role: name }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

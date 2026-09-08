@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #fbfcfe; }
+* { box-sizing: border-box; }
+a { color: #0b1f42; text-decoration: none; }
+a:hover { color: #1257c9; }
+button, input { font-family: inherit; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; font-family: 'Exo 2', sans-serif; font-size: 14px; color: #0b1f42; background: #fbfcfe;">
+<sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}"><dc-import name="AppSidebar" active="documentos" hint-size="256px,100vh" style="position: sticky; top: 0; height: 100vh; flex: none; width: 256px;"></dc-import></sc-if>
+
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+  <header style="position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: rgba(251,252,254,.9); backdrop-filter: blur(8px); border-bottom: 1px solid #e6eaf2;">
+    <button onClick="{{ toggleSidebar }}" title="Recolher menu" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    <span style="width: 1px; height: 18px; background: #e6eaf2;"></span>
+    <nav style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap; min-width: 0;">
+      <a href="App - Documentos.dc.html" style="color: #8a96ad;">Documentos</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <a href="App - Documentos.dc.html" style="color: #8a96ad;">Locação</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9d4e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span style="font-weight: 600; color: #0b1f42; overflow: hidden; text-overflow: ellipsis;">Contrato de locação — Apto 302</span>
+    </nav>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 6px;">
+      <button style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: #47536b; cursor: pointer;" style-hover="background: #eef2f9; color: #0b1f42;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span style="position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 999px; background: #e5484d; border: 2px solid #fbfcfe;"></span></button>
+    </div>
+  </header>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; gap: 14px; align-items: flex-start; min-width: 0;">
+        <a href="App - Documentos.dc.html" title="Voltar" style="width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; color: #47536b; margin-top: 2px;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></a>
+        <div style="min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2;">Contrato de locação — Apto 302</h1>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #fff4e0; color: #9a5b00; border: 1px solid #f5dfae; white-space: nowrap;"><span style="width: 6px; height: 6px; border-radius: 999px; background: currentColor;"></span>Aguardando · 1 de 2</span>
+          </div>
+          <p style="margin: 6px 0 0; font-size: 13px; color: #47536b; display: flex; gap: 6px; flex-wrap: wrap; font-variant-numeric: tabular-nums;"><span style="font-weight: 600; color: #0b1f42;">AV-00148</span><span>·</span><span>Pasta Locação</span><span>·</span><span>Criado por Ana Ribeiro em 1 set 2026</span><span>·</span><span style="color: #9a5b00; font-weight: 600;">Expira em 15 set (12 dias)</span></p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13.5px; font-weight: 500; color: #0b1f42; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.04);" style-hover="background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Baixar<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a96ad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; border: 0; background: #1257c9; color: #ffffff; font-size: 13.5px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(11,31,66,.1);" style-hover="background: #0f4bb0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Lembrar pendentes</button>
+        <button style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; color: #47536b; cursor: pointer;" style-hover="background: #f4f8fe; color: #0b1f42;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 1.4 1 420px; min-width: 0; background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #e6eaf2; font-size: 13px; color: #47536b; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #47536b; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+            <span style="font-variant-numeric: tabular-nums;">Página <b style="color: #0b1f42;">1</b> de 6</span>
+            <button style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #47536b; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #47536b; display: flex; align-items: center; justify-content: center; cursor: pointer;">−</button><span style="font-variant-numeric: tabular-nums; min-width: 40px; text-align: center;">100%</span><button style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; color: #47536b; display: flex; align-items: center; justify-content: center; cursor: pointer;">+</button>
+            <span style="width: 1px; height: 18px; background: #e6eaf2; margin: 0 4px;"></span>
+            <a href="#" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #1257c9;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Certificado</a>
+          </div>
+        </div>
+        <div style="background: #eef2f9; padding: 24px; display: flex; justify-content: center;">
+          <div style="width: 100%; max-width: 560px; aspect-ratio: 1 / 1.3; background: #ffffff; box-shadow: 0 8px 30px rgba(11,31,66,.12); padding: 8% 9%; display: flex; flex-direction: column; gap: 14px; position: relative;">
+            <div style="font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; text-align: center; color: #0b1f42;">Contrato de locação residencial</div>
+            <div style="display: flex; flex-direction: column; gap: 7px; margin-top: 6px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 96%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 88%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 62%;"></div></div>
+            <div style="font-size: 10px; font-weight: 700; color: #47536b; margin-top: 4px;">CLÁUSULA 1ª — DO OBJETO</div>
+            <div style="display: flex; flex-direction: column; gap: 7px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 93%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 97%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 40%;"></div></div>
+            <div style="font-size: 10px; font-weight: 700; color: #47536b; margin-top: 4px;">CLÁUSULA 2ª — DO PRAZO</div>
+            <div style="display: flex; flex-direction: column; gap: 7px;"><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 100%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 90%;"></div><div style="height: 7px; border-radius: 4px; background: #eef2f9; width: 74%;"></div></div>
+            <div style="margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+              <div style="border: 1.5px solid #1fb865; background: #e6f7ee; border-radius: 6px; padding: 8px 10px 6px; position: relative;">
+                <span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #12784a; background: #e6f7ee; padding: 0 4px;">Locatária</span>
+                <div style="font-family: 'Caveat', cursive; font-size: 24px; line-height: 1; color: #0b1f42; transform: rotate(-2deg);">Maria A. Souza</div>
+                <div style="font-size: 9px; color: #12784a; margin-top: 4px; font-variant-numeric: tabular-nums;">✓ Assinado em 02/09/2026 14:32</div>
+              </div>
+              <div style="border: 1.5px dashed #d59b2a; background: #fff8e8; border-radius: 6px; padding: 8px 10px 6px; position: relative; display: flex; flex-direction: column; justify-content: center;">
+                <span style="position: absolute; top: -9px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #9a5b00; background: #fff8e8; padding: 0 4px;">Fiador</span>
+                <div style="font-size: 11px; font-weight: 600; color: #9a5b00;">Carlos Mendes</div>
+                <div style="font-size: 9px; color: #9a5b00; margin-top: 2px;">Aguardando assinatura</div>
+              </div>
+            </div>
+            <div style="position: absolute; right: 12px; bottom: 10px; font-size: 8px; color: #8a96ad; font-variant-numeric: tabular-nums;">AV-00148 · pág. 1/6</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: inline-flex; background: #eef2f9; border-radius: 8px; padding: 3px; gap: 2px; align-self: flex-start;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+            <button onClick="{{ t.select }}" style="padding: 5px 12px; border-radius: 6px; border: 0; cursor: pointer; background: {{ t.bg }}; box-shadow: {{ t.shadow }}; font-size: 12.5px; font-weight: {{ t.w }}; color: {{ t.fg }};">{{ t.label }}</button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ isSigners }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: #47536b;"><span>Ordem de assinatura: <b style="color: #0b1f42;">sequencial</b></span><span>Lembretes: <b style="color: #0b1f42;">a cada 2 dias</b></span></div>
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <span style="width: 40px; height: 40px; border-radius: 10px; background: #e6f7ee; color: #12784a; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex: none;">MS</span>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;"><span style="font-weight: 600;">Maria A. Souza</span><span style="font-size: 11.5px; color: #8a96ad;">Locatária · 1ª</span></div>
+                <div style="font-size: 12.5px; color: #47536b; margin-top: 2px;">maria.souza@gmail.com · +55 11 98877-1234</div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #47536b; background: #f1f4f9; border-radius: 6px; padding: 2px 7px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>WhatsApp</span>
+                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #47536b; background: #f1f4f9; border-radius: 6px; padding: 2px 7px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>Token SMS</span>
+                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #47536b; background: #f1f4f9; border-radius: 6px; padding: 2px 7px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>Selfie</span>
+                </div>
+              </div>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #e6f7ee; color: #12784a; border: 1px solid #bfe9d1; white-space: nowrap; flex: none;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assinado</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #f1f4f9; font-size: 12px; color: #8a96ad; font-variant-numeric: tabular-nums;"><span>02 set 2026, 14:32 · IP 187.12.44.9 · iPhone (Safari)</span><a href="#" style="font-weight: 600; color: #1257c9;">Ver evidências</a></div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <span style="width: 40px; height: 40px; border-radius: 10px; background: #fff4e0; color: #9a5b00; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex: none;">CM</span>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;"><span style="font-weight: 600;">Carlos Mendes</span><span style="font-size: 11.5px; color: #8a96ad;">Fiador · 2º</span></div>
+                <div style="font-size: 12.5px; color: #47536b; margin-top: 2px;">carlos.mendes@outlook.com</div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #47536b; background: #f1f4f9; border-radius: 6px; padding: 2px 7px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>E-mail</span>
+                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #47536b; background: #f1f4f9; border-radius: 6px; padding: 2px 7px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>Certificado ICP-Brasil</span>
+                </div>
+              </div>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #fff4e0; color: #9a5b00; border: 1px solid #f5dfae; white-space: nowrap; flex: none;"><span style="width: 6px; height: 6px; border-radius: 999px; background: currentColor;"></span>Aguardando</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #f1f4f9; font-size: 12px; color: #8a96ad; flex-wrap: wrap;">
+              <span>Visualizou em 03 set, 08:51 · último lembrete hoje, 09:00</span>
+              <span style="display: flex; gap: 6px;"><button style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="border-color: #1257c9; color: #1257c9;">Reenviar</button><button style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12px; font-weight: 600; color: #0b1f42; cursor: pointer;" style-hover="border-color: #1257c9; color: #1257c9;">Editar</button></span>
+            </div>
+          </div>
+          <button style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 38px; border-radius: 10px; border: 1px dashed #c9d4e6; background: transparent; font-size: 13px; font-weight: 600; color: #47536b; cursor: pointer;" style-hover="border-color: #1257c9; color: #1257c9; background: #f4f8fe;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6"/><path d="M22 19h-6"/></svg>Adicionar signatário ou testemunha</button>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isAudit }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); padding: 18px 20px; display: flex; flex-direction: column; gap: 0;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px;"><div><div style="font-size: 15px; font-weight: 600;">Trilha de auditoria</div><div style="font-size: 12.5px; color: #8a96ad; margin-top: 3px;">Todos os eventos, com carimbo de tempo e IP</div></div><a href="#" style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid #d5dce9; background: #ffffff; font-size: 12px; font-weight: 600; color: #0b1f42; white-space: nowrap;" style-hover="background: #f4f8fe; color: #0b1f42;">Relatório PDF</a></div>
+          <sc-for list="{{ events }}" as="e" hint-placeholder-count="6">
+            <div style="display: grid; grid-template-columns: 20px 1fr; gap: 12px;">
+              <div style="display: flex; flex-direction: column; align-items: center;"><span style="width: 20px; height: 20px; border-radius: 999px; background: {{ e.bg }}; color: {{ e.fg }}; display: flex; align-items: center; justify-content: center; flex: none; font-size: 10px; font-weight: 700;">{{ e.n }}</span><span style="flex: 1; width: 2px; background: #eef2f9; margin: 4px 0;"></span></div>
+              <div style="padding-bottom: 16px;">
+                <div style="font-size: 13.5px; font-weight: 600; line-height: 1.3;">{{ e.title }}</div>
+                <div style="font-size: 12px; color: #8a96ad; margin-top: 3px; font-variant-numeric: tabular-nums;">{{ e.meta }}</div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="padding: 12px; border-radius: 8px; background: #f7f9fc; border: 1px solid #e6eaf2; font-size: 12px; color: #47536b; line-height: 1.5;"><b style="color: #0b1f42;">Hash SHA-256 do original</b><br /><span style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; word-break: break-all;">9f2a7c1e4b0d8a63f5e2c9b17d4a6e0f3c8b5d2a1e7f9c4b6d8a0e2f5c7b9d1e</span></div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isDetails }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #ffffff; border: 1px solid #e6eaf2; border-radius: 12px; box-shadow: 0 1px 2px rgba(11,31,66,.04); padding: 6px 20px;">
+          <sc-for list="{{ details }}" as="kv" hint-placeholder-count="10">
+            <div style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f1f4f9; font-size: 13px;"><span style="color: #8a96ad;">{{ kv.k }}</span><span style="color: #0b1f42; font-weight: 500; font-variant-numeric: tabular-nums;">{{ kv.v }}</span></div>
+          </sc-for>
+          <div style="display: flex; gap: 8px; padding: 14px 0 12px;"><a href="App - Documentos.dc.html" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; display: inline-flex; align-items: center;" style-hover="background: #f4f8fe; color: #0b1f42;">Mover para pasta</a><a href="App - Nova solicitacao.dc.html" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dce9; background: #ffffff; font-size: 13px; font-weight: 600; color: #0b1f42; display: inline-flex; align-items: center;" style-hover="background: #f4f8fe; color: #0b1f42;">Duplicar</a><button style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #f5c2c2; background: #ffffff; font-size: 13px; font-weight: 600; color: #b42323; cursor: pointer;" style-hover="background: #fdeaea;">Cancelar documento</button></div>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sidebarOpen: true, tab: "signers" };
+  renderVals() {
+    const tab = this.state.tab;
+    const tabs = [["signers", "Signatários"], ["audit", "Trilha de auditoria"], ["details", "Detalhes"]].map(([k, label]) => ({
+      label, bg: k === tab ? "#ffffff" : "transparent", shadow: k === tab ? "0 1px 2px rgba(11,31,66,.08)" : "none", w: k === tab ? 600 : 500, fg: k === tab ? "#0b1f42" : "#47536b", select: () => this.setState({ tab: k })
+    }));
+    const ok = { bg: "#e6f7ee", fg: "#12784a" }, info = { bg: "#e8f0fd", fg: "#1257c9" }, warn = { bg: "#fff4e0", fg: "#9a5b00" };
+    const events = [
+      { ...info, title: "Documento criado por Ana Ribeiro", meta: "01 set 2026, 10:04 · IP 200.155.8.21 · Chrome / Windows" },
+      { ...info, title: "Enviado para Maria A. Souza via WhatsApp e para Carlos Mendes via e-mail", meta: "01 set 2026, 10:05 · Ordem sequencial" },
+      { ...info, title: "Maria A. Souza visualizou o documento", meta: "02 set 2026, 14:20 · IP 187.12.44.9 · iPhone (Safari)" },
+      { ...ok, title: "Maria A. Souza autenticou com token SMS e selfie", meta: "02 set 2026, 14:31 · +55 11 98877-1234 · selfie validada" },
+      { ...ok, title: "Maria A. Souza assinou (Locatária)", meta: "02 set 2026, 14:32 · hash 4b0d…7c1e · geolocalização São Paulo/SP" },
+      { ...info, title: "Carlos Mendes visualizou o documento", meta: "03 set 2026, 08:51 · IP 177.43.90.2 · Chrome / Android" },
+      { ...warn, title: "Lembrete automático enviado para Carlos Mendes", meta: "03 set 2026, 09:00 · e-mail entregue" }
+    ].map((e, i) => ({ ...e, n: i + 1 }));
+    return {
+      sidebarOpen: this.state.sidebarOpen,
+      toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      tabs, isSigners: tab === "signers", isAudit: tab === "audit", isDetails: tab === "details",
+      events,
+      details: [
+        ["ID", "AV-00148"], ["Status", "Aguardando · 1 de 2 assinaturas"], ["Criado por", "Ana Ribeiro"], ["Criado em", "01 set 2026, 10:04"], ["Expira em", "15 set 2026, 23:59"],
+        ["Pasta", "Locação"], ["Modelo", "Contrato de locação residencial v3"], ["Arquivo", "contrato-apto-302.pdf · 412 KB · 6 páginas"], ["Lembretes", "Automáticos, a cada 2 dias"],
+        ["Mensagem", "“Olá! Segue o contrato do Apto 302 para assinatura. Qualquer dúvida, estou à disposição.”"], ["Webhook", "document.signer_signed · 200 OK · 02 set 14:32"]
+      ].map(([k, v]) => ({ k, v }))
+    };
+  }
+}
+</script>
+</body>
+</html>

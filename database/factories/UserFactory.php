@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -33,6 +34,12 @@ class UserFactory extends Factory
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
+            'is_platform_admin' => false,
+            'current_organization_id' => null,
+            'timezone' => null,
+            'locale' => 'pt_BR',
+            'terms_accepted_at' => now(),
+            'terms_version' => '2026-09',
         ];
     }
 
@@ -55,6 +62,20 @@ class UserFactory extends Factory
             'two_factor_secret' => encrypt('secret'),
             'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
             'two_factor_confirmed_at' => now(),
+        ]);
+    }
+
+    public function platformAdmin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_platform_admin' => true,
+        ]);
+    }
+
+    public function withCurrentOrganization(Organization $organization): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'current_organization_id' => $organization->id,
         ]);
     }
 }

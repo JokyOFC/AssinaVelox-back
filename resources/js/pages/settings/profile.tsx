@@ -28,17 +28,27 @@ export default function Profile({ mustVerifyEmail, status }: Props) {
         <>
             <Head title="Perfil" />
 
-            <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-card">
+            <div className="border-border bg-card shadow-card flex flex-col gap-4 rounded-xl border p-5">
                 <Heading
                     variant="small"
                     title="Dados pessoais"
                     description="Seu nome aparece nos convites enviados e na trilha de auditoria."
                 />
 
-                <Form {...ProfileController.update.form()} options={{ preserveScroll: true }} className="flex flex-col gap-4">
+                <Form
+                    {...ProfileController.update.form()}
+                    options={{ preserveScroll: true }}
+                    className="flex flex-col gap-4"
+                >
                     {({ processing, errors }) => (
                         <>
-                            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                            <div
+                                className="grid gap-3"
+                                style={{
+                                    gridTemplateColumns:
+                                        'repeat(auto-fit, minmax(220px, 1fr))',
+                                }}
+                            >
                                 <div className="grid gap-1.5">
                                     <Label htmlFor="name">Nome completo</Label>
                                     <Input
@@ -68,29 +78,37 @@ export default function Profile({ mustVerifyEmail, status }: Props) {
                                 </div>
                             </div>
 
-                            {mustVerifyEmail && user.email_verified_at === null && (
-                                <div className="rounded-[10px] border border-warning-border bg-warning-bg p-3 text-[12.5px] leading-[1.5] text-warning">
-                                    Seu e-mail ainda não foi verificado.{' '}
-                                    <Link
-                                        href={sendVerification()}
-                                        as="button"
-                                        className="font-semibold underline underline-offset-2"
-                                    >
-                                        Reenviar e-mail de verificação
-                                    </Link>
-                                    {status === 'verification-link-sent' && (
-                                        <span className="mt-1 block font-semibold text-success">
-                                            Um novo link de verificação foi enviado para o seu e-mail.
-                                        </span>
-                                    )}
-                                </div>
-                            )}
+                            {mustVerifyEmail &&
+                                user.email_verified_at === null && (
+                                    <div className="border-warning-border bg-warning-bg text-warning rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
+                                        Seu e-mail ainda não foi verificado.{' '}
+                                        <Link
+                                            href={sendVerification()}
+                                            as="button"
+                                            className="font-semibold underline underline-offset-2"
+                                        >
+                                            Reenviar e-mail de verificação
+                                        </Link>
+                                        {status ===
+                                            'verification-link-sent' && (
+                                            <span className="text-success mt-1 block font-semibold">
+                                                Um novo link de verificação foi
+                                                enviado para o seu e-mail.
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
 
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12.5px] text-muted-foreground">
-                                    Fuso horário: {user.timezone} · Idioma: Português (Brasil)
+                                <span className="text-muted-foreground text-[12.5px]">
+                                    Fuso horário: {user.timezone} · Idioma:
+                                    Português (Brasil)
                                 </span>
-                                <Button type="submit" disabled={processing} data-test="update-profile-button">
+                                <Button
+                                    type="submit"
+                                    disabled={processing}
+                                    data-test="update-profile-button"
+                                >
                                     {processing && <Spinner />}
                                     Salvar alterações
                                 </Button>

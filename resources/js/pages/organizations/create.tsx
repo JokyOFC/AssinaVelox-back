@@ -29,15 +29,17 @@ export default function OrganizationsCreate() {
             />
             <form
                 onSubmit={submit}
-                className="flex max-w-[560px] flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-card"
+                className="border-border bg-card shadow-card flex max-w-[560px] flex-col gap-4 rounded-xl border p-5"
             >
                 <div className="flex items-center gap-3">
-                    <span className="flex size-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                    <span className="bg-primary-soft text-primary flex size-11 items-center justify-center rounded-xl">
                         <Building2 className="size-5" />
                     </span>
                     <div>
-                        <div className="text-[15px] font-semibold">Dados da organização</div>
-                        <div className="text-[13px] text-muted-foreground">
+                        <div className="text-[15px] font-semibold">
+                            Dados da organização
+                        </div>
+                        <div className="text-muted-foreground text-[13px]">
                             Aparecem nos convites e no certificado de conclusão.
                         </div>
                     </div>
@@ -58,12 +60,17 @@ export default function OrganizationsCreate() {
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div className="grid gap-1.5">
                         <Label htmlFor="legal_name">
-                            Razão social <span className="font-normal text-muted-foreground">(opcional)</span>
+                            Razão social{' '}
+                            <span className="text-muted-foreground font-normal">
+                                (opcional)
+                            </span>
                         </Label>
                         <Input
                             id="legal_name"
                             value={form.data.legal_name}
-                            onChange={(e) => form.setData('legal_name', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('legal_name', e.target.value)
+                            }
                             placeholder="Horizonte Negócios Imobiliários Ltda."
                             aria-invalid={!!form.errors.legal_name}
                         />
@@ -71,13 +78,21 @@ export default function OrganizationsCreate() {
                     </div>
                     <div className="grid gap-1.5">
                         <Label htmlFor="tax_id">
-                            CNPJ ou CPF <span className="font-normal text-muted-foreground">(opcional)</span>
+                            CNPJ ou CPF{' '}
+                            <span className="text-muted-foreground font-normal">
+                                (opcional)
+                            </span>
                         </Label>
                         <Input
                             id="tax_id"
                             inputMode="numeric"
                             value={form.data.tax_id}
-                            onChange={(e) => form.setData('tax_id', formatCpfCnpj(e.target.value))}
+                            onChange={(e) =>
+                                form.setData(
+                                    'tax_id',
+                                    formatCpfCnpj(e.target.value),
+                                )
+                            }
                             placeholder="00.000.000/0000-00"
                             className="tabular"
                             aria-invalid={!!form.errors.tax_id}
@@ -86,10 +101,17 @@ export default function OrganizationsCreate() {
                     </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
-                    <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => window.history.back()}
+                    >
                         Cancelar
                     </Button>
-                    <Button type="submit" disabled={form.processing || !form.data.name.trim()}>
+                    <Button
+                        type="submit"
+                        disabled={form.processing || !form.data.name.trim()}
+                    >
                         {form.processing && <Spinner />}
                         Criar organização
                     </Button>

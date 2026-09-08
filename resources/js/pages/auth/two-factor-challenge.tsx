@@ -4,7 +4,11 @@ import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import {
+    InputOTP,
+    InputOTPGroup,
+    InputOTPSlot,
+} from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
 import { store } from '@/routes/two-factor/login';
@@ -60,7 +64,7 @@ export default function TwoFactorChallenge() {
                                 <InputError message={errors.recovery_code} />
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center gap-3 rounded-[10px] border border-border bg-sidebar p-3.5">
+                            <div className="border-border bg-sidebar flex flex-col items-center gap-3 rounded-[10px] border p-3.5">
                                 <InputOTP
                                     name="code"
                                     maxLength={OTP_MAX_LENGTH}
@@ -72,17 +76,20 @@ export default function TwoFactorChallenge() {
                                     containerClassName="w-full"
                                 >
                                     <InputOTPGroup className="w-full gap-2">
-                                        {Array.from({ length: OTP_MAX_LENGTH }, (_, index) => (
-                                            <InputOTPSlot
-                                                key={index}
-                                                index={index}
-                                                className="h-12 flex-1 rounded-lg border border-input bg-white text-[20px] font-bold tabular first:rounded-l-lg last:rounded-r-lg"
-                                            />
-                                        ))}
+                                        {Array.from(
+                                            { length: OTP_MAX_LENGTH },
+                                            (_, index) => (
+                                                <InputOTPSlot
+                                                    key={index}
+                                                    index={index}
+                                                    className="border-input tabular h-12 flex-1 rounded-lg border bg-white text-[20px] font-bold first:rounded-l-lg last:rounded-r-lg"
+                                                />
+                                            ),
+                                        )}
                                     </InputOTPGroup>
                                 </InputOTP>
                                 <InputError message={errors.code} />
-                                <span className="text-[12px] text-muted-foreground">
+                                <span className="text-muted-foreground text-[12px]">
                                     O código muda a cada 30 segundos.
                                 </span>
                             </div>
@@ -92,17 +99,21 @@ export default function TwoFactorChallenge() {
                             type="submit"
                             size="lg"
                             className="w-full"
-                            disabled={processing || (!showRecoveryInput && code.length < OTP_MAX_LENGTH)}
+                            disabled={
+                                processing ||
+                                (!showRecoveryInput &&
+                                    code.length < OTP_MAX_LENGTH)
+                            }
                         >
                             {processing && <Spinner />}
                             Continuar
                         </Button>
 
-                        <p className="text-center text-[13.5px] text-text-secondary">
+                        <p className="text-text-secondary text-center text-[13.5px]">
                             ou{' '}
                             <button
                                 type="button"
-                                className="font-semibold text-primary hover:underline"
+                                className="text-primary font-semibold hover:underline"
                                 onClick={() => toggleRecoveryMode(clearErrors)}
                             >
                                 {showRecoveryInput

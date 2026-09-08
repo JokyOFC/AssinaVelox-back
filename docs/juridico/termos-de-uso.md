@@ -16,19 +16,19 @@ Se você aceita estes Termos em nome de uma pessoa jurídica, declara ter podere
 
 ## 1. Definições
 
-| Termo | Significado |
-|---|---|
-| **Plataforma** | O software AssinaVelox, suas páginas web, e-mails transacionais e demais recursos operados pela Operadora. |
-| **Organização** | A conta de cliente (empresa ou pessoa) titular dos envelopes, documentos e usuários vinculados. |
-| **Usuário** | Pessoa natural com login na Plataforma, vinculada a uma ou mais Organizações por um papel (`owner`, `admin` ou `member`). |
-| **Signatário** | Pessoa indicada pela Organização para manifestar aceite sobre um documento. Não possui conta; acessa por link enviado ao seu e-mail. |
-| **Envelope** | Unidade de envio: um documento, seus campos, seus Signatários, sua ordem de assinatura, prazo e trilha de eventos. Cada envelope recebe um código de verificação público ao ser enviado. |
-| **Documento** | Arquivo enviado pela Organização (PDF, DOCX ou imagem) e suas versões geradas pela Plataforma (convertida, consolidada, de evidências e final). |
-| **Representação visual da assinatura** | Imagem (desenhada, digitada ou enviada) posicionada no documento. Por si só, não comprova nada. |
-| **Aceite eletrônico com evidências** | Manifestação de vontade do Signatário registrada pela Plataforma junto com evidências técnicas (ver Cláusula 3). |
-| **Assinatura criptográfica da Operadora** | Assinatura digital no padrão PAdES aplicada ao arquivo final com certificado A1 de titularidade da Operadora, quando configurado. Identifica a Operadora, não o Signatário. |
-| **Página de evidências** | Relatório gerado pela Plataforma e anexado ao arquivo final, descrevendo os eventos, os participantes e os resumos criptográficos (hashes) do envelope. |
-| **Código de verificação** | Código público, aleatório, exibido no formato `XXXX-XXXX-XXXX`, que permite consultar o estado e os hashes de um envelope em {{URL_VERIFICACAO}}. |
+| Termo                                     | Significado                                                                                                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Plataforma**                            | O software AssinaVelox, suas páginas web, e-mails transacionais e demais recursos operados pela Operadora.                                                                               |
+| **Organização**                           | A conta de cliente (empresa ou pessoa) titular dos envelopes, documentos e usuários vinculados.                                                                                          |
+| **Usuário**                               | Pessoa natural com login na Plataforma, vinculada a uma ou mais Organizações por um papel (`owner`, `admin` ou `member`).                                                                |
+| **Signatário**                            | Pessoa indicada pela Organização para manifestar aceite sobre um documento. Não possui conta; acessa por link enviado ao seu e-mail.                                                     |
+| **Envelope**                              | Unidade de envio: um documento, seus campos, seus Signatários, sua ordem de assinatura, prazo e trilha de eventos. Cada envelope recebe um código de verificação público ao ser enviado. |
+| **Documento**                             | Arquivo enviado pela Organização (PDF, DOCX ou imagem) e suas versões geradas pela Plataforma (convertida, consolidada, de evidências e final).                                          |
+| **Representação visual da assinatura**    | Imagem (desenhada, digitada ou enviada) posicionada no documento. Por si só, não comprova nada.                                                                                          |
+| **Aceite eletrônico com evidências**      | Manifestação de vontade do Signatário registrada pela Plataforma junto com evidências técnicas (ver Cláusula 3).                                                                         |
+| **Assinatura criptográfica da Operadora** | Assinatura digital no padrão PAdES aplicada ao arquivo final com certificado A1 de titularidade da Operadora, quando configurado. Identifica a Operadora, não o Signatário.              |
+| **Página de evidências**                  | Relatório gerado pela Plataforma e anexado ao arquivo final, descrevendo os eventos, os participantes e os resumos criptográficos (hashes) do envelope.                                  |
+| **Código de verificação**                 | Código público, aleatório, exibido no formato `XXXX-XXXX-XXXX`, que permite consultar o estado e os hashes de um envelope em {{URL_VERIFICACAO}}.                                        |
 
 ## 2. Objeto
 
@@ -43,15 +43,17 @@ Esta cláusula é central para o uso correto do serviço. A Plataforma distingue
 **3.1. Representação visual da assinatura.** O desenho feito na tela, o nome digitado em fonte manuscrita ou a imagem enviada pelo Signatário é apenas uma **representação gráfica**. Ela é posicionada no documento para leitura humana e **não constitui prova de autoria por si só**.
 
 **3.2. Aceite eletrônico com evidências.** O que a Plataforma registra como manifestação de vontade é o conjunto dos seguintes elementos, gravados no momento em que o Signatário marca a declaração de aceite e confirma:
+
 - a versão exata do documento que foi apresentada ao Signatário, identificada pelo seu resumo criptográfico SHA-256;
-- os campos apresentados ao Signatário e os valores por ele preenchidos (retrato, ou *snapshot*, do que foi exibido);
+- os campos apresentados ao Signatário e os valores por ele preenchidos (retrato, ou _snapshot_, do que foi exibido);
 - o método de autenticação utilizado — na versão atual, **código de uso único enviado ao e-mail indicado pela Organização**;
 - a data e a hora do servidor, em UTC;
-- o endereço IP do Signatário, conforme informado pela infraestrutura de rede confiável da Plataforma, e a identificação do navegador (*user-agent*);
+- o endereço IP do Signatário, conforme informado pela infraestrutura de rede confiável da Plataforma, e a identificação do navegador (_user-agent_);
 - a versão do texto de aceite exibido e o texto integral aceito;
 - os eventos da trilha de auditoria (abertura do link, envio e verificação do código, início da sessão, aceite ou recusa).
 
 **3.3. Assinatura criptográfica da Operadora.** Quando houver certificado digital A1 configurado e ativo, a Plataforma aplica ao arquivo final uma assinatura digital no perfil PAdES (alvo: PAdES B-B), com certificado **de titularidade da Operadora** ({{RAZAO_SOCIAL}}). Essa assinatura:
+
 - identifica a **Operadora** como quem lacrou o arquivo final e permite detectar alterações posteriores ao arquivo;
 - **não é assinatura pessoal de nenhum Signatário** e **não é assinatura ICP-Brasil do Signatário**;
 - não substitui a análise das evidências descritas em 3.2, que permanecem a base do aceite.
@@ -69,6 +71,7 @@ Esta cláusula é central para o uso correto do serviço. A Plataforma distingue
 4.1. **Cadastro.** O cadastro exige nome, e-mail válido e senha. A verificação do e-mail é obrigatória. Ao se cadastrar, o Usuário cria uma Organização, da qual se torna `owner`, com plano gratuito ativo.
 
 4.2. **Papéis.**
+
 - `owner`: acesso total, incluindo cobrança, gestão de outros owners e solicitação de exclusão da Organização;
 - `admin`: gestão de usuários (exceto owners), pastas, todos os envelopes e configurações;
 - `member`: cria e gerencia apenas os próprios envelopes.
@@ -159,7 +162,7 @@ Toda Organização mantém ao menos um `owner`.
 
 11.4. **Registros mantidos após a exclusão [VALIDAR].** A Operadora poderá conservar, pelo prazo legal, registros mínimos necessários ao cumprimento de obrigações legais e regulatórias (por exemplo, registros de pagamento e faturamento) e à defesa em processos, na forma da Política de Privacidade. **Decisão pendente:** se o registro público de verificação (código, hashes e estado) deve ser mantido, anonimizado ou removido após a exclusão da Organização.
 
-11.5. **Cópias de segurança.** Cópias de segurança (*backups*) são sobrescritas em ciclo de até {{PRAZO_BACKUP}} após a exclusão.
+11.5. **Cópias de segurança.** Cópias de segurança (_backups_) são sobrescritas em ciclo de até {{PRAZO_BACKUP}} após a exclusão.
 
 ## 12. Uso aceitável
 
@@ -217,13 +220,13 @@ Comunicações da Operadora são feitas pelo e-mail cadastrado e por avisos na P
 
 ## Anexo A — Quadro-resumo da semântica de assinatura (para leitura rápida)
 
-| O que você vê | O que é | O que prova |
-|---|---|---|
-| Desenho, nome estilizado ou imagem no documento | Representação visual | Nada, por si só. |
-| Registro de aceite com data UTC, IP, navegador, hash do documento, campos e autenticação por e-mail | Aceite eletrônico com evidências | Que alguém com acesso ao e-mail indicado, na data registrada, aceitou aquela versão exata do documento. |
-| "Assinado digitalmente por {{RAZAO_SOCIAL}}" (PAdES) no arquivo final | Assinatura criptográfica da Operadora | Que a Plataforma lacrou o arquivo final e que ele não foi alterado depois. **Não identifica o Signatário.** |
-| "Concluído como aceite eletrônico com evidências (sem assinatura criptográfica)" | Ausência de certificado configurado | Somente o aceite eletrônico com evidências; integridade conferível pelo hash final na página de verificação. |
-| Hash SHA-256 | Resumo criptográfico | Que dois arquivos são (ou não) idênticos byte a byte. Não é assinatura. |
+| O que você vê                                                                                       | O que é                               | O que prova                                                                                                  |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Desenho, nome estilizado ou imagem no documento                                                     | Representação visual                  | Nada, por si só.                                                                                             |
+| Registro de aceite com data UTC, IP, navegador, hash do documento, campos e autenticação por e-mail | Aceite eletrônico com evidências      | Que alguém com acesso ao e-mail indicado, na data registrada, aceitou aquela versão exata do documento.      |
+| "Assinado digitalmente por {{RAZAO_SOCIAL}}" (PAdES) no arquivo final                               | Assinatura criptográfica da Operadora | Que a Plataforma lacrou o arquivo final e que ele não foi alterado depois. **Não identifica o Signatário.**  |
+| "Concluído como aceite eletrônico com evidências (sem assinatura criptográfica)"                    | Ausência de certificado configurado   | Somente o aceite eletrônico com evidências; integridade conferível pelo hash final na página de verificação. |
+| Hash SHA-256                                                                                        | Resumo criptográfico                  | Que dois arquivos são (ou não) idênticos byte a byte. Não é assinatura.                                      |
 
 ## Anexo B — Pontos a validar pela assessoria jurídica
 

@@ -23,7 +23,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { store as storeOrganization, switchMethod as switchOrganization } from '@/routes/organizations';
+import {
+    store as storeOrganization,
+    switchMethod as switchOrganization,
+} from '@/routes/organizations';
 
 /**
  * Switcher de organização (DESIGN §3.1 item 2; ROUTES §5.3): botão branco
@@ -52,7 +55,7 @@ export function OrgSwitcher() {
                 <DropdownMenuTrigger asChild>
                     <button
                         type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-white px-2 py-[7px] text-left transition-colors hover:bg-accent-subtle focus-visible:ring-[3px] focus-visible:ring-primary/18 focus-visible:outline-none"
+                        className="border-border hover:bg-accent-subtle focus-visible:ring-primary/18 flex w-full items-center gap-2.5 rounded-lg border bg-white px-2 py-[7px] text-left transition-colors focus-visible:ring-[3px] focus-visible:outline-none"
                     >
                         <AvatarInitials
                             initials={organization.initials}
@@ -61,54 +64,56 @@ export function OrgSwitcher() {
                             className="text-[12px]"
                         />
                         <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13px] font-semibold text-foreground">
+                            <span className="text-foreground block truncate text-[13px] font-semibold">
                                 {organization.name}
                             </span>
-                            <span className="block truncate text-[11.5px] text-muted-foreground">
+                            <span className="text-muted-foreground block truncate text-[11.5px]">
                                 Plano {organization.plan.name}
                             </span>
                         </span>
-                        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        <ChevronsUpDown className="text-muted-foreground size-3.5 shrink-0" />
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                     align="start"
                     sideOffset={6}
-                    className="w-(--radix-dropdown-menu-trigger-width) min-w-[232px] rounded-[10px] p-1.5 shadow-popover"
+                    className="shadow-popover w-(--radix-dropdown-menu-trigger-width) min-w-[232px] rounded-[10px] p-1.5"
                 >
-                    <DropdownMenuLabel className="px-2.5 pt-2 pb-1.5 text-[11px] font-bold tracking-[.12em] text-muted-foreground uppercase">
+                    <DropdownMenuLabel className="text-muted-foreground px-2.5 pt-2 pb-1.5 text-[11px] font-bold tracking-[.12em] uppercase">
                         Organizações
                     </DropdownMenuLabel>
                     {organizations.map((org, index) => (
                         <DropdownMenuItem
                             key={org.id}
                             onSelect={() => handleSwitch(org.id)}
-                            className="gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] focus:bg-accent-subtle"
+                            className="focus:bg-accent-subtle gap-2.5 rounded-md px-2.5 py-2 text-[13.5px]"
                         >
                             <AvatarInitials
                                 initials={org.initials}
                                 index={index}
-                                tone={org.is_current ? 'organization' : 'palette'}
+                                tone={
+                                    org.is_current ? 'organization' : 'palette'
+                                }
                                 size="sm"
                                 className="size-7 text-[11px]"
                             />
                             <span className="min-w-0 flex-1">
-                                <span className="block truncate font-semibold text-foreground">
+                                <span className="text-foreground block truncate font-semibold">
                                     {org.name}
                                 </span>
-                                <span className="block truncate text-[11.5px] text-muted-foreground">
+                                <span className="text-muted-foreground block truncate text-[11.5px]">
                                     {org.plan_name}
                                 </span>
                             </span>
                             {org.is_current && (
-                                <Check className="size-4 text-primary" />
+                                <Check className="text-primary size-4" />
                             )}
                         </DropdownMenuItem>
                     ))}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                         onSelect={() => setCreateOpen(true)}
-                        className="gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] font-medium text-text-secondary focus:bg-accent-subtle focus:text-foreground"
+                        className="text-text-secondary focus:bg-accent-subtle focus:text-foreground gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] font-medium"
                     >
                         <Plus className="size-4" />
                         Criar nova organização
@@ -116,7 +121,10 @@ export function OrgSwitcher() {
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <CreateOrganizationDialog open={createOpen} onOpenChange={setCreateOpen} />
+            <CreateOrganizationDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+            />
         </>
     );
 }
@@ -162,12 +170,16 @@ export function CreateOrganizationDialog({
                 </DialogHeader>
                 <form onSubmit={submit} className="flex flex-col gap-4">
                     <div className="grid gap-1.5">
-                        <Label htmlFor="new-org-name">Nome da organização</Label>
+                        <Label htmlFor="new-org-name">
+                            Nome da organização
+                        </Label>
                         <Input
                             id="new-org-name"
                             name="name"
                             value={form.data.name}
-                            onChange={(e) => form.setData('name', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('name', e.target.value)
+                            }
                             placeholder="Ex.: Imobiliária Horizonte"
                             autoFocus
                             required
@@ -186,7 +198,10 @@ export function CreateOrganizationDialog({
                         >
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={form.processing || !form.data.name.trim()}>
+                        <Button
+                            type="submit"
+                            disabled={form.processing || !form.data.name.trim()}
+                        >
                             {form.processing && <Spinner />}
                             Criar organização
                         </Button>

@@ -7,7 +7,10 @@ import { Stepper, type StepperStep } from '@/components/stepper';
 export type SignerLayoutProps = {
     children: ReactNode;
     /** Remetente exibido no header (organização + iniciais). */
-    sender?: { organization_name: string; organization_initials: string } | null;
+    sender?: {
+        organization_name: string;
+        organization_initials: string;
+    } | null;
     /** Índice do passo atual no stepper público (0 = Confirmar identidade). */
     step?: number | null;
     steps?: StepperStep[];
@@ -32,8 +35,8 @@ export default function SignerLayout({
     steps = SIGNER_STEPS,
 }: SignerLayoutProps) {
     return (
-        <div className="flex min-h-svh flex-col bg-accent text-[14px] text-foreground">
-            <header className="flex h-[60px] items-center gap-4 border-b border-border bg-white px-4 md:px-6">
+        <div className="bg-accent text-foreground flex min-h-svh flex-col text-[14px]">
+            <header className="border-border flex h-[60px] items-center gap-4 border-b bg-white px-4 md:px-6">
                 {sender ? (
                     <div className="flex min-w-0 items-center gap-2.5">
                         <AvatarInitials
@@ -45,7 +48,7 @@ export default function SignerLayout({
                             <span className="block truncate text-[13.5px] font-semibold">
                                 {sender.organization_name}
                             </span>
-                            <span className="block text-[11.5px] text-muted-foreground">
+                            <span className="text-muted-foreground block text-[11.5px]">
                                 solicita sua assinatura
                             </span>
                         </span>
@@ -58,21 +61,22 @@ export default function SignerLayout({
                         <Stepper steps={steps} current={step} variant="pills" />
                     </div>
                 )}
-                <div className="ml-auto flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                <div className="text-muted-foreground ml-auto flex items-center gap-1.5 text-[11.5px]">
                     <span>via</span>
                     <AppLogo height={18} />
                 </div>
             </header>
             {step !== null && (
-                <div className="flex justify-center border-b border-border bg-white px-4 py-2 md:hidden">
+                <div className="border-border flex justify-center border-b bg-white px-4 py-2 md:hidden">
                     <Stepper steps={steps} current={step} variant="pills" />
                 </div>
             )}
             <main className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-4 p-4 md:p-6">
                 {children}
             </main>
-            <footer className="px-6 py-4 text-center text-[11.5px] text-muted-foreground">
-                Documento processado pela AssinaVelox · Aceite eletrônico com trilha de auditoria
+            <footer className="text-muted-foreground px-6 py-4 text-center text-[11.5px]">
+                Documento processado pela AssinaVelox · Aceite eletrônico com
+                trilha de auditoria
             </footer>
             <FlashToaster />
         </div>

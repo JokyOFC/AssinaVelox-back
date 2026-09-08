@@ -91,8 +91,7 @@ export function TablePagination<T>({
 }) {
     const { meta, links } = paginated;
     const total = meta.total;
-    const noun =
-        total === 1 && entitySingular ? entitySingular : entity;
+    const noun = total === 1 && entitySingular ? entitySingular : entity;
 
     const handlePerPage = (value: string) => {
         const perPage = Number(value);
@@ -117,7 +116,7 @@ export function TablePagination<T>({
     return (
         <div
             className={cn(
-                'flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-[12.5px] text-muted-foreground',
+                'text-muted-foreground flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-[12.5px]',
                 className,
             )}
         >
@@ -125,7 +124,9 @@ export function TablePagination<T>({
                 <span className="tabular">
                     {total === 0
                         ? `Nenhum ${entitySingular ?? entity}`
-                        : meta.from !== null && meta.to !== null && meta.from !== meta.to
+                        : meta.from !== null &&
+                            meta.to !== null &&
+                            meta.from !== meta.to
                           ? `Mostrando ${meta.from}–${meta.to} de ${formatNumber(total)} ${noun}`
                           : `Mostrando ${meta.to ?? meta.from ?? 0} de ${formatNumber(total)} ${noun}`}
                 </span>
@@ -143,7 +144,7 @@ export function TablePagination<T>({
                             >
                                 <SelectTrigger
                                     size="sm"
-                                    className="h-[30px] w-[64px] rounded-md px-2 text-[12.5px] font-semibold text-foreground"
+                                    className="text-foreground h-[30px] w-[64px] rounded-md px-2 text-[12.5px] font-semibold"
                                 >
                                     <SelectValue />
                                 </SelectTrigger>
@@ -170,24 +171,26 @@ export function TablePagination<T>({
                                         disabled={!links.prev}
                                     />
                                 </PaginationItem>
-                                {pageNumbers(meta.current_page, meta.last_page).map(
-                                    (page, index) =>
-                                        page === 'ellipsis' ? (
-                                            <PaginationItem key={`e-${index}`}>
-                                                <PaginationEllipsis />
-                                            </PaginationItem>
-                                        ) : (
-                                            <PaginationItem key={page}>
-                                                <PaginationLink
-                                                    href={pageUrl(meta, page)}
-                                                    isActive={
-                                                        page === meta.current_page
-                                                    }
-                                                >
-                                                    {page}
-                                                </PaginationLink>
-                                            </PaginationItem>
-                                        ),
+                                {pageNumbers(
+                                    meta.current_page,
+                                    meta.last_page,
+                                ).map((page, index) =>
+                                    page === 'ellipsis' ? (
+                                        <PaginationItem key={`e-${index}`}>
+                                            <PaginationEllipsis />
+                                        </PaginationItem>
+                                    ) : (
+                                        <PaginationItem key={page}>
+                                            <PaginationLink
+                                                href={pageUrl(meta, page)}
+                                                isActive={
+                                                    page === meta.current_page
+                                                }
+                                            >
+                                                {page}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    ),
                                 )}
                                 <PaginationItem>
                                     <PaginationNext

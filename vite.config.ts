@@ -51,6 +51,8 @@ export default defineConfig({
             'resources/js/components/ui/*',
             'resources/js/routes/**',
             'resources/js/wayfinder/**',
+            // Mocks de design (material de referência, não código da aplicação).
+            'docs/design/**',
         ],
         options: {
             denyWarnings: true,
@@ -69,6 +71,9 @@ export default defineConfig({
             'composer.json',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
+            // Documentos-contrato e mocks de design: material de referência, não código.
+            'docs/design/**',
+            'docs/arquitetura.md',
         ],
         sortTailwindcss: {
             functions: ['clsx', 'cn', 'cva'],

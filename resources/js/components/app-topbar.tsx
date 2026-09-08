@@ -11,7 +11,11 @@ import {
     BreadcrumbPage,
 } from '@/components/ui/breadcrumb';
 import { useSidebar } from '@/components/ui/sidebar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { index as adminOrganizations } from '@/routes/admin/organizations';
@@ -49,7 +53,7 @@ export function AppTopbar({
 
     return (
         <header
-            className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 md:px-6"
+            className="border-border sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b px-4 md:px-6"
             style={{
                 background: 'rgba(251,252,254,.9)',
                 backdropFilter: 'blur(8px)',
@@ -60,11 +64,11 @@ export function AppTopbar({
                 onClick={toggleSidebar}
                 title="Recolher menu"
                 aria-label="Alternar menu lateral"
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-accent hover:text-foreground"
+                className="text-text-secondary hover:bg-accent hover:text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
             >
                 <PanelLeft className="size-[17px]" />
             </button>
-            <span aria-hidden className="h-[18px] w-px shrink-0 bg-border" />
+            <span aria-hidden className="bg-border h-[18px] w-px shrink-0" />
 
             <Breadcrumb className="min-w-0 flex-1">
                 <BreadcrumbList className="flex-nowrap gap-2 text-[13.5px] sm:gap-2">
@@ -81,14 +85,14 @@ export function AppTopbar({
                                     }
                                 >
                                     {isLast ? (
-                                        <BreadcrumbPage className="truncate font-semibold text-foreground">
+                                        <BreadcrumbPage className="text-foreground truncate font-semibold">
                                             {item.title}
                                         </BreadcrumbPage>
                                     ) : (
                                         <BreadcrumbLink asChild>
                                             <Link
                                                 href={item.href}
-                                                className="truncate text-muted-foreground hover:text-primary"
+                                                className="text-muted-foreground hover:text-primary truncate"
                                             >
                                                 {item.title}
                                             </Link>
@@ -98,7 +102,7 @@ export function AppTopbar({
                                 {!isLast && (
                                     <li
                                         aria-hidden
-                                        className="hidden shrink-0 text-border-dashed sm:block"
+                                        className="text-border-dashed hidden shrink-0 sm:block"
                                     >
                                         <ChevronRight className="size-3.5" />
                                     </li>
@@ -112,7 +116,7 @@ export function AppTopbar({
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 {extra}
                 {mode === 'admin' && (
-                    <span className="hidden h-[30px] items-center gap-1.5 rounded-md bg-warning-bg px-[10px] text-[12px] font-semibold text-warning lg:inline-flex">
+                    <span className="bg-warning-bg text-warning hidden h-[30px] items-center gap-1.5 rounded-md px-[10px] text-[12px] font-semibold lg:inline-flex">
                         <Shield className="size-[13px]" />
                         Acesso restrito · ações são auditadas
                     </span>
@@ -127,7 +131,7 @@ export function AppTopbar({
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="Ajuda"
-                            className="hidden size-[34px] items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-accent hover:text-foreground sm:flex"
+                            className="text-text-secondary hover:bg-accent hover:text-foreground hidden size-[34px] items-center justify-center rounded-lg transition-colors sm:flex"
                         >
                             <HelpCircle className="size-[17px]" />
                         </a>

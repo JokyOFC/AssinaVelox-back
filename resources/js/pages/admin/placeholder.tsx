@@ -20,11 +20,13 @@ export interface Phase2PlaceholderProps {
 const FALLBACK: Record<Feature, { title: string; subtitle: string }> = {
     admin_billing: {
         title: 'Planos e faturamento',
-        subtitle: 'Visão consolidada de planos, MRR e pagamentos da plataforma.',
+        subtitle:
+            'Visão consolidada de planos, MRR e pagamentos da plataforma.',
     },
     admin_users: {
         title: 'Usuários da plataforma',
-        subtitle: 'Todos os usuários cadastrados, com organizações e último acesso.',
+        subtitle:
+            'Todos os usuários cadastrados, com organizações e último acesso.',
     },
     admin_audit: {
         title: 'Logs e auditoria',
@@ -45,7 +47,9 @@ const FALLBACK: Record<Feature, { title: string; subtitle: string }> = {
 };
 
 /** Placeholder de telas do painel interno na Fase 2 (ROUTES §1.5 / §2.21). */
-export default function AdminPlaceholder(props: Partial<Phase2PlaceholderProps>) {
+export default function AdminPlaceholder(
+    props: Partial<Phase2PlaceholderProps>,
+) {
     const { url } = usePage();
     const feature: Feature = props.feature ?? 'admin_settings';
     const title = props.title ?? FALLBACK[feature].title;

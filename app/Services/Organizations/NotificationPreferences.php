@@ -3,20 +3,17 @@
 namespace App\Services\Organizations;
 
 use App\Models\Membership;
-use App\Models\Organization;
 
 /**
  * Preferências de notificação por membership (usuário × organização), eventos × canais.
  *
- * ARMAZENAMENTO (decisão B2, ver relatório): o alvo definido é a coluna JSON
- * `memberships.notification_preferences`, que ainda não existe na camada de dados
- * entregue por B1. Até a migration ser adicionada, as preferências ficam em
- * `organizations.settings['notification_preferences'][user_id]`. Toda leitura/escrita
- * passa por esta classe, então a troca de armazenamento é local a este arquivo.
+ * Armazenamento: coluna JSON `memberships.notification_preferences` (migration B2
+ * 2026_09_08_200001). O model Membership (área B1) não declara cast para a coluna, por isso
+ * a (de)serialização é feita aqui — toda leitura/escrita passa por esta classe.
  */
 class NotificationPreferences
 {
-    public const SETTINGS_KEY = 'notification_preferences';
+    public const COLUMN = 'notification_preferences';
 
     /** @var list<string> */
     public const CHANNELS = ['mail', 'database'];
@@ -75,6 +72,14 @@ class NotificationPreferences
     }
 
     /**
+     * @return list<string>
+     */
+    public static function events(): array
+    {
+        return array_keys(self::catalog());
+    }
+
+    /**
      * Preferências efetivas (padrões sobrescritos pelo que o usuário salvou).
      *
      * @return array<string, list<string>>
@@ -85,15 +90,15 @@ class NotificationPreferences
         $result = [];
 
         foreach (self::catalog() as $event => $definition) {
-            $channels = $stored[$event] ?? $definition['default'];
-            $result[$event] = array_values(array_intersect(self::CHANNELS, (array) $channels));
+            $channels = array_key_exists($event, $stored) ? (array) $stored[$event] : $definition['default'];
+            $result[$event] = array_values(array_intersect(self::CHANNELS, $channels));
         }
 
         return $result;
     }
 
     /**
-     * Linhas no formato consumido por pages/settings/Notifications.tsx.
+     * Linhas no formato consumido por pages/settings/notifications.tsx.
      *
      * @return array<int, array{key: string, label: string, description: string, channels: array<string, bool>, locked: array<string, bool>}>
      */
@@ -119,7 +124,15 @@ class NotificationPreferences
     }
 
     /**
-     * @param  array<string, list<string>>  $preferences
+     * Usuário quer receber `$event` por `$channel`?
+     */
+    public function wants(Membership $membership, string $event, string $channel): bool
+    {
+        return in_array($channel, $this->for($membership)[$event] ?? [], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $preferences
      */
     public function save(Membership $membership, array $preferences): void
     {
@@ -138,13 +151,7 @@ class NotificationPreferences
             $clean[$event] = $channels;
         }
 
-        $organization = $membership->organization()->firstOrFail();
-        $settings = $organization->settings ?? [];
-        $all = $settings[self::SETTINGS_KEY] ?? [];
-        $all[(string) $membership->user_id] = $clean;
-        $settings[self::SETTINGS_KEY] = $all;
-
-        $organization->forceFill(['settings' => $settings])->save();
+        $membership->forceFill([self::COLUMN => json_encode($clean, JSON_THROW_ON_ERROR)])->save();
     }
 
     /**
@@ -152,16 +159,18 @@ class NotificationPreferences
      */
     protected function stored(Membership $membership): array
     {
-        $organization = $membership->relationLoaded('organization')
-            ? $membership->organization
-            : $membership->organization()->first();
+        $raw = $membership->getAttribute(self::COLUMN);
 
-        if (! $organization instanceof Organization) {
+        if ($raw === null || $raw === '') {
             return [];
         }
 
-        $all = ($organization->settings ?? [])[self::SETTINGS_KEY] ?? [];
+        if (is_array($raw)) {
+            return $raw;
+        }
 
-        return (array) ($all[(string) $membership->user_id] ?? []);
+        $decoded = json_decode((string) $raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 }

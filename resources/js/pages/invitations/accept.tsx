@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateMedium } from '@/lib/format';
 import { dashboard, login, logout, register } from '@/routes';
+import { accept as invitationAccept } from '@/routes/invitations';
+import { store as acceptInvitation } from '@/routes/invitations/accept';
 
 export interface InvitationAcceptProps {
     token: string;
@@ -40,15 +42,24 @@ const INVALID_COPY = {
 } as const;
 
 /** Aceitar convite (ROUTES §2.11): estados válido/expirado/revogado/aceito × guest/same_user/other_user. */
-export default function InvitationAccept({ token, invitation, state, auth_state }: InvitationAcceptProps) {
+export default function InvitationAccept({
+    token,
+    invitation,
+    state,
+    auth_state,
+}: InvitationAcceptProps) {
     const { auth } = usePage().props;
     const [processing, setProcessing] = useState(false);
 
-    const acceptUrl = `/convites/${token}`;
+    const acceptUrl = invitationAccept(token).url;
 
     const accept = () => {
         setProcessing(true);
-        router.post(acceptUrl, {}, { onFinish: () => setProcessing(false) });
+        router.post(
+            acceptInvitation(token).url,
+            {},
+            { onFinish: () => setProcessing(false) },
+        );
     };
 
     if (state !== 'valid' || !invitation) {
@@ -58,13 +69,15 @@ export default function InvitationAccept({ token, invitation, state, auth_state 
         return (
             <>
                 <Head title="Convite" />
-                <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-card">
-                    <span className="flex size-10 items-center justify-center rounded-[10px] bg-muted text-text-secondary">
+                <div className="border-border bg-card shadow-card flex flex-col gap-4 rounded-xl border p-6">
+                    <span className="bg-muted text-text-secondary flex size-10 items-center justify-center rounded-[10px]">
                         <Icon className="size-5" />
                     </span>
                     <div>
                         <h1 className="text-[20px] font-bold">{copy.title}</h1>
-                        <p className="mt-2 text-[14px] leading-[1.55] text-text-secondary">{copy.text}</p>
+                        <p className="text-text-secondary mt-2 text-[14px] leading-[1.55]">
+                            {copy.text}
+                        </p>
                     </div>
                     <Button asChild variant="outline" className="self-start">
                         <Link href={auth.user ? dashboard() : login()}>
@@ -79,11 +92,15 @@ export default function InvitationAccept({ token, invitation, state, auth_state 
     return (
         <>
             <Head title={`Convite · ${invitation.organization_name}`} />
-            <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-6 shadow-card">
+            <div className="border-border bg-card shadow-card flex flex-col gap-5 rounded-xl border p-6">
                 <div className="flex items-center gap-3">
-                    <AvatarInitials initials={invitation.organization_initials} tone="organization" size="xl" />
+                    <AvatarInitials
+                        initials={invitation.organization_initials}
+                        tone="organization"
+                        size="xl"
+                    />
                     <div className="min-w-0">
-                        <p className="text-[11px] font-bold tracking-[.18em] text-muted-foreground uppercase">
+                        <p className="text-muted-foreground text-[11px] font-bold tracking-[.18em] uppercase">
                             Convite para
                         </p>
                         <h1 className="truncate text-[20px] leading-tight font-bold">
@@ -91,10 +108,13 @@ export default function InvitationAccept({ token, invitation, state, auth_state 
                         </h1>
                     </div>
                 </div>
-                <p className="text-[14px] leading-[1.55] text-text-secondary">
-                    <b className="text-foreground">{invitation.invited_by}</b> convidou{' '}
-                    <b className="text-foreground">{invitation.email}</b> para entrar como{' '}
-                    <b className="text-foreground">{invitation.role_label}</b>. O convite expira em{' '}
+                <p className="text-text-secondary text-[14px] leading-[1.55]">
+                    <b className="text-foreground">{invitation.invited_by}</b>{' '}
+                    convidou{' '}
+                    <b className="text-foreground">{invitation.email}</b> para
+                    entrar como{' '}
+                    <b className="text-foreground">{invitation.role_label}</b>.
+                    O convite expira em{' '}
                     {formatDateMedium(invitation.expires_at)}.
                 </p>
 
@@ -108,21 +128,30 @@ export default function InvitationAccept({ token, invitation, state, auth_state 
                 {auth_state === 'guest' && (
                     <div className="flex flex-col gap-2">
                         <Button asChild size="lg">
-                            <Link href={register({ query: { invitation: token } })}>
+                            <Link
+                                href={register({
+                                    query: { invitation: token },
+                                })}
+                            >
                                 Criar conta com {invitation.email}
                             </Link>
                         </Button>
                         <Button asChild variant="outline" size="lg">
-                            <Link href={login({ query: { intended: acceptUrl } })}>Já tenho conta · Entrar</Link>
+                            <Link
+                                href={login({ query: { intended: acceptUrl } })}
+                            >
+                                Já tenho conta · Entrar
+                            </Link>
                         </Button>
                     </div>
                 )}
 
                 {auth_state === 'other_user' && (
                     <div className="flex flex-col gap-3">
-                        <p className="rounded-[10px] border border-warning-border bg-warning-bg p-3 text-[12.5px] leading-[1.5] text-warning">
-                            Você está conectado como <b>{auth.user?.email}</b>, mas o convite foi
-                            enviado para <b>{invitation.email}</b>.
+                        <p className="border-warning-border bg-warning-bg text-warning rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
+                            Você está conectado como <b>{auth.user?.email}</b>,
+                            mas o convite foi enviado para{' '}
+                            <b>{invitation.email}</b>.
                         </p>
                         <Button
                             size="lg"

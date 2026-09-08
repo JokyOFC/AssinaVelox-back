@@ -16,6 +16,7 @@ return [
     | Caminho absoluto do Python do venv em tools/pdftool/.venv. O Laravel nunca
     | usa shell: o binário é executado diretamente com argumentos em array.
     | Padrão: .venv/Scripts/python.exe no Windows e .venv/bin/python no Linux.
+    | (PDFTOOL_PYTHON vazio => padrão; venv ausente => isAvailable() = false.)
     |
     */
 
@@ -59,8 +60,8 @@ return [
 
     /*
     | Quantidade máxima de caracteres de stderr registrados em log por chamada.
-    | O stderr nunca contém a passphrase (o pdftool não a imprime) e, por
-    | precaução, o cliente ainda redige qualquer ocorrência do valor.
+    | O stderr nunca contém a senha do certificado (o pdftool não a imprime) e,
+    | por precaução, o cliente ainda redige qualquer ocorrência do valor.
     */
 
     'stderr_log_limit' => 4000,
@@ -93,13 +94,20 @@ return [
     | Certificado A1 da empresa operadora (assinatura PAdES B-B)
     |--------------------------------------------------------------------------
     |
-    | pfx_path: arquivo PKCS#12 (.pfx/.p12). passphrase_env: NOME da variável
-    | de ambiente que contém a senha do PKCS#12. O VALOR nunca entra na config,
-    | em argv, em log ou em fila: fica apenas no ambiente do processo PHP e é
-    | injetado, sob esse mesmo nome, no ambiente do processo filho do pdftool.
-    | Atenção: com `config:cache` o .env não é carregado; nesse caso a variável
-    | precisa estar no ambiente real do serviço (systemd EnvironmentFile,
-    | pool do PHP-FPM, etc.).
+    | enabled: liga a assinatura criptográfica. Com false (padrão) o container
+    | resolve PdfSigner para NullPdfSigner mesmo que haja PFX configurado, e os
+    | envelopes concluem como aceite eletrônico com evidências.
+    |
+    | pfx_path: arquivo PKCS#12 (.pfx/.p12). password_env: NOME da variável de
+    | ambiente que contém a senha do PKCS#12 (padrão COMPANY_CERT_PASSWORD). O
+    | VALOR nunca entra na config, em argv, em log ou em fila: fica apenas no
+    | ambiente do processo PHP e é injetado, sob esse mesmo nome, no ambiente do
+    | processo filho do pdftool. Atenção: com `config:cache` o .env não é
+    | carregado; nesse caso a variável precisa estar no ambiente real do serviço
+    | (systemd EnvironmentFile, pool do PHP-FPM, etc.).
+    |
+    | PyHankoSigner::isConfigured() exige enabled=true + PFX existente + variável
+    | de senha definida (não vazia) no ambiente do PHP + pdftool disponível.
     |
     | environment: test|production. Certificados de teste (gen-test-cert) são
     | sempre rotulados como teste e nunca exibidos como ICP-Brasil.
@@ -107,8 +115,9 @@ return [
     */
 
     'company_certificate' => [
+        'enabled' => filter_var(env('COMPANY_CERT_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         'pfx_path' => env('COMPANY_CERT_PFX_PATH'),
-        'passphrase_env' => env('COMPANY_CERT_PASSPHRASE_ENV', 'COMPANY_CERT_PASSPHRASE'),
+        'password_env' => env('COMPANY_CERT_PASSWORD_ENV', 'COMPANY_CERT_PASSWORD'),
         'environment' => env('COMPANY_CERT_ENVIRONMENT', 'test'),
         'name' => env('COMPANY_CERT_NAME', 'Certificado da operadora'),
         'reason' => env('COMPANY_CERT_REASON', 'Assinatura eletrônica AssinaVelox'),

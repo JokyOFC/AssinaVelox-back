@@ -16,6 +16,7 @@ namespace App\Services\Pdf\Support;
  *
  * O que é repassado:
  * - Windows: SYSTEMROOT (obrigatório para carregar DLLs do sistema/Winsock),
+ *   COMSPEC (o Symfony Process executa o filho via cmd.exe no Windows) e
  *   PATH (localização de dependências do interpretador/LibreOffice).
  * - Linux/macOS: PATH, LANG=C.UTF-8.
  * - TEMP/TMP/TMPDIR e HOME/USERPROFILE apontam para o diretório temporário
@@ -66,7 +67,7 @@ final class ProcessEnvironment
     public static function inheritedNames(): array
     {
         return PHP_OS_FAMILY === 'Windows'
-            ? ['SYSTEMROOT', 'PATH']
+            ? ['SYSTEMROOT', 'COMSPEC', 'PATH']
             : ['PATH'];
     }
 

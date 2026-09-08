@@ -1,10 +1,23 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { FileText, Folder, FolderPlus, MoreHorizontal, Plus, RefreshCw, XCircle } from 'lucide-react';
+import {
+    FileText,
+    Folder,
+    FolderPlus,
+    MoreHorizontal,
+    Plus,
+    RefreshCw,
+    XCircle,
+} from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { AvatarStack } from '@/components/avatar-initials';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { BulkActionBar, DataTable, TitleCell, type DataTableColumn } from '@/components/data-table';
+import {
+    BulkActionBar,
+    DataTable,
+    TitleCell,
+    type DataTableColumn,
+} from '@/components/data-table';
 import { EmptyState } from '@/components/empty-state';
 import { FilterBar, FilterChip, SearchInput } from '@/components/filter-bar';
 import InputError from '@/components/input-error';
@@ -13,20 +26,70 @@ import { RailNavButton, UnderlineTabs } from '@/components/segmented-control';
 import { EnvelopeStatusBadge } from '@/components/status/envelope-status-badge';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { formatBytes, formatNumber, formatProgress, formatRelativeDateTime, plural } from '@/lib/format';
+import {
+    formatBytes,
+    formatNumber,
+    formatProgress,
+    formatRelativeDateTime,
+    plural,
+} from '@/lib/format';
 import { envelopeTabLabels } from '@/lib/labels';
-import { bulk as envelopesBulk, cancel as envelopeCancel, create as envelopesCreate, destroy as envelopeDestroy, duplicate as envelopeDuplicate, edit as envelopeEdit, index as envelopesIndex, show as envelopeShow } from '@/routes/envelopes';
+import {
+    bulk as envelopesBulk,
+    cancel as envelopeCancel,
+    create as envelopesCreate,
+    destroy as envelopeDestroy,
+    duplicate as envelopeDuplicate,
+    edit as envelopeEdit,
+    index as envelopesIndex,
+    show as envelopeShow,
+} from '@/routes/envelopes';
 import { store as storeFolder } from '@/routes/folders';
-import type { EnvelopeListItem, FolderFilterItem, Paginated, UserRef } from '@/types';
+import type {
+    EnvelopeListItem,
+    FolderFilterItem,
+    Paginated,
+    UserRef,
+} from '@/types';
 
-type EnvelopeTab = 'all' | 'awaiting' | 'in_progress' | 'completed' | 'drafts' | 'refused_expired';
-type Sort = 'updated_desc' | 'updated_asc' | 'created_desc' | 'title_asc' | 'expires_asc';
+type EnvelopeTab =
+    | 'all'
+    | 'awaiting'
+    | 'in_progress'
+    | 'completed'
+    | 'drafts'
+    | 'refused_expired';
+type Sort =
+    | 'updated_desc'
+    | 'updated_asc'
+    | 'created_desc'
+    | 'title_asc'
+    | 'expires_asc';
 
 export interface EnvelopesIndexProps {
     filters: {
@@ -55,13 +118,24 @@ const SORT_LABELS: Record<Sort, string> = {
     expires_asc: 'Vencem primeiro',
 };
 
-type PendingAction = { type: 'cancel' | 'delete'; envelope: EnvelopeListItem } | { type: 'bulk_cancel' } | null;
+type PendingAction =
+    | { type: 'cancel' | 'delete'; envelope: EnvelopeListItem }
+    | { type: 'bulk_cancel' }
+    | null;
 
 /**
  * Documentos (ROUTES §2.5; DESIGN §6.3): rail de pastas, abas por status,
  * filtros, tabela com seleção e ações em lote. Versão inicial funcional; Wave B refina.
  */
-export default function EnvelopesIndex({ filters, summary, tabs, folders, creators, envelopes, can }: EnvelopesIndexProps) {
+export default function EnvelopesIndex({
+    filters,
+    summary,
+    tabs,
+    folders,
+    creators,
+    envelopes,
+    can,
+}: EnvelopesIndexProps) {
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [pending, setPending] = useState<PendingAction>(null);
     const [busy, setBusy] = useState(false);
@@ -71,23 +145,37 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
 
     const apply = (next: Partial<EnvelopesIndexProps['filters']>) => {
         router.get(
-            envelopesIndex.url({ query: { ...filters, ...next, page: undefined } }),
+            envelopesIndex.url({
+                query: { ...filters, ...next, page: undefined },
+            }),
             {},
-            { preserveState: true, preserveScroll: true, replace: true, onSuccess: () => setSelected(new Set()) },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => setSelected(new Set()),
+            },
         );
     };
 
-    const runBulk = (action: 'move' | 'resend' | 'cancel', payload: Record<string, unknown> = {}) => {
+    const runBulk = (
+        action: 'move' | 'resend' | 'cancel',
+        payload: Record<string, unknown> = {},
+    ) => {
         setBusy(true);
-        router.post(envelopesBulk(action).url, { ids: [...selected], ...payload }, {
-            preserveScroll: true,
-            onSuccess: () => setSelected(new Set()),
-            onFinish: () => {
-                setBusy(false);
-                setPending(null);
-                setMoveOpen(false);
+        router.post(
+            envelopesBulk(action).url,
+            { ids: [...selected], ...payload },
+            {
+                preserveScroll: true,
+                onSuccess: () => setSelected(new Set()),
+                onFinish: () => {
+                    setBusy(false);
+                    setPending(null);
+                    setMoveOpen(false);
+                },
             },
-        });
+        );
     };
 
     const runPending = () => {
@@ -128,20 +216,73 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                     title={row.title}
                     href={envelopeShow(row.id).url}
                     onClick={() => router.visit(envelopeShow(row.id).url)}
-                    meta={[row.display_code, row.document?.pages ? `PDF · ${plural(row.document.pages, 'pág')}` : null].filter(Boolean).join(' · ')}
+                    meta={[
+                        row.display_code,
+                        row.document?.pages
+                            ? `PDF · ${plural(row.document.pages, 'pág')}`
+                            : null,
+                    ]
+                        .filter(Boolean)
+                        .join(' · ')}
                 />
             ),
         },
-        { key: 'folder', header: 'Pasta', width: '1fr', cell: (row) => <span className="truncate text-[13px] text-text-secondary">{row.folder?.name ?? '—'}</span> },
+        {
+            key: 'folder',
+            header: 'Pasta',
+            width: '1fr',
+            cell: (row) => (
+                <span className="text-text-secondary truncate text-[13px]">
+                    {row.folder?.name ?? '—'}
+                </span>
+            ),
+        },
         {
             key: 'recipients',
             header: 'Signatários',
             width: '1.2fr',
-            cell: (row) => <AvatarStack items={row.recipients} progress={formatProgress(row.signed_count, row.recipients_count)} />,
+            cell: (row) => (
+                <AvatarStack
+                    items={row.recipients}
+                    progress={formatProgress(
+                        row.signed_count,
+                        row.recipients_count,
+                    )}
+                />
+            ),
         },
-        { key: 'status', header: 'Status', width: '1.1fr', cell: (row) => <EnvelopeStatusBadge status={row.status} signedCount={row.signed_count} label={row.status_label} /> },
-        { key: 'creator', header: 'Criado por', width: '1fr', cell: (row) => <span className="truncate text-[13px] text-text-secondary">{row.creator.name}</span> },
-        { key: 'updated', header: 'Atualizado', width: '1fr', cell: (row) => <span className="text-[13px] whitespace-nowrap text-text-secondary tabular">{formatRelativeDateTime(row.updated_at)}</span> },
+        {
+            key: 'status',
+            header: 'Status',
+            width: '1.1fr',
+            cell: (row) => (
+                <EnvelopeStatusBadge
+                    status={row.status}
+                    signedCount={row.signed_count}
+                    label={row.status_label}
+                />
+            ),
+        },
+        {
+            key: 'creator',
+            header: 'Criado por',
+            width: '1fr',
+            cell: (row) => (
+                <span className="text-text-secondary truncate text-[13px]">
+                    {row.creator.name}
+                </span>
+            ),
+        },
+        {
+            key: 'updated',
+            header: 'Atualizado',
+            width: '1fr',
+            cell: (row) => (
+                <span className="text-text-secondary tabular text-[13px] whitespace-nowrap">
+                    {formatRelativeDateTime(row.updated_at)}
+                </span>
+            ),
+        },
         {
             key: 'actions',
             header: '',
@@ -150,29 +291,62 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
             cell: (row) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-xs" aria-label="Ações">
-                            <MoreHorizontal className="size-4 text-muted-foreground" />
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Ações"
+                        >
+                            <MoreHorizontal className="text-muted-foreground size-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                             <Link href={envelopeShow(row.id)}>Abrir</Link>
                         </DropdownMenuItem>
-                        {row.can.update && ['draft', 'preparing', 'ready'].includes(row.status) && (
-                            <DropdownMenuItem asChild>
-                                <Link href={envelopeEdit(row.id)}>Editar rascunho</Link>
-                            </DropdownMenuItem>
+                        {row.can.update &&
+                            ['draft', 'preparing', 'ready'].includes(
+                                row.status,
+                            ) && (
+                                <DropdownMenuItem asChild>
+                                    <Link href={envelopeEdit(row.id)}>
+                                        Editar rascunho
+                                    </Link>
+                                </DropdownMenuItem>
+                            )}
+                        <DropdownMenuItem
+                            onSelect={() =>
+                                router.post(envelopeDuplicate(row.id).url)
+                            }
+                        >
+                            Duplicar
+                        </DropdownMenuItem>
+                        {(row.can.cancel || row.can.delete) && (
+                            <DropdownMenuSeparator />
                         )}
-                        <DropdownMenuItem onSelect={() => router.post(envelopeDuplicate(row.id).url)}>Duplicar</DropdownMenuItem>
-                        {(row.can.cancel || row.can.delete) && <DropdownMenuSeparator />}
                         {row.can.cancel && row.status === 'in_progress' && (
-                            <DropdownMenuItem variant="destructive" onSelect={() => setPending({ type: 'cancel', envelope: row })}>
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() =>
+                                    setPending({
+                                        type: 'cancel',
+                                        envelope: row,
+                                    })
+                                }
+                            >
                                 <XCircle className="size-3.5" />
                                 Cancelar documento
                             </DropdownMenuItem>
                         )}
                         {row.can.delete && (
-                            <DropdownMenuItem variant="destructive" onSelect={() => setPending({ type: 'delete', envelope: row })}>
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() =>
+                                    setPending({
+                                        type: 'delete',
+                                        envelope: row,
+                                    })
+                                }
+                            >
                                 Excluir rascunho
                             </DropdownMenuItem>
                         )}
@@ -182,7 +356,11 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
         },
     ];
 
-    const hasFilters = !!filters.q || !!filters.creator || !!filters.folder || filters.status !== 'all';
+    const hasFilters =
+        !!filters.q ||
+        !!filters.creator ||
+        !!filters.folder ||
+        filters.status !== 'all';
 
     return (
         <>
@@ -203,13 +381,15 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
             <div className="flex flex-wrap items-start gap-5">
                 <aside className="hidden w-[200px] shrink-0 flex-col gap-1 md:flex">
                     <div className="flex h-7 items-center justify-between px-3">
-                        <span className="text-[10.5px] font-bold tracking-[.14em] text-muted-foreground uppercase">Pastas</span>
+                        <span className="text-muted-foreground text-[10.5px] font-bold tracking-[.14em] uppercase">
+                            Pastas
+                        </span>
                         {can.create_folder && (
                             <button
                                 type="button"
                                 onClick={() => setFolderDialog(true)}
                                 aria-label="Nova pasta"
-                                className="flex size-[22px] items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                                className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-[22px] items-center justify-center rounded-md"
                             >
                                 <FolderPlus className="size-3.5" />
                             </button>
@@ -220,7 +400,11 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                             key={folder.id ?? 'all'}
                             active={(filters.folder ?? null) === folder.id}
                             onClick={() => apply({ folder: folder.id })}
-                            trailing={<span className="text-[11.5px] text-muted-foreground tabular">{formatNumber(folder.count)}</span>}
+                            trailing={
+                                <span className="text-muted-foreground tabular text-[11.5px]">
+                                    {formatNumber(folder.count)}
+                                </span>
+                            }
                         >
                             <span className="inline-flex items-center gap-2">
                                 <Folder className="size-3.5" />
@@ -228,39 +412,66 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                             </span>
                         </RailNavButton>
                     ))}
-                    <p className="mt-2 rounded-[10px] bg-primary-soft p-3 text-[12px] leading-[1.5] text-primary">
-                        Pastas organizam documentos por assunto. Mover um documento não altera status nem assinaturas.
+                    <p className="bg-primary-soft text-primary mt-2 rounded-[10px] p-3 text-[12px] leading-[1.5]">
+                        Pastas organizam documentos por assunto. Mover um
+                        documento não altera status nem assinaturas.
                     </p>
                 </aside>
 
-                <div className="min-w-0 flex-1 rounded-xl border border-border bg-card shadow-card">
+                <div className="border-border bg-card shadow-card min-w-0 flex-1 rounded-xl border">
                     <UnderlineTabs
                         value={filters.status}
                         onChange={(status) => apply({ status })}
-                        options={(Object.keys(envelopeTabLabels) as EnvelopeTab[]).map((key) => ({ value: key, label: envelopeTabLabels[key], count: tabs[key] }))}
+                        options={(
+                            Object.keys(envelopeTabLabels) as EnvelopeTab[]
+                        ).map((key) => ({
+                            value: key,
+                            label: envelopeTabLabels[key],
+                            count: tabs[key],
+                        }))}
                     />
                     <FilterBar
                         trailing={
-                            <Select value={filters.sort} onValueChange={(sort) => apply({ sort: sort as Sort })}>
-                                <SelectTrigger size="sm" className="h-[34px] text-[13px]">
+                            <Select
+                                value={filters.sort}
+                                onValueChange={(sort) =>
+                                    apply({ sort: sort as Sort })
+                                }
+                            >
+                                <SelectTrigger
+                                    size="sm"
+                                    className="h-[34px] text-[13px]"
+                                >
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {(Object.keys(SORT_LABELS) as Sort[]).map((key) => (
-                                        <SelectItem key={key} value={key}>
-                                            {SORT_LABELS[key]}
-                                        </SelectItem>
-                                    ))}
+                                    {(Object.keys(SORT_LABELS) as Sort[]).map(
+                                        (key) => (
+                                            <SelectItem key={key} value={key}>
+                                                {SORT_LABELS[key]}
+                                            </SelectItem>
+                                        ),
+                                    )}
                                 </SelectContent>
                             </Select>
                         }
                     >
-                        <SearchInput value={filters.q} onChange={(q) => apply({ q })} placeholder="Buscar por título, código ou signatário" />
+                        <SearchInput
+                            value={filters.q}
+                            onChange={(q) => apply({ q })}
+                            placeholder="Buscar por título, código ou signatário"
+                        />
                         <FilterChip
                             label="Pasta"
                             value={filters.folder}
                             onChange={(folder) => apply({ folder })}
-                            options={folders.filter((f) => f.id !== null).map((f) => ({ value: f.id as string, label: f.name, count: f.count }))}
+                            options={folders
+                                .filter((f) => f.id !== null)
+                                .map((f) => ({
+                                    value: f.id as string,
+                                    label: f.name,
+                                    count: f.count,
+                                }))}
                             allLabel="Todas"
                             className="md:hidden"
                         />
@@ -268,19 +479,42 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                             label="Criado por"
                             value={filters.creator}
                             onChange={(creator) => apply({ creator })}
-                            options={creators.map((c) => ({ value: c.id, label: c.name }))}
+                            options={creators.map((c) => ({
+                                value: c.id,
+                                label: c.name,
+                            }))}
                         />
                     </FilterBar>
 
-                    <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
-                        <Button variant="outline" size="xs" onClick={() => setMoveOpen(true)} disabled={busy}>
+                    <BulkActionBar
+                        count={selected.size}
+                        onClear={() => setSelected(new Set())}
+                    >
+                        <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => setMoveOpen(true)}
+                            disabled={busy}
+                        >
                             <Folder className="size-3.5" /> Mover
                         </Button>
-                        <Button variant="outline" size="xs" onClick={() => runBulk('resend')} disabled={busy}>
+                        <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => runBulk('resend')}
+                            disabled={busy}
+                        >
                             <RefreshCw className="size-3.5" /> Reenviar convites
                         </Button>
                         {can.bulk_cancel && (
-                            <Button variant="destructive" size="xs" onClick={() => setPending({ type: 'bulk_cancel' })} disabled={busy}>
+                            <Button
+                                variant="destructive"
+                                size="xs"
+                                onClick={() =>
+                                    setPending({ type: 'bulk_cancel' })
+                                }
+                                disabled={busy}
+                            >
                                 <XCircle className="size-3.5" /> Cancelar
                             </Button>
                         )}
@@ -297,7 +531,10 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                         dense
                         empty={
                             hasFilters ? (
-                                <EmptyState variant="inline" title="Nenhum documento nesta combinação de pasta e status." />
+                                <EmptyState
+                                    variant="inline"
+                                    title="Nenhum documento nesta combinação de pasta e status."
+                                />
                             ) : (
                                 <EmptyState
                                     icon={FileText}
@@ -306,7 +543,10 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                                     action={
                                         <Button asChild>
                                             <Link href={envelopesCreate()}>
-                                                <Plus className="size-[15px]" strokeWidth={2.5} />
+                                                <Plus
+                                                    className="size-[15px]"
+                                                    strokeWidth={2.5}
+                                                />
                                                 Nova solicitação
                                             </Link>
                                         </Button>
@@ -315,30 +555,50 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                             )
                         }
                     />
-                    <TablePagination paginated={envelopes} entity="documentos" entitySingular="documento" />
+                    <TablePagination
+                        paginated={envelopes}
+                        entity="documentos"
+                        entitySingular="documento"
+                    />
                 </div>
             </div>
 
-            <NewFolderDialog open={folderDialog} onOpenChange={setFolderDialog} />
+            <NewFolderDialog
+                open={folderDialog}
+                onOpenChange={setFolderDialog}
+            />
 
             <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Mover {plural(selected.size, 'documento')}</DialogTitle>
-                        <DialogDescription>Escolha a pasta de destino. Mover não altera status nem assinaturas.</DialogDescription>
+                        <DialogTitle>
+                            Mover {plural(selected.size, 'documento')}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Escolha a pasta de destino. Mover não altera status
+                            nem assinaturas.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-1.5">
                         <Label>Pasta</Label>
-                        <Select value={moveTarget} onValueChange={setMoveTarget}>
+                        <Select
+                            value={moveTarget}
+                            onValueChange={setMoveTarget}
+                        >
                             <SelectTrigger className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="__none">Sem pasta (Todos)</SelectItem>
+                                <SelectItem value="__none">
+                                    Sem pasta (Todos)
+                                </SelectItem>
                                 {folders
                                     .filter((f) => f.id !== null)
                                     .map((f) => (
-                                        <SelectItem key={f.id} value={f.id as string}>
+                                        <SelectItem
+                                            key={f.id}
+                                            value={f.id as string}
+                                        >
                                             {f.name}
                                         </SelectItem>
                                     ))}
@@ -346,10 +606,24 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                         </Select>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setMoveOpen(false)} disabled={busy}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setMoveOpen(false)}
+                            disabled={busy}
+                        >
                             Cancelar
                         </Button>
-                        <Button onClick={() => runBulk('move', { folder_id: moveTarget === '__none' ? null : moveTarget })} disabled={busy}>
+                        <Button
+                            onClick={() =>
+                                runBulk('move', {
+                                    folder_id:
+                                        moveTarget === '__none'
+                                            ? null
+                                            : moveTarget,
+                                })
+                            }
+                            disabled={busy}
+                        >
                             {busy && <Spinner />}
                             Mover
                         </Button>
@@ -376,14 +650,24 @@ export default function EnvelopesIndex({ filters, summary, tabs, folders, creato
                         ? 'O rascunho e o arquivo enviado serão removidos. Esta ação não pode ser desfeita.'
                         : 'Os signatários pendentes serão avisados e o link de assinatura deixa de funcionar. Documentos que não estão em andamento são ignorados.'
                 }
-                confirmLabel={pending?.type === 'delete' ? 'Excluir rascunho' : 'Cancelar documento'}
+                confirmLabel={
+                    pending?.type === 'delete'
+                        ? 'Excluir rascunho'
+                        : 'Cancelar documento'
+                }
                 onConfirm={runPending}
             />
         </>
     );
 }
 
-function NewFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function NewFolderDialog({
+    open,
+    onOpenChange,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
     const form = useForm({ name: '' });
 
     const submit = (event: FormEvent) => {
@@ -403,7 +687,10 @@ function NewFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Nova pasta</DialogTitle>
-                    <DialogDescription>Pastas ajudam a organizar documentos por assunto ou equipe.</DialogDescription>
+                    <DialogDescription>
+                        Pastas ajudam a organizar documentos por assunto ou
+                        equipe.
+                    </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={submit} className="flex flex-col gap-4">
                     <div className="grid gap-1.5">
@@ -411,7 +698,9 @@ function NewFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                         <Input
                             id="folder-name"
                             value={form.data.name}
-                            onChange={(e) => form.setData('name', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('name', e.target.value)
+                            }
                             placeholder="Ex.: Locação"
                             autoFocus
                             required
@@ -422,10 +711,18 @@ function NewFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                         <InputError message={form.errors.name} />
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={form.processing}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                            disabled={form.processing}
+                        >
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={form.processing || !form.data.name.trim()}>
+                        <Button
+                            type="submit"
+                            disabled={form.processing || !form.data.name.trim()}
+                        >
                             {form.processing && <Spinner />}
                             Criar pasta
                         </Button>

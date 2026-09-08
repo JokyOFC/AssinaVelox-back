@@ -36,7 +36,7 @@ export function PageHeader({
                 {leading}
                 <div className="min-w-0">
                     {eyebrow && (
-                        <p className="mb-1.5 text-[11px] font-bold tracking-[.18em] text-muted-foreground uppercase">
+                        <p className="text-muted-foreground mb-1.5 text-[11px] font-bold tracking-[.18em] uppercase">
                             {eyebrow}
                         </p>
                     )}
@@ -54,14 +54,16 @@ export function PageHeader({
                         {badge}
                     </div>
                     {subtitle && (
-                        <p className="mt-1.5 text-[13.5px] text-text-secondary">
+                        <p className="text-text-secondary mt-1.5 text-[13.5px]">
                             {subtitle}
                         </p>
                     )}
                 </div>
             </div>
             {actions && (
-                <div className="flex flex-wrap items-center gap-2">{actions}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                    {actions}
+                </div>
             )}
         </div>
     );

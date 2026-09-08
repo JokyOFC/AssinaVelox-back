@@ -115,16 +115,21 @@ export default function Register({ invitation = null }: Props) {
                                 className="h-10"
                                 value={form.data.organization_name}
                                 onChange={(e) =>
-                                    form.setData('organization_name', e.target.value)
+                                    form.setData(
+                                        'organization_name',
+                                        e.target.value,
+                                    )
                                 }
                                 aria-invalid={!!form.errors.organization_name}
                             />
-                            <InputError message={form.errors.organization_name} />
+                            <InputError
+                                message={form.errors.organization_name}
+                            />
                         </div>
                         <div className="grid gap-1.5">
                             <Label htmlFor="organization_tax_id">
                                 CNPJ ou CPF{' '}
-                                <span className="font-normal text-muted-foreground">
+                                <span className="text-muted-foreground font-normal">
                                     (opcional)
                                 </span>
                             </Label>
@@ -133,7 +138,7 @@ export default function Register({ invitation = null }: Props) {
                                 name="organization_tax_id"
                                 inputMode="numeric"
                                 placeholder="00.000.000/0000-00"
-                                className="h-10 tabular"
+                                className="tabular h-10"
                                 value={form.data.organization_tax_id}
                                 onChange={(e) =>
                                     form.setData(
@@ -143,7 +148,9 @@ export default function Register({ invitation = null }: Props) {
                                 }
                                 aria-invalid={!!form.errors.organization_tax_id}
                             />
-                            <InputError message={form.errors.organization_tax_id} />
+                            <InputError
+                                message={form.errors.organization_tax_id}
+                            />
                         </div>
                     </div>
                 )}
@@ -158,7 +165,9 @@ export default function Register({ invitation = null }: Props) {
                         placeholder="Mínimo de 8 caracteres"
                         className="h-10"
                         value={form.data.password}
-                        onChange={(e) => form.setData('password', e.target.value)}
+                        onChange={(e) =>
+                            form.setData('password', e.target.value)
+                        }
                         aria-invalid={!!form.errors.password}
                     />
                     <div className="mt-0.5 flex gap-1" aria-hidden>
@@ -167,19 +176,23 @@ export default function Register({ invitation = null }: Props) {
                                 key={index}
                                 className={cn(
                                     'h-1 flex-1 rounded-full transition-colors',
-                                    index < strength ? 'bg-success-solid' : 'bg-accent',
+                                    index < strength
+                                        ? 'bg-success-solid'
+                                        : 'bg-accent',
                                 )}
                             />
                         ))}
                     </div>
-                    <span className="text-[12px] text-muted-foreground">
+                    <span className="text-muted-foreground text-[12px]">
                         Use letras, números e um símbolo.
                     </span>
                     <InputError message={form.errors.password} />
                 </div>
 
                 <div className="grid gap-1.5">
-                    <Label htmlFor="password_confirmation">Confirmar senha</Label>
+                    <Label htmlFor="password_confirmation">
+                        Confirmar senha
+                    </Label>
                     <PasswordInput
                         id="password_confirmation"
                         name="password_confirmation"
@@ -189,7 +202,10 @@ export default function Register({ invitation = null }: Props) {
                         className="h-10"
                         value={form.data.password_confirmation}
                         onChange={(e) =>
-                            form.setData('password_confirmation', e.target.value)
+                            form.setData(
+                                'password_confirmation',
+                                e.target.value,
+                            )
                         }
                         aria-invalid={!!form.errors.password_confirmation}
                     />
@@ -197,7 +213,7 @@ export default function Register({ invitation = null }: Props) {
                 </div>
 
                 <div className="grid gap-1.5">
-                    <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-[1.5] text-text-secondary">
+                    <label className="text-text-secondary flex cursor-pointer items-start gap-2.5 text-[13px] leading-[1.5]">
                         <Checkbox
                             id="terms"
                             name="terms"
@@ -210,11 +226,17 @@ export default function Register({ invitation = null }: Props) {
                         />
                         <span>
                             Li e aceito os{' '}
-                            <Link href={terms()} className="font-semibold text-primary hover:underline">
+                            <Link
+                                href={terms()}
+                                className="text-primary font-semibold hover:underline"
+                            >
                                 Termos de uso
                             </Link>{' '}
                             e a{' '}
-                            <Link href={privacy()} className="font-semibold text-primary hover:underline">
+                            <Link
+                                href={privacy()}
+                                className="text-primary font-semibold hover:underline"
+                            >
                                 Política de Privacidade
                             </Link>
                             .
@@ -231,11 +253,13 @@ export default function Register({ invitation = null }: Props) {
                     data-test="register-user-button"
                 >
                     {form.processing && <Spinner />}
-                    {invitation ? 'Criar conta e entrar na organização' : 'Criar conta grátis'}
+                    {invitation
+                        ? 'Criar conta e entrar na organização'
+                        : 'Criar conta grátis'}
                 </Button>
             </form>
 
-            <p className="text-center text-[13.5px] text-text-secondary">
+            <p className="text-text-secondary text-center text-[13.5px]">
                 Já tem conta? <TextLink href={login()}>Entrar</TextLink>
             </p>
         </>

@@ -12,7 +12,10 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { formatCpfCnpj, formatDate } from '@/lib/format';
 import { general as settingsGeneral } from '@/routes/settings';
-import { destroy as requestDeletion, update as updateOrganization } from '@/routes/settings/organization';
+import {
+    destroy as requestDeletion,
+    update as updateOrganization,
+} from '@/routes/settings/organization';
 import { update as updateSecurity } from '@/routes/settings/security';
 
 export interface SettingsGeneralProps {
@@ -50,26 +53,33 @@ function SecurityRow({
     phase2?: boolean;
 }) {
     return (
-        <div className="flex items-center justify-between gap-4 border-t border-muted py-3 first:border-t-0">
+        <div className="border-muted flex items-center justify-between gap-4 border-t py-3 first:border-t-0">
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
                     {title}
                     {phase2 && <Badge variant="phase">Fase 2</Badge>}
                 </div>
-                <div className="mt-0.5 text-[12.5px] text-muted-foreground">{description}</div>
+                <div className="text-muted-foreground mt-0.5 text-[12.5px]">
+                    {description}
+                </div>
             </div>
             <Switch
                 checked={checked}
                 onCheckedChange={onCheckedChange}
                 disabled={disabled}
-                className="h-[22px] w-10 data-[state=unchecked]:bg-border-dashed [&>span]:size-[18px] [&>span]:data-[state=checked]:translate-x-[18px]"
+                className="data-[state=unchecked]:bg-border-dashed h-[22px] w-10 [&>span]:size-[18px] [&>span]:data-[state=checked]:translate-x-[18px]"
             />
         </div>
     );
 }
 
 /** Configurações › Geral (ROUTES §2.12; DESIGN §6.11 "Geral e segurança"). */
-export default function SettingsGeneral({ organization, security, deletion, can }: SettingsGeneralProps) {
+export default function SettingsGeneral({
+    organization,
+    security,
+    deletion,
+    can,
+}: SettingsGeneralProps) {
     const company = useForm({
         legal_name: organization.legal_name ?? '',
         name: organization.name,
@@ -77,8 +87,12 @@ export default function SettingsGeneral({ organization, security, deletion, can 
         contact_email: organization.contact_email ?? '',
     });
 
-    const [requireTwoFactor, setRequireTwoFactor] = useState(security.require_two_factor);
-    const [sessionIdle, setSessionIdle] = useState(security.session_idle_hours === 12);
+    const [requireTwoFactor, setRequireTwoFactor] = useState(
+        security.require_two_factor,
+    );
+    const [sessionIdle, setSessionIdle] = useState(
+        security.session_idle_hours === 12,
+    );
     const [savingSecurity, setSavingSecurity] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -88,13 +102,17 @@ export default function SettingsGeneral({ organization, security, deletion, can 
         company.patch(updateOrganization.url(), { preserveScroll: true });
     };
 
-    const saveSecurity = (next: { require_two_factor?: boolean; session_idle_hours?: 12 | null }) => {
+    const saveSecurity = (next: {
+        require_two_factor?: boolean;
+        session_idle_hours?: 12 | null;
+    }) => {
         setSavingSecurity(true);
         router.patch(
             updateSecurity.url(),
             {
                 require_two_factor: next.require_two_factor ?? requireTwoFactor,
-                session_idle_hours: next.session_idle_hours ?? (sessionIdle ? 12 : null),
+                session_idle_hours:
+                    next.session_idle_hours ?? (sessionIdle ? 12 : null),
             },
             { preserveScroll: true, onFinish: () => setSavingSecurity(false) },
         );
@@ -102,13 +120,17 @@ export default function SettingsGeneral({ organization, security, deletion, can 
 
     const requestDelete = () => {
         setDeleting(true);
-        router.post(requestDeletion.url(), {}, {
-            preserveScroll: true,
-            onFinish: () => {
-                setDeleting(false);
-                setDeleteOpen(false);
+        router.post(
+            requestDeletion.url(),
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setDeleting(false);
+                    setDeleteOpen(false);
+                },
             },
-        });
+        );
     };
 
     const cancelDelete = () => {
@@ -119,19 +141,30 @@ export default function SettingsGeneral({ organization, security, deletion, can 
         <>
             <Head title="Configurações · Geral" />
 
-            <form onSubmit={saveCompany} className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-card">
+            <form
+                onSubmit={saveCompany}
+                className="border-border bg-card shadow-card flex flex-col gap-4 rounded-xl border p-5"
+            >
                 <Heading
                     variant="small"
                     title="Empresa"
                     description="Aparece nos convites, no certificado de conclusão e nos recibos."
                 />
-                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                <div
+                    className="grid gap-3"
+                    style={{
+                        gridTemplateColumns:
+                            'repeat(auto-fit, minmax(220px, 1fr))',
+                    }}
+                >
                     <div className="grid gap-1.5">
                         <Label htmlFor="legal_name">Razão social</Label>
                         <Input
                             id="legal_name"
                             value={company.data.legal_name}
-                            onChange={(e) => company.setData('legal_name', e.target.value)}
+                            onChange={(e) =>
+                                company.setData('legal_name', e.target.value)
+                            }
                             placeholder="Horizonte Negócios Imobiliários Ltda."
                             aria-invalid={!!company.errors.legal_name}
                         />
@@ -142,7 +175,9 @@ export default function SettingsGeneral({ organization, security, deletion, can 
                         <Input
                             id="name"
                             value={company.data.name}
-                            onChange={(e) => company.setData('name', e.target.value)}
+                            onChange={(e) =>
+                                company.setData('name', e.target.value)
+                            }
                             required
                             aria-invalid={!!company.errors.name}
                         />
@@ -155,7 +190,12 @@ export default function SettingsGeneral({ organization, security, deletion, can 
                             inputMode="numeric"
                             className="tabular"
                             value={company.data.tax_id}
-                            onChange={(e) => company.setData('tax_id', formatCpfCnpj(e.target.value))}
+                            onChange={(e) =>
+                                company.setData(
+                                    'tax_id',
+                                    formatCpfCnpj(e.target.value),
+                                )
+                            }
                             placeholder="00.000.000/0000-00"
                             aria-invalid={!!company.errors.tax_id}
                         />
@@ -167,7 +207,9 @@ export default function SettingsGeneral({ organization, security, deletion, can 
                             id="contact_email"
                             type="email"
                             value={company.data.contact_email}
-                            onChange={(e) => company.setData('contact_email', e.target.value)}
+                            onChange={(e) =>
+                                company.setData('contact_email', e.target.value)
+                            }
                             placeholder="contato@empresa.com.br"
                             aria-invalid={!!company.errors.contact_email}
                         />
@@ -175,35 +217,54 @@ export default function SettingsGeneral({ organization, security, deletion, can 
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3.5 rounded-[10px] border border-border p-3.5">
-                    <AvatarInitials initials={organization.initials} tone="organization" size="2xl" />
+                <div className="border-border flex items-center gap-3.5 rounded-[10px] border p-3.5">
+                    <AvatarInitials
+                        initials={organization.initials}
+                        tone="organization"
+                        size="2xl"
+                    />
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
-                            Logo da empresa <Badge variant="phase">Fase 2</Badge>
+                            Logo da empresa{' '}
+                            <Badge variant="phase">Fase 2</Badge>
                         </div>
-                        <div className="text-[12.5px] leading-[1.5] text-muted-foreground">
-                            PNG ou SVG, fundo transparente, mínimo 200×200. Usado nos e-mails e na página de assinatura.
+                        <div className="text-muted-foreground text-[12.5px] leading-[1.5]">
+                            PNG ou SVG, fundo transparente, mínimo 200×200.
+                            Usado nos e-mails e na página de assinatura.
                         </div>
                     </div>
-                    <Button type="button" variant="outline" size="xs" disabled title="Disponível na Fase 2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled
+                        title="Disponível na Fase 2"
+                    >
                         Enviar logo
                     </Button>
                 </div>
 
                 <div className="flex justify-end">
-                    <Button type="submit" disabled={company.processing || !company.isDirty}>
+                    <Button
+                        type="submit"
+                        disabled={company.processing || !company.isDirty}
+                    >
                         {company.processing && <Spinner />}
                         Salvar alterações
                     </Button>
                 </div>
             </form>
 
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-card">
+            <div className="border-border bg-card shadow-card flex flex-col rounded-xl border p-5">
                 <Heading
                     variant="small"
                     title="Segurança"
                     description="Políticas aplicadas a todos os usuários da conta."
-                    action={savingSecurity ? <Spinner className="size-4 text-muted-foreground" /> : undefined}
+                    action={
+                        savingSecurity ? (
+                            <Spinner className="text-muted-foreground size-4" />
+                        ) : undefined
+                    }
                     className="mb-2"
                 />
                 <SecurityRow
@@ -230,7 +291,9 @@ export default function SettingsGeneral({ organization, security, deletion, can 
                     disabled={savingSecurity}
                     onCheckedChange={(checked) => {
                         setSessionIdle(checked);
-                        saveSecurity({ session_idle_hours: checked ? 12 : null });
+                        saveSecurity({
+                            session_idle_hours: checked ? 12 : null,
+                        });
                     }}
                 />
                 <SecurityRow
@@ -243,27 +306,39 @@ export default function SettingsGeneral({ organization, security, deletion, can 
             </div>
 
             {can.delete_organization && (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-danger-border bg-card p-5 shadow-card">
+                <div className="border-danger-border bg-card shadow-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-5">
                     <div className="min-w-0">
-                        <h2 className="text-[15px] font-semibold text-danger">Excluir conta</h2>
+                        <h2 className="text-danger text-[15px] font-semibold">
+                            Excluir conta
+                        </h2>
                         {deletion.requested_at ? (
-                            <p className="mt-1 text-[13px] leading-[1.5] text-text-secondary">
-                                Exclusão agendada para <b>{formatDate(deletion.scheduled_for)}</b>. Até essa data você
-                                pode cancelar.
+                            <p className="text-text-secondary mt-1 text-[13px] leading-[1.5]">
+                                Exclusão agendada para{' '}
+                                <b>{formatDate(deletion.scheduled_for)}</b>. Até
+                                essa data você pode cancelar.
                             </p>
                         ) : (
-                            <p className="mt-1 text-[13px] leading-[1.5] text-muted-foreground">
-                                Remove todos os usuários e documentos após 30 dias. Documentos assinados continuam
-                                válidos para quem os baixou.
+                            <p className="text-muted-foreground mt-1 text-[13px] leading-[1.5]">
+                                Remove todos os usuários e documentos após 30
+                                dias. Documentos assinados continuam válidos
+                                para quem os baixou.
                             </p>
                         )}
                     </div>
                     {deletion.requested_at ? (
-                        <Button variant="outline" size="sm" onClick={cancelDelete}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={cancelDelete}
+                        >
                             Cancelar exclusão
                         </Button>
                     ) : (
-                        <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeleteOpen(true)}
+                        >
                             Solicitar exclusão
                         </Button>
                     )}

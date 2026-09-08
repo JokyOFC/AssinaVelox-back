@@ -19,7 +19,7 @@ use Throwable;
  * Pillow lidos de requirements.lock.txt), roda o selftest ponta a ponta do
  * pdftool (compose, append, inspect, image2pdf, gen-test-cert, sign, validate) e
  * informa o estado dos adaptadores (conversores por tipo, LibreOffice,
- * certificado A1 + ambiente, raízes de confiança). Exit code 1 se o pdftool não
+ * certificado A1 ligado/configurado + ambiente, raízes de confiança). Exit code 1 se o pdftool não
  * estiver disponível ou o selftest falhar; LibreOffice/certificado ausentes são
  * avisos (são opcionais). Nunca imprime valores de variáveis de ambiente.
  */
@@ -136,12 +136,13 @@ class PdftoolSelftestCommand extends Command
                 'timeout_seconds' => $libreOffice->timeout(),
             ],
             'certificate' => [
+                'enabled' => $signer->isEnabled(),
                 'configured' => $signer->isConfigured(),
                 'name' => $signer->certificateName(),
                 'environment' => $signer->environment()->value,
                 'pfx_path' => $signer->pfxPath() !== '' ? $signer->pfxPath() : null,
                 'pfx_exists' => $signer->pfxPath() !== '' && is_file($signer->pfxPath()),
-                'passphrase_env' => $signer->passphraseEnvName(),
+                'password_env' => $signer->passwordEnvName(),
                 'problems' => $signer->configurationProblems(),
                 'profile' => PyHankoSigner::PROFILE,
             ],
@@ -235,9 +236,9 @@ class PdftoolSelftestCommand extends Command
         $cert = $report['adapters']['certificate'];
         $this->components->twoColumnDetail('Certificado A1', $cert['configured']
             ? sprintf('<fg=green>configurado</> — %s, ambiente <options=bold>%s</>, perfil %s', $cert['name'], $cert['environment'], $cert['profile'])
-            : '<fg=yellow>não configurado</> (envelopes concluem como aceite eletrônico com evidências)');
+            : sprintf('<fg=yellow>%s</> (envelopes concluem como aceite eletrônico com evidências)', $cert['enabled'] ? 'não configurado' : 'desligado — COMPANY_CERT_ENABLED=false'));
         $this->components->twoColumnDetail('  PFX', $cert['pfx_path'] ? ($cert['pfx_exists'] ? $cert['pfx_path'] : $cert['pfx_path'].' <fg=red>(não encontrado)</>') : '—');
-        $this->components->twoColumnDetail('  Variável da passphrase', sprintf('%s (valor nunca exibido)', $cert['passphrase_env']));
+        $this->components->twoColumnDetail('  Variável da senha', sprintf('%s (valor nunca exibido)', $cert['password_env']));
         foreach ($cert['problems'] as $problem) {
             $this->components->warn($problem);
         }

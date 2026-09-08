@@ -57,7 +57,8 @@ export function DataTable<T>({
     const allKeys = rows.map(rowKey);
     const allSelected =
         allKeys.length > 0 && allKeys.every((key) => selectedSet.has(key));
-    const someSelected = !allSelected && allKeys.some((key) => selectedSet.has(key));
+    const someSelected =
+        !allSelected && allKeys.some((key) => selectedSet.has(key));
 
     const template = [
         selectable ? '36px' : null,
@@ -105,7 +106,7 @@ export function DataTable<T>({
                 <div
                     role="row"
                     className={cn(
-                        'grid h-[38px] items-center border-y border-muted bg-background px-4 font-semibold text-muted-foreground',
+                        'border-muted bg-background text-muted-foreground grid h-[38px] items-center border-y px-4 font-semibold',
                         uppercaseHeader
                             ? 'text-[10.5px] tracking-[.14em] uppercase'
                             : 'text-[12px]',
@@ -149,10 +150,12 @@ export function DataTable<T>({
                         <div
                             key={`skeleton-${index}`}
                             role="row"
-                            className="grid items-center border-b border-muted px-4 py-[13px]"
+                            className="border-muted grid items-center border-b px-4 py-[13px]"
                             style={{ gridTemplateColumns: template }}
                         >
-                            {selectable && <Skeleton className="size-4 rounded" />}
+                            {selectable && (
+                                <Skeleton className="size-4 rounded" />
+                            )}
                             {columns.map((column) => (
                                 <div key={column.key} className="pr-3">
                                     <Skeleton className="h-3.5 w-3/4 rounded" />
@@ -164,7 +167,7 @@ export function DataTable<T>({
                 {!loading && rows.length === 0 && (
                     <div role="row">
                         {empty ?? (
-                            <p className="px-5 py-12 text-center text-[13.5px] text-muted-foreground">
+                            <p className="text-muted-foreground px-5 py-12 text-center text-[13.5px]">
                                 Nenhum registro encontrado.
                             </p>
                         )}
@@ -181,11 +184,16 @@ export function DataTable<T>({
                                 role="row"
                                 key={key}
                                 aria-selected={isSelected}
-                                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                onClick={
+                                    onRowClick
+                                        ? () => onRowClick(row)
+                                        : undefined
+                                }
                                 className={cn(
-                                    'grid min-h-[52px] items-center border-b border-muted px-4 text-[13.5px] transition-colors last:border-b-0 hover:bg-row-hover',
+                                    'border-muted hover:bg-row-hover grid min-h-[52px] items-center border-b px-4 text-[13.5px] transition-colors last:border-b-0',
                                     dense ? 'py-[9px]' : 'py-[10px]',
-                                    isSelected && 'bg-accent-subtle hover:bg-accent-subtle',
+                                    isSelected &&
+                                        'bg-accent-subtle hover:bg-accent-subtle',
                                     onRowClick && 'cursor-pointer',
                                 )}
                                 style={{ gridTemplateColumns: template }}
@@ -194,7 +202,9 @@ export function DataTable<T>({
                                     <div
                                         role="cell"
                                         className="flex items-center"
-                                        onClick={(event) => event.stopPropagation()}
+                                        onClick={(event) =>
+                                            event.stopPropagation()
+                                        }
                                     >
                                         <Checkbox
                                             aria-label="Selecionar linha"
@@ -241,7 +251,7 @@ export function TitleCell({
     onClick?: () => void;
 }) {
     const content = (
-        <span className="block truncate font-semibold text-foreground hover:text-primary">
+        <span className="text-foreground hover:text-primary block truncate font-semibold">
             {title}
         </span>
     );
@@ -249,7 +259,7 @@ export function TitleCell({
     return (
         <div className="flex min-w-0 items-center gap-3">
             {icon && (
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-primary">
+                <span className="bg-accent-subtle text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
                     {icon}
                 </span>
             )}
@@ -270,7 +280,7 @@ export function TitleCell({
                     content
                 )}
                 {meta && (
-                    <span className="block truncate text-[12px] text-muted-foreground tabular">
+                    <span className="text-muted-foreground tabular block truncate text-[12px]">
                         {meta}
                     </span>
                 )}
@@ -288,7 +298,12 @@ export function SecondaryCell({
     className?: string;
 }) {
     return (
-        <span className={cn('truncate text-[13px] text-text-secondary', className)}>
+        <span
+            className={cn(
+                'text-text-secondary truncate text-[13px]',
+                className,
+            )}
+        >
             {children}
         </span>
     );
@@ -309,14 +324,14 @@ export function BulkActionBar({
     }
 
     return (
-        <div className="flex flex-wrap items-center gap-2 border-b border-primary-soft-border bg-primary-soft px-4 py-2 text-[13px]">
-            <span className="font-semibold text-primary">
+        <div className="border-primary-soft-border bg-primary-soft flex flex-wrap items-center gap-2 border-b px-4 py-2 text-[13px]">
+            <span className="text-primary font-semibold">
                 {count} {count === 1 ? 'selecionado' : 'selecionados'}
             </span>
             <button
                 type="button"
                 onClick={onClear}
-                className="text-[12.5px] font-semibold text-primary hover:underline"
+                className="text-primary text-[12.5px] font-semibold hover:underline"
             >
                 Limpar seleção
             </button>

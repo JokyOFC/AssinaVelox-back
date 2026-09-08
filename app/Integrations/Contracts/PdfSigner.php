@@ -3,8 +3,10 @@
 namespace App\Integrations\Contracts;
 
 use App\Integrations\Dto\SignRequest;
+use App\Integrations\Exceptions\SignerNotConfiguredException;
 use App\Services\Pdf\Dto\SignResult;
 use App\Services\Pdf\Dto\ValidationResult;
+use App\Services\Pdf\Exceptions\PdfToolException;
 
 /**
  * Assinatura criptográfica da EMPRESA OPERADORA (certificado A1, PAdES B-B) e
@@ -19,8 +21,8 @@ use App\Services\Pdf\Dto\ValidationResult;
 interface PdfSigner
 {
     /**
-     * @throws \App\Integrations\Exceptions\SignerNotConfiguredException
-     * @throws \App\Services\Pdf\Exceptions\PdfToolException
+     * @throws SignerNotConfiguredException
+     * @throws PdfToolException
      */
     public function sign(SignRequest $request): SignResult;
 

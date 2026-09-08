@@ -6,8 +6,18 @@ import { Stepper } from '@/components/stepper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatTime } from '@/lib/format';
-import { edit as envelopeEdit, index as envelopesIndex, show as envelopeShow } from '@/routes/envelopes';
-import type { DocumentProcessingStatus, EnvelopeDocument, FieldType, FolderRef, SigningOrder } from '@/types';
+import {
+    edit as envelopeEdit,
+    index as envelopesIndex,
+    show as envelopeShow,
+} from '@/routes/envelopes';
+import type {
+    DocumentProcessingStatus,
+    EnvelopeDocument,
+    FieldType,
+    FolderRef,
+    SigningOrder,
+} from '@/types';
 
 export interface WizardRecipient {
     id: string | null;
@@ -55,9 +65,18 @@ export interface WizardProps {
     recipients: WizardRecipient[];
     fields: WizardField[];
     folders: FolderRef[];
-    defaults: { expires_in_days: number; signing_order: SigningOrder; initials_on_all_pages: boolean };
+    defaults: {
+        expires_in_days: number;
+        signing_order: SigningOrder;
+        initials_on_all_pages: boolean;
+    };
     role_suggestions: string[];
-    plan: { envelopes_used: number; envelopes_limit: number | null; can_send: boolean; reason: string | null };
+    plan: {
+        envelopes_used: number;
+        envelopes_limit: number | null;
+        can_send: boolean;
+        reason: string | null;
+    };
     limits: { max_upload_bytes: number; accepted_mimes: string[] };
     completeness: { document: boolean; recipients: boolean; fields: boolean };
 }
@@ -82,9 +101,21 @@ const PROCESSING_LABEL: Record<DocumentProcessingStatus, string> = {
  * stepper clicável, header com autosave e resumo do estado do rascunho.
  * Wave B implementa upload, signatários, editor de campos e revisão.
  */
-export default function EnvelopeWizard({ envelope, step, document, recipients, fields, completeness, plan }: WizardProps) {
+export default function EnvelopeWizard({
+    envelope,
+    step,
+    document,
+    recipients,
+    fields,
+    completeness,
+    plan,
+}: WizardProps) {
     const goTo = (index: number) => {
-        router.get(envelopeEdit(envelope.id, { query: { step: index + 1 } }).url, {}, { preserveScroll: true });
+        router.get(
+            envelopeEdit(envelope.id, { query: { step: index + 1 } }).url,
+            {},
+            { preserveScroll: true },
+        );
     };
 
     return (
@@ -113,7 +144,7 @@ export default function EnvelopeWizard({ envelope, step, document, recipients, f
                     onSelect={goTo}
                 />
 
-                <div className="rounded-xl border border-border bg-card shadow-card">
+                <div className="border-border bg-card shadow-card rounded-xl border">
                     <EmptyState
                         icon={Construction}
                         title={`Passo ${step} · ${WIZARD_STEPS[step - 1].title}`}
@@ -123,25 +154,33 @@ export default function EnvelopeWizard({ envelope, step, document, recipients, f
                                     Em construção · Wave B
                                 </Badge>
                                 <br />
-                                Upload do documento, cadastro de signatários, editor de campos sobre o PDF e revisão
-                                serão entregues na próxima onda. O rascunho já está persistido e pode ser retomado.
+                                Upload do documento, cadastro de signatários,
+                                editor de campos sobre o PDF e revisão serão
+                                entregues na próxima onda. O rascunho já está
+                                persistido e pode ser retomado.
                             </>
                         }
                         action={
                             <Button asChild variant="outline">
-                                <Link href={envelopeShow(envelope.id)}>Ver detalhe do documento</Link>
+                                <Link href={envelopeShow(envelope.id)}>
+                                    Ver detalhe do documento
+                                </Link>
                             </Button>
                         }
                     />
-                    <dl className="grid gap-x-6 gap-y-2 border-t border-muted px-6 py-4 text-[12.5px] sm:grid-cols-2">
+                    <dl className="border-muted grid gap-x-6 gap-y-2 border-t px-6 py-4 text-[12.5px] sm:grid-cols-2">
                         <div className="flex justify-between gap-3">
                             <dt className="text-muted-foreground">Documento</dt>
                             <dd className="font-medium">
-                                {document ? `${document.original_name} · ${PROCESSING_LABEL[document.processing.status]}` : 'nenhum arquivo'}
+                                {document
+                                    ? `${document.original_name} · ${PROCESSING_LABEL[document.processing.status]}`
+                                    : 'nenhum arquivo'}
                             </dd>
                         </div>
                         <div className="flex justify-between gap-3">
-                            <dt className="text-muted-foreground">Signatários</dt>
+                            <dt className="text-muted-foreground">
+                                Signatários
+                            </dt>
                             <dd className="font-medium">{recipients.length}</dd>
                         </div>
                         <div className="flex justify-between gap-3">
@@ -149,11 +188,18 @@ export default function EnvelopeWizard({ envelope, step, document, recipients, f
                             <dd className="font-medium">{fields.length}</dd>
                         </div>
                         <div className="flex justify-between gap-3">
-                            <dt className="text-muted-foreground">Consumo do plano</dt>
-                            <dd className="font-medium tabular">
+                            <dt className="text-muted-foreground">
+                                Consumo do plano
+                            </dt>
+                            <dd className="tabular font-medium">
                                 {plan.envelopes_used}
-                                {plan.envelopes_limit !== null && ` / ${plan.envelopes_limit}`}
-                                {!plan.can_send && plan.reason && <span className="ml-1 text-danger">· {plan.reason}</span>}
+                                {plan.envelopes_limit !== null &&
+                                    ` / ${plan.envelopes_limit}`}
+                                {!plan.can_send && plan.reason && (
+                                    <span className="text-danger ml-1">
+                                        · {plan.reason}
+                                    </span>
+                                )}
                             </dd>
                         </div>
                     </dl>
@@ -170,7 +216,7 @@ EnvelopeWizard.layout = (props: WizardProps) => ({
     ],
     hideSearch: true,
     topbarExtra: (
-        <span className="hidden text-[12.5px] text-muted-foreground sm:inline">
+        <span className="text-muted-foreground hidden text-[12.5px] sm:inline">
             Rascunho salvo às {formatTime(props.envelope.updated_at)}
         </span>
     ),

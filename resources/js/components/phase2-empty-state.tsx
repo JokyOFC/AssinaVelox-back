@@ -23,7 +23,7 @@ export function Phase2EmptyState({
     extra?: ReactNode;
 }) {
     return (
-        <div className="rounded-xl border border-border bg-card shadow-card">
+        <div className="border-border bg-card shadow-card rounded-xl border">
             <EmptyState
                 icon={Sparkles}
                 title={title}

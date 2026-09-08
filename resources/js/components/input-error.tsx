@@ -11,7 +11,7 @@ export default function InputError({
         <p
             {...props}
             role="alert"
-            className={cn('text-[12px] font-medium text-danger', className)}
+            className={cn('text-danger text-[12px] font-medium', className)}
         >
             {message}
         </p>

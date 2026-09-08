@@ -5,6 +5,7 @@ namespace App\Integrations\Contracts;
 use App\Integrations\Dto\CheckoutPreference;
 use App\Integrations\Dto\CheckoutPreferenceRequest;
 use App\Integrations\Dto\GatewayPayment;
+use App\Integrations\Exceptions\IntegrationException;
 
 /**
  * Gateway de pagamento (Mercado Pago Checkout Pro). Apenas o contrato na
@@ -17,12 +18,12 @@ use App\Integrations\Dto\GatewayPayment;
 interface PaymentGateway
 {
     /**
-     * @throws \App\Integrations\Exceptions\IntegrationException
+     * @throws IntegrationException
      */
     public function createCheckoutPreference(CheckoutPreferenceRequest $request): CheckoutPreference;
 
     /**
-     * @throws \App\Integrations\Exceptions\IntegrationException
+     * @throws IntegrationException
      */
     public function getPayment(string $providerPaymentId): GatewayPayment;
 

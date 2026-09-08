@@ -1,5 +1,12 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Check, Crown, MoreHorizontal, RefreshCw, UserPlus, XCircle } from 'lucide-react';
+import {
+    Check,
+    Crown,
+    MoreHorizontal,
+    RefreshCw,
+    UserPlus,
+    XCircle,
+} from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { AvatarInitials } from '@/components/avatar-initials';
@@ -27,7 +34,13 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDateMedium, formatRelativeDateTime, plural } from '@/lib/format';
@@ -39,9 +52,26 @@ import {
 } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 import { index as billingIndex } from '@/routes/billing';
-import { destroy as revokeInvitation, resend as resendInvitation, store as storeInvitation } from '@/routes/invitations';
-import { destroy as removeMember, index as membersIndex, status as memberStatus, transfer_ownership as transferOwnership, update as updateMember } from '@/routes/members';
-import type { Invitation, Membership, MembershipRole, PermissionMatrixRow, RoleDefinition, UserRef } from '@/types';
+import {
+    destroy as revokeInvitation,
+    resend as resendInvitation,
+    store as storeInvitation,
+} from '@/routes/invitations';
+import {
+    destroy as removeMember,
+    index as membersIndex,
+    status as memberStatus,
+    transfer_ownership as transferOwnership,
+    update as updateMember,
+} from '@/routes/members';
+import type {
+    Invitation,
+    Membership,
+    MembershipRole,
+    PermissionMatrixRow,
+    RoleDefinition,
+    UserRef,
+} from '@/types';
 
 export interface MembersIndexProps {
     tab: 'members' | 'roles';
@@ -52,7 +82,11 @@ export interface MembersIndexProps {
         available: number | null;
         plan_name: string;
     };
-    filters: { q: string; role: MembershipRole | null; status: 'active' | 'suspended' | 'invited' | null };
+    filters: {
+        q: string;
+        role: MembershipRole | null;
+        status: 'active' | 'suspended' | 'invited' | null;
+    };
     members: Membership[];
     invitations: Invitation[];
     roles: RoleDefinition[];
@@ -75,7 +109,15 @@ type PendingAction =
 const ROLE_ORDER: MembershipRole[] = ['owner', 'admin', 'member'];
 
 /** Usuários da conta (ROUTES §2.10; DESIGN §6.8). */
-export default function MembersIndex({ tab, seats, filters, members, invitations, roles, permission_matrix }: MembersIndexProps) {
+export default function MembersIndex({
+    tab,
+    seats,
+    filters,
+    members,
+    invitations,
+    roles,
+    permission_matrix,
+}: MembersIndexProps) {
     const [currentTab, setCurrentTab] = useState<'members' | 'roles'>(tab);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [pending, setPending] = useState<PendingAction>(null);
@@ -83,17 +125,29 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
 
     const applyFilters = (next: Partial<MembersIndexProps['filters']>) => {
         router.get(
-            membersIndex.url({ query: { ...filters, ...next, tab: 'members' } }),
+            membersIndex.url({
+                query: { ...filters, ...next, tab: 'members' },
+            }),
             {},
             { preserveState: true, preserveScroll: true, replace: true },
         );
     };
 
     const rows = useMemo<Row[]>(() => {
-        const list: Row[] = members.map((m) => ({ kind: 'member', id: `m-${m.id}`, member: m }));
+        const list: Row[] = members.map((m) => ({
+            kind: 'member',
+            id: `m-${m.id}`,
+            member: m,
+        }));
 
         if (!filters.status || filters.status === 'invited') {
-            invitations.forEach((i) => list.push({ kind: 'invitation', id: `i-${i.id}`, invitation: i }));
+            invitations.forEach((i) =>
+                list.push({
+                    kind: 'invitation',
+                    id: `i-${i.id}`,
+                    invitation: i,
+                }),
+            );
         }
 
         if (filters.status === 'invited') {
@@ -114,7 +168,11 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             return;
         }
 
-        router.patch(updateMember(member.id).url, { role }, { preserveScroll: true });
+        router.patch(
+            updateMember(Number(member.id)).url,
+            { role },
+            { preserveScroll: true },
+        );
     };
 
     const runPending = () => {
@@ -133,32 +191,56 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
 
         switch (pending.type) {
             case 'remove':
-                router.delete(removeMember(pending.member.id).url, options);
+                router.delete(
+                    removeMember(Number(pending.member.id)).url,
+                    options,
+                );
                 break;
             case 'suspend':
                 router.patch(
-                    memberStatus(pending.member.id).url,
-                    { status: pending.member.status === 'active' ? 'suspended' : 'active' },
+                    memberStatus(Number(pending.member.id)).url,
+                    {
+                        status:
+                            pending.member.status === 'active'
+                                ? 'suspended'
+                                : 'active',
+                    },
                     options,
                 );
                 break;
             case 'transfer':
-                router.post(transferOwnership(pending.member.id).url, {}, options);
+                router.post(
+                    transferOwnership(Number(pending.member.id)).url,
+                    {},
+                    options,
+                );
                 break;
             case 'demote':
-                router.patch(updateMember(pending.member.id).url, { role: pending.role }, options);
+                router.patch(
+                    updateMember(Number(pending.member.id)).url,
+                    { role: pending.role },
+                    options,
+                );
                 break;
             case 'revoke':
-                router.delete(revokeInvitation(pending.invitation.id).url, options);
+                router.delete(
+                    revokeInvitation(pending.invitation.id).url,
+                    options,
+                );
                 break;
         }
     };
 
     const resend = (invitation: Invitation) => {
-        router.post(resendInvitation(invitation.id).url, {}, {
-            preserveScroll: true,
-            onSuccess: () => toast.success(`Convite reenviado para ${invitation.email}`),
-        });
+        router.post(
+            resendInvitation(invitation.id).url,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () =>
+                    toast.success(`Convite reenviado para ${invitation.email}`),
+            },
+        );
     };
 
     const columns: DataTableColumn<Row>[] = [
@@ -169,15 +251,21 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             cell: (row, index) =>
                 row.kind === 'member' ? (
                     <div className="flex min-w-0 items-center gap-3">
-                        <AvatarInitials initials={row.member.user.initials} index={index} size="lg" />
+                        <AvatarInitials
+                            initials={row.member.user.initials}
+                            index={index}
+                            size="lg"
+                        />
                         <span className="min-w-0">
                             <span className="block truncate font-semibold">
                                 {row.member.user.name}
                                 {row.member.is_me && (
-                                    <span className="ml-1 font-medium text-muted-foreground">(você)</span>
+                                    <span className="text-muted-foreground ml-1 font-medium">
+                                        (você)
+                                    </span>
                                 )}
                             </span>
-                            <span className="block truncate text-[12.5px] text-muted-foreground">
+                            <span className="text-muted-foreground block truncate text-[12.5px]">
                                 {row.member.user.email}
                             </span>
                         </span>
@@ -186,8 +274,10 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                     <div className="flex min-w-0 items-center gap-3">
                         <AvatarInitials initials="@" tone="neutral" size="lg" />
                         <span className="min-w-0">
-                            <span className="block truncate font-semibold">{row.invitation.email}</span>
-                            <span className="block truncate text-[12.5px] text-muted-foreground">
+                            <span className="block truncate font-semibold">
+                                {row.invitation.email}
+                            </span>
+                            <span className="text-muted-foreground block truncate text-[12.5px]">
                                 Convidado por {row.invitation.invited_by.name}
                             </span>
                         </span>
@@ -200,23 +290,44 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             width: '1.2fr',
             cell: (row) => {
                 if (row.kind === 'invitation') {
-                    return <span className="text-[13px] text-text-secondary">{row.invitation.role_label}</span>;
+                    return (
+                        <span className="text-text-secondary text-[13px]">
+                            {row.invitation.role_label}
+                        </span>
+                    );
                 }
 
                 const { member } = row;
 
                 if (member.role === 'owner' || !member.can.change_role) {
                     return (
-                        <Badge variant={member.role === 'owner' ? 'planEnterprise' : 'draft'} className="gap-1">
-                            {member.role === 'owner' && <Crown className="size-3" />}
+                        <Badge
+                            variant={
+                                member.role === 'owner'
+                                    ? 'planEnterprise'
+                                    : 'draft'
+                            }
+                            className="gap-1"
+                        >
+                            {member.role === 'owner' && (
+                                <Crown className="size-3" />
+                            )}
                             {member.role_label}
                         </Badge>
                     );
                 }
 
                 return (
-                    <Select value={member.role} onValueChange={(v) => changeRole(member, v as MembershipRole)}>
-                        <SelectTrigger size="sm" className="h-7 rounded-md px-2.5 text-[12px] font-semibold">
+                    <Select
+                        value={member.role}
+                        onValueChange={(v) =>
+                            changeRole(member, v as MembershipRole)
+                        }
+                    >
+                        <SelectTrigger
+                            size="sm"
+                            className="h-7 rounded-md px-2.5 text-[12px] font-semibold"
+                        >
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -238,7 +349,10 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             width: '1.2fr',
             cell: (row) =>
                 row.kind === 'member' ? (
-                    <Badge variant={membershipStatusTones[row.member.status]} dot>
+                    <Badge
+                        variant={membershipStatusTones[row.member.status]}
+                        dot
+                    >
                         {row.member.status_label}
                     </Badge>
                 ) : (
@@ -253,12 +367,14 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             width: '.9fr',
             cell: (row) =>
                 row.kind === 'invitation' ? (
-                    <span className="text-[13px] text-muted-foreground">—</span>
+                    <span className="text-muted-foreground text-[13px]">—</span>
                 ) : (
                     <span
                         className={cn(
                             'text-[13px] font-semibold',
-                            row.member.two_factor_enabled ? 'text-success' : 'text-danger',
+                            row.member.two_factor_enabled
+                                ? 'text-success'
+                                : 'text-danger',
                         )}
                     >
                         {row.member.two_factor_enabled ? 'Ativa' : 'Inativa'}
@@ -270,7 +386,7 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             header: 'Último acesso',
             width: '1.1fr',
             cell: (row) => (
-                <span className="text-[13px] whitespace-nowrap text-text-secondary tabular">
+                <span className="text-text-secondary tabular text-[13px] whitespace-nowrap">
                     {row.kind === 'member'
                         ? formatRelativeDateTime(row.member.last_seen_at)
                         : `Convite enviado ${formatDateMedium(row.invitation.sent_at)}`}
@@ -285,21 +401,32 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             cell: (row) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-xs" aria-label="Ações">
-                            <MoreHorizontal className="size-4 text-muted-foreground" />
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Ações"
+                        >
+                            <MoreHorizontal className="text-muted-foreground size-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         {row.kind === 'invitation' ? (
                             <>
-                                <DropdownMenuItem onSelect={() => resend(row.invitation)}>
+                                <DropdownMenuItem
+                                    onSelect={() => resend(row.invitation)}
+                                >
                                     <RefreshCw className="size-3.5" />
                                     Reenviar convite
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                     variant="destructive"
-                                    onSelect={() => setPending({ type: 'revoke', invitation: row.invitation })}
+                                    onSelect={() =>
+                                        setPending({
+                                            type: 'revoke',
+                                            invitation: row.invitation,
+                                        })
+                                    }
                                 >
                                     <XCircle className="size-3.5" />
                                     Revogar convite
@@ -308,12 +435,28 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                         ) : (
                             <>
                                 {row.member.can.suspend && (
-                                    <DropdownMenuItem onSelect={() => setPending({ type: 'suspend', member: row.member })}>
-                                        {row.member.status === 'active' ? 'Suspender acesso' : 'Reativar acesso'}
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            setPending({
+                                                type: 'suspend',
+                                                member: row.member,
+                                            })
+                                        }
+                                    >
+                                        {row.member.status === 'active'
+                                            ? 'Suspender acesso'
+                                            : 'Reativar acesso'}
                                     </DropdownMenuItem>
                                 )}
                                 {row.member.can.transfer_ownership && (
-                                    <DropdownMenuItem onSelect={() => setPending({ type: 'transfer', member: row.member })}>
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            setPending({
+                                                type: 'transfer',
+                                                member: row.member,
+                                            })
+                                        }
+                                    >
                                         <Crown className="size-3.5" />
                                         Transferir propriedade
                                     </DropdownMenuItem>
@@ -323,15 +466,24 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
                                             variant="destructive"
-                                            onSelect={() => setPending({ type: 'remove', member: row.member })}
+                                            onSelect={() =>
+                                                setPending({
+                                                    type: 'remove',
+                                                    member: row.member,
+                                                })
+                                            }
                                         >
                                             Remover da organização
                                         </DropdownMenuItem>
                                     </>
                                 )}
-                                {!row.member.can.suspend && !row.member.can.transfer_ownership && !row.member.can.remove && (
-                                    <DropdownMenuItem disabled>Nenhuma ação disponível</DropdownMenuItem>
-                                )}
+                                {!row.member.can.suspend &&
+                                    !row.member.can.transfer_ownership &&
+                                    !row.member.can.remove && (
+                                        <DropdownMenuItem disabled>
+                                            Nenhuma ação disponível
+                                        </DropdownMenuItem>
+                                    )}
                             </>
                         )}
                     </DropdownMenuContent>
@@ -345,7 +497,11 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             ? `${seats.used} de ${seats.limit} assentos do plano ${seats.plan_name} em uso`
             : `${plural(seats.used, 'usuário')} · plano ${seats.plan_name}`,
         seats.pending_invitations > 0
-            ? plural(seats.pending_invitations, 'convite pendente', 'convites pendentes')
+            ? plural(
+                  seats.pending_invitations,
+                  'convite pendente',
+                  'convites pendentes',
+              )
             : null,
     ]
         .filter(Boolean)
@@ -358,7 +514,10 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                 title="Usuários da conta"
                 subtitle={subtitle}
                 actions={
-                    <Button onClick={() => setInviteOpen(true)} disabled={seats.available === 0}>
+                    <Button
+                        onClick={() => setInviteOpen(true)}
+                        disabled={seats.available === 0}
+                    >
                         <UserPlus className="size-[15px]" />
                         Convidar usuário
                     </Button>
@@ -375,7 +534,7 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
             />
 
             {currentTab === 'members' ? (
-                <div className="rounded-xl border border-border bg-card shadow-card">
+                <div className="border-border bg-card shadow-card rounded-xl border">
                     <FilterBar>
                         <SearchInput
                             value={filters.q}
@@ -385,14 +544,25 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                         <FilterChip
                             label="Função"
                             value={filters.role}
-                            onChange={(role) => applyFilters({ role: role as MembershipRole | null })}
-                            options={ROLE_ORDER.map((r) => ({ value: r, label: membershipRoleLabels[r] }))}
+                            onChange={(role) =>
+                                applyFilters({
+                                    role: role as MembershipRole | null,
+                                })
+                            }
+                            options={ROLE_ORDER.map((r) => ({
+                                value: r,
+                                label: membershipRoleLabels[r],
+                            }))}
                             allLabel="Todas"
                         />
                         <FilterChip
                             label="Status"
                             value={filters.status}
-                            onChange={(status) => applyFilters({ status: status as MembersIndexProps['filters']['status'] })}
+                            onChange={(status) =>
+                                applyFilters({
+                                    status: status as MembersIndexProps['filters']['status'],
+                                })
+                            }
                             options={[
                                 { value: 'active', label: 'Ativo' },
                                 { value: 'suspended', label: 'Inativo' },
@@ -400,33 +570,49 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                             ]}
                         />
                     </FilterBar>
-                    <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} minWidth={760} />
-                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[12.5px] text-muted-foreground">
+                    <DataTable
+                        columns={columns}
+                        rows={rows}
+                        rowKey={(r) => r.id}
+                        minWidth={760}
+                    />
+                    <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[12.5px]">
                         <span>
                             {plural(members.length, 'usuário')}
-                            {seats.available !== null && ` · ${plural(seats.available, 'assento disponível', 'assentos disponíveis')}`}
+                            {seats.available !== null &&
+                                ` · ${plural(seats.available, 'assento disponível', 'assentos disponíveis')}`}
                         </span>
-                        <Link href={billingIndex()} className="font-semibold text-primary hover:text-primary-hover">
+                        <Link
+                            href={billingIndex()}
+                            className="text-primary hover:text-primary-hover font-semibold"
+                        >
                             Adicionar assentos ao plano
                         </Link>
                     </div>
                 </div>
             ) : (
-                <div className="rounded-xl border border-border bg-card shadow-card">
+                <div className="border-border bg-card shadow-card rounded-xl border">
                     <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-[18px] pb-3">
                         <div>
-                            <div className="text-[15px] font-semibold">Funções e permissões</div>
-                            <div className="mt-1 text-[13px] text-muted-foreground">
-                                Funções padrão do sistema. Funções personalizadas chegam na Fase 2.
+                            <div className="text-[15px] font-semibold">
+                                Funções e permissões
+                            </div>
+                            <div className="text-muted-foreground mt-1 text-[13px]">
+                                Funções padrão do sistema. Funções
+                                personalizadas chegam na Fase 2.
                             </div>
                         </div>
-                        <Badge variant="phase">Funções personalizadas · Fase 2</Badge>
+                        <Badge variant="phase">
+                            Funções personalizadas · Fase 2
+                        </Badge>
                     </div>
                     <div className="overflow-x-auto">
                         <div style={{ minWidth: 640 }}>
                             <div
-                                className="grid h-10 items-center border-y border-muted bg-background px-5 text-[12px] font-semibold text-muted-foreground"
-                                style={{ gridTemplateColumns: `minmax(0,2.4fr) repeat(${ROLE_ORDER.length}, minmax(0,1fr))` }}
+                                className="border-muted bg-background text-muted-foreground grid h-10 items-center border-y px-5 text-[12px] font-semibold"
+                                style={{
+                                    gridTemplateColumns: `minmax(0,2.4fr) repeat(${ROLE_ORDER.length}, minmax(0,1fr))`,
+                                }}
                             >
                                 <span>Permissão</span>
                                 {ROLE_ORDER.map((role) => (
@@ -438,15 +624,24 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                             {permission_matrix.map((row) => (
                                 <div
                                     key={row.key}
-                                    className="grid items-center border-b border-muted px-5 py-[11px] last:border-b-0 hover:bg-row-hover"
-                                    style={{ gridTemplateColumns: `minmax(0,2.4fr) repeat(${ROLE_ORDER.length}, minmax(0,1fr))` }}
+                                    className="border-muted hover:bg-row-hover grid items-center border-b px-5 py-[11px] last:border-b-0"
+                                    style={{
+                                        gridTemplateColumns: `minmax(0,2.4fr) repeat(${ROLE_ORDER.length}, minmax(0,1fr))`,
+                                    }}
                                 >
                                     <span className="min-w-0 pr-3">
-                                        <span className="block text-[13.5px] font-medium">{row.label}</span>
-                                        <span className="block text-[12px] text-muted-foreground">{row.description}</span>
+                                        <span className="block text-[13.5px] font-medium">
+                                            {row.label}
+                                        </span>
+                                        <span className="text-muted-foreground block text-[12px]">
+                                            {row.description}
+                                        </span>
                                     </span>
                                     {ROLE_ORDER.map((role) => (
-                                        <span key={role} className="flex justify-center">
+                                        <span
+                                            key={role}
+                                            className="flex justify-center"
+                                        >
                                             <span
                                                 className={cn(
                                                     'flex size-[22px] items-center justify-center rounded-md text-[12px] font-bold',
@@ -455,7 +650,11 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                                                         : 'bg-muted text-muted-foreground',
                                                 )}
                                             >
-                                                {row.grants[role] ? <Check className="size-3.5 stroke-[2.5]" /> : '–'}
+                                                {row.grants[role] ? (
+                                                    <Check className="size-3.5 stroke-[2.5]" />
+                                                ) : (
+                                                    '–'
+                                                )}
                                             </span>
                                         </span>
                                     ))}
@@ -465,10 +664,16 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                     </div>
                     <div className="grid gap-3 px-5 py-4 sm:grid-cols-3">
                         {roles.map((role) => (
-                            <div key={role.key} className="rounded-[10px] border border-border p-3">
-                                <div className="text-[13px] font-semibold">{role.label}</div>
-                                <div className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
-                                    {role.description || membershipRoleDescriptions[role.key]}
+                            <div
+                                key={role.key}
+                                className="border-border rounded-[10px] border p-3"
+                            >
+                                <div className="text-[13px] font-semibold">
+                                    {role.label}
+                                </div>
+                                <div className="text-muted-foreground mt-0.5 text-[12px] leading-[1.5]">
+                                    {role.description ||
+                                        membershipRoleDescriptions[role.key]}
                                 </div>
                             </div>
                         ))}
@@ -476,13 +681,23 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                 </div>
             )}
 
-            <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} seats={seats} roles={roles} />
+            <InviteDialog
+                open={inviteOpen}
+                onOpenChange={setInviteOpen}
+                seats={seats}
+                roles={roles}
+            />
 
             <ConfirmDialog
                 open={pending !== null}
                 onOpenChange={(open) => !open && setPending(null)}
                 processing={busy}
-                destructive={pending?.type === 'remove' || pending?.type === 'revoke' || (pending?.type === 'suspend' && pending.member.status === 'active')}
+                destructive={
+                    pending?.type === 'remove' ||
+                    pending?.type === 'revoke' ||
+                    (pending?.type === 'suspend' &&
+                        pending.member.status === 'active')
+                }
                 title={
                     pending?.type === 'remove'
                         ? `Remover ${pending.member.user.name}?`
@@ -526,7 +741,11 @@ export default function MembersIndex({ tab, seats, filters, members, invitations
                               ? 'Revogar convite'
                               : 'Confirmar'
                 }
-                confirmText={pending?.type === 'transfer' ? pending.member.user.email : undefined}
+                confirmText={
+                    pending?.type === 'transfer'
+                        ? pending.member.user.email
+                        : undefined
+                }
                 onConfirm={runPending}
             />
         </>
@@ -544,7 +763,10 @@ function InviteDialog({
     seats: MembersIndexProps['seats'];
     roles: RoleDefinition[];
 }) {
-    const form = useForm<{ emails: string; role: 'admin' | 'member' }>({ emails: '', role: 'member' });
+    const form = useForm<{ emails: string; role: 'admin' | 'member' }>({
+        emails: '',
+        role: 'member',
+    });
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -557,7 +779,9 @@ function InviteDialog({
         form.post(storeInvitation.url(), {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success(`Convite enviado para ${plural(emails.length, 'e-mail', 'e-mails')}`);
+                toast.success(
+                    `Convite enviado para ${plural(emails.length, 'e-mail', 'e-mails')}`,
+                );
                 form.reset();
                 onOpenChange(false);
             },
@@ -578,7 +802,8 @@ function InviteDialog({
                     <DialogTitle>Convidar usuário</DialogTitle>
                     <DialogDescription>
                         O convite expira em 7 dias.
-                        {seats.available !== null && ` Você tem ${plural(seats.available, 'assento disponível', 'assentos disponíveis')}.`}
+                        {seats.available !== null &&
+                            ` Você tem ${plural(seats.available, 'assento disponível', 'assentos disponíveis')}.`}
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={submit} className="flex flex-col gap-4">
@@ -588,45 +813,67 @@ function InviteDialog({
                             id="invite-emails"
                             rows={2}
                             value={form.data.emails}
-                            onChange={(e) => form.setData('emails', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('emails', e.target.value)
+                            }
                             placeholder="nome@empresa.com.br, outro@empresa.com.br"
                             autoFocus
                             required
                             aria-invalid={!!emailErrors}
                         />
-                        <span className="text-[12px] text-muted-foreground">Separe vários e-mails por vírgula.</span>
+                        <span className="text-muted-foreground text-[12px]">
+                            Separe vários e-mails por vírgula.
+                        </span>
                         <InputError message={emailErrors || undefined} />
                         <InputError message={errors.seats} />
                         {errors.seats && (
-                            <Link href={billingIndex()} className="text-[12.5px] font-semibold text-primary hover:underline">
+                            <Link
+                                href={billingIndex()}
+                                className="text-primary text-[12.5px] font-semibold hover:underline"
+                            >
                                 Adicionar assentos ao plano
                             </Link>
                         )}
                     </div>
                     <div className="grid gap-1.5">
-                        <span className="text-[13px] font-semibold">Função</span>
+                        <span className="text-[13px] font-semibold">
+                            Função
+                        </span>
                         <div className="grid gap-2 sm:grid-cols-2">
                             {roles
                                 .filter((r) => r.key !== 'owner')
                                 .map((role) => {
-                                    const selected = form.data.role === role.key;
+                                    const selected =
+                                        form.data.role === role.key;
 
                                     return (
                                         <button
                                             key={role.key}
                                             type="button"
-                                            onClick={() => form.setData('role', role.key as 'admin' | 'member')}
+                                            onClick={() =>
+                                                form.setData(
+                                                    'role',
+                                                    role.key as
+                                                        | 'admin'
+                                                        | 'member',
+                                                )
+                                            }
                                             aria-pressed={selected}
                                             className={cn(
                                                 'rounded-lg border p-2.5 text-left transition-colors',
                                                 selected
                                                     ? 'border-primary bg-primary-soft'
-                                                    : 'border-border bg-white hover:bg-accent-subtle',
+                                                    : 'border-border hover:bg-accent-subtle bg-white',
                                             )}
                                         >
-                                            <span className="block text-[13px] font-semibold">{role.label}</span>
-                                            <span className="block text-[12px] leading-[1.45] text-muted-foreground">
-                                                {role.description || membershipRoleDescriptions[role.key]}
+                                            <span className="block text-[13px] font-semibold">
+                                                {role.label}
+                                            </span>
+                                            <span className="text-muted-foreground block text-[12px] leading-[1.45]">
+                                                {role.description ||
+                                                    membershipRoleDescriptions[
+                                                        role.key
+                                                    ]}
                                             </span>
                                         </button>
                                     );
@@ -635,10 +882,20 @@ function InviteDialog({
                         <InputError message={errors.role} />
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={form.processing}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                            disabled={form.processing}
+                        >
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={form.processing || !form.data.emails.trim()}>
+                        <Button
+                            type="submit"
+                            disabled={
+                                form.processing || !form.data.emails.trim()
+                            }
+                        >
                             {form.processing && <Spinner />}
                             Enviar convite
                         </Button>

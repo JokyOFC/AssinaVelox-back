@@ -12,6 +12,7 @@ use App\Services\Pdf\Dto\VisibleStamp;
 use App\Services\Pdf\Exceptions\PdfToolInputRejectedException;
 use App\Services\Pdf\Exceptions\PdfToolUsageException;
 use App\Services\Pdf\PdfToolClient;
+use Psr\Log\AbstractLogger;
 use Tests\Feature\Pdf\Support\PdfFixtures;
 
 const PDFTEST_PASSPHRASE = 'senha-de-teste-Xk93!';
@@ -34,8 +35,9 @@ beforeEach(function () {
     $this->certificate = $this->client->generateTestCertificate($this->pfx, 'PDFTEST_CERT_PASS', 'CN=AssinaVelox TESTE,O=AssinaVelox,C=BR', 2, $this->pem);
 
     config()->set('pdftool.company_certificate', [
+        'enabled' => true,
         'pfx_path' => $this->pfx,
-        'passphrase_env' => 'PDFTEST_CERT_PASS',
+        'password_env' => 'PDFTEST_CERT_PASS',
         'environment' => 'test',
         'name' => 'Certificado de teste',
         'reason' => 'Teste automatizado',
@@ -181,7 +183,8 @@ it('não vaza a passphrase quando a variável está ausente', function () {
             ->and($argv)->toContain('--pass-env PDFTEST_VARIAVEL_INEXISTENTE')
             ->and($argv)->not->toContain('valor-super-secreto-xyz')
             ->and($argv)->not->toContain(PDFTEST_PASSPHRASE)
-            ->and(is_file($out))->toBeFalse();
+            ->and(is_file($out))->toBeFalse()
+            ->and(glob($this->work.'/pdftool-tmp/*') ?: [])->toBe([]);
     }
 });
 
@@ -202,7 +205,46 @@ it('não vaza a passphrase quando a senha está errada', function () {
             ->and($argv)->toContain('--pass-env PDFTEST_WRONG_PASS')
             ->and($argv)->not->toContain('senha-errada-abc')
             ->and((string) $exception->stderrExcerpt)->not->toContain('senha-errada-abc')
-            ->and(is_file($out))->toBeFalse();
+            ->and(is_file($out))->toBeFalse()
+            ->and(glob($this->work.'/pdftool-tmp/*') ?: [])->toBe([]);
+    }
+});
+
+it('nunca registra a senha em log — nem em sucesso, nem em senha errada', function () {
+    putenv('PDFTEST_WRONG_PASS=senha-errada-abc');
+
+    $logger = new class extends AbstractLogger
+    {
+        /** @var list<array{level: string, message: string, context: array<string, mixed>}> */
+        public array $records = [];
+
+        public function log($level, string|Stringable $message, array $context = []): void
+        {
+            $this->records[] = ['level' => (string) $level, 'message' => (string) $message, 'context' => $context];
+        }
+    };
+    $client = new PdfToolClient(app('config'), $logger);
+
+    $client->sign($this->source, $this->work.'/assinado-log.pdf', $this->pfx, 'PDFTEST_CERT_PASS');
+
+    try {
+        $client->sign($this->source, $this->work.'/nao-assinado-log.pdf', $this->pfx, 'PDFTEST_WRONG_PASS');
+        $this->fail('Esperava PdfToolInputRejectedException.');
+    } catch (PdfToolInputRejectedException) {
+        // esperado
+    }
+
+    $serialized = json_encode($logger->records, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    expect(count($logger->records))->toBeGreaterThanOrEqual(2)
+        ->and($serialized)->toContain('--pass-env')
+        ->and($serialized)->toContain('PDFTEST_CERT_PASS')
+        ->and($serialized)->not->toContain(PDFTEST_PASSPHRASE)
+        ->and($serialized)->not->toContain('senha-errada-abc');
+
+    // O ambiente do processo filho não é registrado: nenhum registro traz chave "env".
+    foreach ($logger->records as $record) {
+        expect($record['context'])->not->toHaveKey('env');
     }
 });
 
@@ -221,7 +263,22 @@ it('sem certificado o container resolve NullPdfSigner, que nunca assina', functi
     expect($signer->validate($this->source)->signatureCount)->toBe(0);
 });
 
-it('PyHankoSigner sem PFX ou sem variável de passphrase não está configurado e lança', function () {
+it('com COMPANY_CERT_ENABLED=false o container resolve NullPdfSigner mesmo com PFX e senha válidos', function () {
+    config()->set('pdftool.company_certificate.enabled', false);
+
+    $pyhanko = app(PyHankoSigner::class);
+    expect($pyhanko->isEnabled())->toBeFalse()
+        ->and($pyhanko->isConfigured())->toBeFalse()
+        ->and(implode(' ', $pyhanko->configurationProblems()))->toContain('COMPANY_CERT_ENABLED')
+        ->and(app(PdfSigner::class))->toBeInstanceOf(NullPdfSigner::class);
+
+    config()->set('pdftool.company_certificate.enabled', 'true');
+    expect($pyhanko->isEnabled())->toBeTrue()
+        ->and($pyhanko->isConfigured())->toBeTrue()
+        ->and(app(PdfSigner::class))->toBeInstanceOf(PyHankoSigner::class);
+});
+
+it('PyHankoSigner sem PFX ou sem variável de senha não está configurado e lança', function () {
     $signer = app(PyHankoSigner::class);
     $out = $this->work.'/jamais-assinado.pdf';
 
@@ -231,7 +288,7 @@ it('PyHankoSigner sem PFX ou sem variável de passphrase não está configurado 
         ->and(fn () => $signer->sign(new SignRequest($this->source, $out)))->toThrow(SignerNotConfiguredException::class);
 
     config()->set('pdftool.company_certificate.pfx_path', $this->pfx);
-    config()->set('pdftool.company_certificate.passphrase_env', 'PDFTEST_VARIAVEL_INEXISTENTE');
+    config()->set('pdftool.company_certificate.password_env', 'PDFTEST_VARIAVEL_INEXISTENTE');
     expect($signer->isConfigured())->toBeFalse()
         ->and(implode(' ', $signer->configurationProblems()))->toContain('PDFTEST_VARIAVEL_INEXISTENTE')
         ->and(fn () => $signer->sign(new SignRequest($this->source, $out)))->toThrow(SignerNotConfiguredException::class)

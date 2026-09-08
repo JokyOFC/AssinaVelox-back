@@ -39,7 +39,7 @@ class NullPdfSigner implements PdfSigner
         ]);
 
         throw SignerNotConfiguredException::make(
-            'Defina COMPANY_CERT_PFX_PATH e a variável de passphrase (COMPANY_CERT_PASSPHRASE_ENV) para habilitar a assinatura A1.',
+            'Defina COMPANY_CERT_ENABLED=true, COMPANY_CERT_PFX_PATH e a variável de senha nomeada em COMPANY_CERT_PASSWORD_ENV para habilitar a assinatura A1.',
         );
     }
 

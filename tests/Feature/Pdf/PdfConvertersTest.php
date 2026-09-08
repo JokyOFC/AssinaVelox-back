@@ -13,6 +13,7 @@ use App\Integrations\Pdf\LibreOfficeConverter;
 use App\Integrations\Pdf\PassthroughPdfConverter;
 use App\Integrations\Pdf\PdfConverterManager;
 use App\Services\Pdf\PdfToolClient;
+use App\Services\Pdf\Support\ImageNormalizer;
 use Illuminate\Support\Facades\Log;
 use Tests\Feature\Pdf\Support\PdfFixtures;
 
@@ -111,23 +112,72 @@ describe('PassthroughPdfConverter', function () {
 });
 
 describe('ImageToPdfConverter', function () {
-    it('normaliza (≤ 4000 px, sem metadados) e converte PNG em PDF de uma página', function () {
-        $png = PdfFixtures::largePng($this->work.'/grande.png', 4200, 1000);
+    it('normaliza (≤ 4000 px, sem metadados) e converte PNG em PDF de uma página sem estourar memória', function () {
+        $png = PdfFixtures::largePng($this->work.'/grande.png', 4100, 600);
         $out = $this->work.'/imagem.pdf';
+        $converter = app(ImageToPdfConverter::class);
 
-        $result = app(ImageToPdfConverter::class)->convert(new ConversionRequest($png, $out, DocumentSourceType::Image, 'image/png', 'grande.png'));
+        gc_collect_cycles();
+        memory_reset_peak_usage();
+        $before = memory_get_usage(true);
+
+        $result = $converter->convert(new ConversionRequest($png, $out, DocumentSourceType::Image, 'image/png', 'grande.png'));
+
+        // 4100×600 (2,5 MP): decodificação + cópia reduzida + codificação ficam
+        // bem abaixo de 64 MB (medido ~20 MB); a suíte roda com memory_limit=512M.
+        $peakDelta = memory_get_peak_usage(true) - $before;
 
         expect($result->isReady())->toBeTrue()
             ->and($result->converter)->toBe(ImageToPdfConverter::NAME)
             ->and($result->pageCount())->toBe(1)
             ->and($result->inspection?->page(1)?->isLandscape())->toBeTrue()
             ->and($result->details['normalized']['width_px'])->toBe(4000)
-            ->and($result->details['normalized']['height_px'])->toBe(952)
+            ->and($result->details['normalized']['height_px'])->toBe(585)
             ->and($result->details['source']['mime'])->toBe('image/png')
-            ->and($result->details['source']['width_px'])->toBe(4200)
+            ->and($result->details['source']['width_px'])->toBe(4100)
             ->and($result->details['page_size'])->toBe('a4')
+            ->and($peakDelta)->toBeLessThan(64 * 1024 * 1024)
             ->and(is_file($out))->toBeTrue()
             ->and(glob($this->tmpRoot.'/*') ?: [])->toBe([]);
+    });
+
+    it('reencoda sem canvas intermediário quando não há redução (JPEG) e remove metadados', function () {
+        $jpeg = PdfFixtures::jpeg($this->work.'/foto.jpg', 1200, 900);
+        $normalizer = app(ImageNormalizer::class);
+
+        gc_collect_cycles();
+        memory_reset_peak_usage();
+        $before = memory_get_usage(true);
+
+        $normalized = $normalizer->normalize($jpeg, $this->work);
+
+        $peakDelta = memory_get_peak_usage(true) - $before;
+
+        expect($normalized['format'])->toBe('jpeg')
+            ->and($normalized['width'])->toBe(1200)
+            ->and($normalized['height'])->toBe(900)
+            ->and($peakDelta)->toBeLessThan(24 * 1024 * 1024)
+            ->and(is_file($normalized['path']))->toBeTrue()
+            ->and($normalizer->detectMime($normalized['path']))->toBe('image/jpeg')
+            ->and(file_get_contents($normalized['path']))->not->toContain('Exif');
+    });
+
+    it('recusa imagem que não caberia em memory_limit sem decodificá-la', function () {
+        // 6000×6000 (36 MP, abaixo do limite de 40 MP) precisa de ~290 MB de GD:
+        // com memory_limit=256M a normalização recusa antes de alocar.
+        $png = PdfFixtures::pngHeaderOnly($this->work.'/quase-limite.png', 6000, 6000);
+        $previous = ini_get('memory_limit');
+        ini_set('memory_limit', '256M');
+
+        try {
+            $result = app(ImageToPdfConverter::class)->convert(new ConversionRequest($png, $this->work.'/out.pdf', DocumentSourceType::Image));
+        } finally {
+            ini_set('memory_limit', (string) $previous);
+        }
+
+        expect($result->isFailed())->toBeTrue()
+            ->and($result->reasonCode)->toBe('image_too_large')
+            ->and($result->reasonMessage)->toContain('memória');
     });
 
     it('converte JPEG', function () {
@@ -251,21 +301,60 @@ describe('LibreOfficeConverter', function () {
         $recorded = str_replace('\\', '/', (string) file_get_contents($log));
         $tmpRoot = str_replace('\\', '/', $this->tmpRoot);
 
-        foreach (LibreOfficeConverter::ARGUMENTS as $flag) {
-            expect($recorded)->toContain($flag);
-        }
-        expect($recorded)->toContain('--convert-to pdf')
-            ->and($recorded)->toContain('--outdir '.$tmpRoot.'/lo-')
-            ->and($recorded)->toContain('-env:UserInstallation=file:///')
-            ->and($recorded)->toContain('/profile ')
-            ->and($recorded)->toContain('/in/input.docx')
+        // No Windows o cmd.exe registra argumentos com "=" entre aspas; o
+        // conteúdo é o mesmo, então as aspas são removidas antes de comparar.
+        expect(preg_match('/^ARGS=(.*)$/m', $recorded, $matches))->toBe(1);
+        $args = trim(str_replace('"', '', $matches[1]));
+
+        expect(preg_match('#--outdir (\S+)/out(?:\s|$)#', $args, $outdir))->toBe(1);
+        $workDir = $outdir[1];
+        $profileUri = LibreOfficeConverter::fileUri($workDir.'/profile');
+
+        expect($args)->toStartWith(implode(' ', LibreOfficeConverter::ARGUMENTS).' --convert-to pdf --outdir '.$workDir.'/out ')
+            ->and($workDir)->toStartWith($tmpRoot.'/lo-')
+            ->and($args)->toContain(' -env:UserInstallation='.$profileUri.' ')
+            ->and($profileUri)->toStartWith('file:///')
+            ->and($args)->toEndWith(' '.$workDir.'/in/input.docx')
             ->and($recorded)->toContain('PROFILE_XCU=1')
+            ->and(preg_match('/^CWD=(.*)$/m', $recorded, $cwd))->toBe(1)
+            ->and(rtrim($cwd[1]))->toBe($workDir);
+
+        // Ambiente mínimo: TEMP/TMP/TMPDIR redirecionados ao diretório exclusivo,
+        // extras da config presentes, nada do .env do PHP herdado.
+        expect(preg_match('/^TEMP=(.*)$/m', $recorded, $temp))->toBe(1)
+            ->and(rtrim($temp[1]))->toBe($workDir)
+            ->and(preg_match('/^TMPDIR=(.*)$/m', $recorded, $tmpdir))->toBe(1)
+            ->and(rtrim($tmpdir[1]))->toBe($workDir)
             ->and($recorded)->toContain('FAKE_SOFFICE_LOG=')
+            ->and($recorded)->toContain('PATH=')
             ->and($recorded)->not->toContain('APP_KEY=')
-            ->and($recorded)->not->toContain('DB_PASSWORD=');
+            ->and($recorded)->not->toContain('DB_PASSWORD=')
+            ->and($recorded)->not->toContain('APP_NAME=');
 
         // Diretório temporário exclusivo removido ao final.
         expect(glob($this->tmpRoot.'/*') ?: [])->toBe([]);
+    });
+
+    it('encerra o processo e reporta failed (timeout) quando o LibreOffice excede o tempo limite', function () {
+        config()->set('pdftool.libreoffice.binary', PdfFixtures::fakeSoffice());
+        config()->set('pdftool.libreoffice.timeout_seconds', 1);
+        config()->set('pdftool.libreoffice.env', [
+            'FAKE_SOFFICE_PDF' => PdfFixtures::fakeConvertedPdf(),
+            'FAKE_SOFFICE_SLEEP' => '6',
+        ]);
+        file_put_contents($this->work.'/lento.docx', 'x');
+        $out = $this->work.'/lento.pdf';
+
+        $started = microtime(true);
+        $result = app(LibreOfficeConverter::class)->convert(new ConversionRequest($this->work.'/lento.docx', $out, DocumentSourceType::Docx));
+        $elapsed = microtime(true) - $started;
+
+        expect($result->isFailed())->toBeTrue()
+            ->and($result->reasonCode)->toBe('timeout')
+            ->and($result->details['timeout_seconds'])->toBe(1)
+            ->and($elapsed)->toBeLessThan(5.0)
+            ->and(is_file($out))->toBeFalse()
+            ->and(glob($this->tmpRoot.'/*') ?: [])->toBe([]);
     });
 
     it('reporta failed quando o binário falha ou não gera saída', function () {
@@ -283,7 +372,8 @@ describe('LibreOfficeConverter', function () {
         $noOutput = $converter->convert(new ConversionRequest($this->work.'/doc.docx', $this->work.'/doc.pdf', DocumentSourceType::Docx));
         expect($noOutput->isFailed())->toBeTrue()
             ->and($noOutput->reasonCode)->toBe('no_output')
-            ->and(is_file($this->work.'/doc.pdf'))->toBeFalse();
+            ->and(is_file($this->work.'/doc.pdf'))->toBeFalse()
+            ->and(glob($this->tmpRoot.'/*') ?: [])->toBe([]);
     });
 
     it('gera URI file:/// e registro do perfil válidos', function () {

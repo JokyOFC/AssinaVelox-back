@@ -23,17 +23,17 @@ Job/Serviço Laravel
                 ──► NullPdfSigner (sem certificado)             ──► lança SignerNotConfiguredException
 ```
 
-| Componente | Local | Papel |
-|---|---|---|
-| `PdfToolClient` | `app/Services/Pdf/PdfToolClient.php` | Único ponto que executa o pdftool. Timeout, ambiente mínimo, parse do JSON, exceções tipadas, logs, correlation id, diretório temporário exclusivo. |
-| DTOs do pdftool | `app/Services/Pdf/Dto/*` | `PdfInspection`/`PdfPage`, `ComposePlan` (builder) / `ComposeField` / `ComposeResult`, `SignOptions` / `VisibleStamp` / `SignResult`, `ValidationResult` / `SignatureValidation`. Todos `readonly`, exceto o builder. |
-| Exceções | `app/Services/Pdf/Exceptions/*` | `PdfToolUsageException` (exit 2), `PdfToolProcessingException` (exit 3, timeout, saída inválida), `PdfToolInputRejectedException` (exit 4). Carregam `errorCode` (snake_case do JSON), `exitCode`, `command` (argv saneado), `correlationId`, `stderrExcerpt`. `ImageRejectedException` vem da normalização GD. |
-| Suporte | `app/Services/Pdf/Support/*` | `TemporaryDirectory`, `ProcessEnvironment`, `ImageNormalizer`, `JpegOrientation`. |
-| Contratos | `app/Integrations/Contracts/*` | `PdfConverter`, `PdfSigner`, `EmailProvider`, `PaymentGateway` (Fase 1) e os reservados (`SmsProvider`, `WhatsAppProvider`, `CpfVerificationProvider`, `CnpjLookupProvider`, `IdentityVerificationProvider`, `TimestampProvider`, `FiscalInvoiceProvider` — Fase 2/3, sem implementação). |
-| Adaptadores | `app/Integrations/Pdf/*` | Conversores, manager, signers. |
-| Provider | `app/Integrations/IntegrationsServiceProvider.php` | Bindings (precisa estar em `bootstrap/providers.php`). |
-| Config | `config/pdftool.php` | Todas as chaves lidas de `.env` (seção 9). |
-| Comando | `php artisan pdftool:selftest` | Diagnóstico operacional (seção 8). |
+| Componente      | Local                                              | Papel                                                                                                                                                                                                                                                                                                           |
+| --------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PdfToolClient` | `app/Services/Pdf/PdfToolClient.php`               | Único ponto que executa o pdftool. Timeout, ambiente mínimo, parse do JSON, exceções tipadas, logs, correlation id, diretório temporário exclusivo.                                                                                                                                                             |
+| DTOs do pdftool | `app/Services/Pdf/Dto/*`                           | `PdfInspection`/`PdfPage`, `ComposePlan` (builder) / `ComposeField` / `ComposeResult`, `SignOptions` / `VisibleStamp` / `SignResult`, `ValidationResult` / `SignatureValidation`. Todos `readonly`, exceto o builder.                                                                                           |
+| Exceções        | `app/Services/Pdf/Exceptions/*`                    | `PdfToolUsageException` (exit 2), `PdfToolProcessingException` (exit 3, timeout, saída inválida), `PdfToolInputRejectedException` (exit 4). Carregam `errorCode` (snake_case do JSON), `exitCode`, `command` (argv saneado), `correlationId`, `stderrExcerpt`. `ImageRejectedException` vem da normalização GD. |
+| Suporte         | `app/Services/Pdf/Support/*`                       | `TemporaryDirectory`, `ProcessEnvironment`, `ImageNormalizer`, `JpegOrientation`.                                                                                                                                                                                                                               |
+| Contratos       | `app/Integrations/Contracts/*`                     | `PdfConverter`, `PdfSigner`, `EmailProvider`, `PaymentGateway` (Fase 1) e os reservados (`SmsProvider`, `WhatsAppProvider`, `CpfVerificationProvider`, `CnpjLookupProvider`, `IdentityVerificationProvider`, `TimestampProvider`, `FiscalInvoiceProvider` — Fase 2/3, sem implementação).                       |
+| Adaptadores     | `app/Integrations/Pdf/*`                           | Conversores, manager, signers.                                                                                                                                                                                                                                                                                  |
+| Provider        | `app/Integrations/IntegrationsServiceProvider.php` | Bindings (precisa estar em `bootstrap/providers.php`).                                                                                                                                                                                                                                                          |
+| Config          | `config/pdftool.php`                               | Todas as chaves lidas de `.env` (seção 9). Nomes alinhados ao `.env.example` (`PDFTOOL_PYTHON`, `LIBREOFFICE_BIN`, `COMPANY_CERT_*`).                                                                                                                                                                           |
+| Comando         | `php artisan pdftool:selftest`                     | Diagnóstico operacional (seção 8).                                                                                                                                                                                                                                                                              |
 
 ### Contrato de erro dos conversores
 
@@ -50,28 +50,32 @@ Job/Serviço Laravel
 
 **Ambiente mínimo, nunca herdado** (`App\Services\Pdf\Support\ProcessEnvironment`). O ambiente do PHP (CLI, FPM, worker) carrega `APP_KEY`, credenciais de banco/S3/SMTP, tokens de gateway e a própria passphrase do certificado. Um processo filho poderia gravá-los em tracebacks, perfis, arquivos temporários; uma biblioteca comprometida os leria trivialmente. Por isso **toda** variável visível ao PHP é marcada com `false` (o Symfony Process a remove do filho) e só passam:
 
-| Variável | Quando | Motivo |
-|---|---|---|
-| `SYSTEMROOT`, `PATH` | Windows | carregamento de DLLs do sistema/Winsock e localização de dependências |
-| `PATH`, `LANG=C.UTF-8` | Linux | localização de binários auxiliares; nomes de arquivo UTF-8 |
-| `TEMP`, `TMP`, `TMPDIR`, `HOME` (Linux) / `USERPROFILE` (Windows) | sempre | apontam para o **diretório temporário exclusivo da operação** — nada é gravado fora dele |
-| `PYTHONUTF8=1`, `PYTHONIOENCODING=utf-8`, `PYTHONNOUSERSITE=1` | pdftool | stdout/stderr UTF-8; ignora `~/.local/lib/pythonX/site-packages` |
-| **`<COMPANY_CERT_PASSPHRASE_ENV>`** | **somente** `sign` e `gen-test-cert` | a passphrase do PKCS#12, sob o nome configurado |
-| `pdftool.libreoffice.env` (ex.: `SAL_USE_VCLPLUGIN=svp`) | LibreOffice | extras explícitos de config; nunca segredos |
+| Variável                                                           | Quando                               | Motivo                                                                                                                                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SYSTEMROOT`, `COMSPEC`, `PATH`                                    | Windows                              | `SYSTEMROOT`: carregamento de DLLs do sistema/Winsock; `COMSPEC`: o Symfony Process executa o filho via `cmd.exe` no Windows; `PATH`: localização de dependências do interpretador/LibreOffice |
+| `PATH`, `LANG=C.UTF-8`                                             | Linux                                | localização de binários auxiliares; nomes de arquivo UTF-8                                                                                                                                     |
+| `TEMP`, `TMP`, `TMPDIR`, `HOME` (Linux) / `USERPROFILE` (Windows)  | sempre                               | apontam para o **diretório temporário exclusivo da operação** — nada é gravado fora dele                                                                                                       |
+| `PYTHONUTF8=1`, `PYTHONIOENCODING=utf-8`, `PYTHONNOUSERSITE=1`     | pdftool                              | stdout/stderr UTF-8; ignora `~/.local/lib/pythonX/site-packages`                                                                                                                               |
+| **`<COMPANY_CERT_PASSWORD_ENV>`** (padrão `COMPANY_CERT_PASSWORD`) | **somente** `sign` e `gen-test-cert` | a senha do PKCS#12, sob o nome configurado                                                                                                                                                     |
+| `pdftool.libreoffice.env` (ex.: `SAL_USE_VCLPLUGIN=svp`)           | LibreOffice                          | extras explícitos de config; nunca segredos                                                                                                                                                    |
 
-O `cmd.exe` do Windows acrescenta `COMSPEC`, `PATHEXT` e `PROMPT` por conta própria.
+O `cmd.exe` do Windows acrescenta `PATHEXT` e `PROMPT` por conta própria. A lista é verificada por teste (`ProcessEnvironment::minimal` — toda variável visível ao PHP fora da lista aparece com `false`; `TEMP`/`TMP`/`TMPDIR`/`HOME|USERPROFILE` iguais ao diretório exclusivo) e pelo binário falso do LibreOffice, que grava o ambiente que efetivamente recebeu (sem `APP_KEY`, `DB_PASSWORD`, `APP_NAME`).
 
-**Passphrase só por variável de ambiente nomeada.** A config guarda o **nome** da variável (`COMPANY_CERT_PASSPHRASE_ENV`, padrão `COMPANY_CERT_PASSPHRASE`). O `PdfToolClient` lê o valor do ambiente do PHP (`Env::getRepository()`, ou seja `.env`/`$_ENV`/`$_SERVER`/`putenv`) e o injeta no ambiente do filho **sob esse mesmo nome**, passando ao pdftool apenas `--pass-env <NOME>`. O valor nunca aparece em argv, log, exceção, fila ou banco; se aparecer em stderr por acidente de biblioteca, o cliente o redige (`[REDACTED]`) antes de registrar. Variável ausente/vazia → `PdfToolUsageException(missing_passphrase)` **antes** de iniciar o processo. Senha errada → `PdfToolInputRejectedException(pfx_load_failed)`. Ambos verificados por teste quanto a vazamento.
+**Senha do certificado só por variável de ambiente nomeada.** A config guarda o **nome** da variável (`COMPANY_CERT_PASSWORD_ENV`, padrão `COMPANY_CERT_PASSWORD`), nunca o valor. O `PdfToolClient` lê o valor do ambiente do PHP (`Env::getRepository()`, ou seja `.env`/`$_ENV`/`$_SERVER`/`putenv`) e o injeta no ambiente do filho **sob esse mesmo nome**, passando ao pdftool apenas `--pass-env <NOME>`. O valor nunca aparece em argv, log, exceção, fila ou banco; se aparecer em stderr por acidente de biblioteca, o cliente o redige (`[REDACTED]`) antes de registrar. Variável ausente/vazia → `PdfToolUsageException(missing_passphrase)` **antes** de iniciar o processo. Senha errada → `PdfToolInputRejectedException(pfx_load_failed)`. Verificado por testes explícitos: argv e mensagem das exceções (variável ausente e senha errada) e **todos os registros de log** de uma assinatura bem-sucedida e de uma com senha errada (logger capturado em memória) não contêm a senha; os registros trazem `--pass-env <NOME>` e nunca a chave `env`.
 
-> Com `php artisan config:cache`, o Laravel **não carrega o `.env`**. Em produção a variável deve estar no ambiente real do serviço: `EnvironmentFile=` da unit systemd do worker/Horizon, `env[COMPANY_CERT_PASSPHRASE]` no pool do PHP-FPM, ou gerenciador de segredos que exporte a variável. Nunca em `config/*.php`.
+A assinatura só é ligada com `COMPANY_CERT_ENABLED=true`. `PyHankoSigner::isConfigured()` exige, ao mesmo tempo: `enabled`, arquivo PFX existente em `COMPANY_CERT_PFX_PATH`, variável de senha definida e não vazia no ambiente do PHP, e pdftool disponível; faltando qualquer um, o container resolve `PdfSigner` para `NullPdfSigner` e `pdftool:selftest` lista os motivos.
 
-**Diretórios temporários exclusivos.** `storage/app/tmp/pdftool/<ulid>` (ou `PDFTOOL_TMP_PATH`), `mkdir 0700`, um por operação, removidos em `finally` (com nova tentativa no Windows por causa de handles recém-liberados); destrutor como rede de segurança. O LibreOffice ganha três subpastas: `in/` (entrada copiada com nome neutro `input.docx`), `out/`, `profile/` (perfil de usuário isolado). `storage/app/.gitignore` já ignora `tmp/`.
+> Com `php artisan config:cache`, o Laravel **não carrega o `.env`**. Em produção a variável deve estar no ambiente real do serviço: `EnvironmentFile=` da unit systemd do worker/Horizon, `env[COMPANY_CERT_PASSWORD]` no pool do PHP-FPM, ou gerenciador de segredos que exporte a variável. Nunca em `config/*.php`.
 
-**Timeouts.** `PDFTOOL_TIMEOUT_SECONDS` (60) por comando, `PDFTOOL_SIGN_TIMEOUT_SECONDS` (120) para `sign`/`gen-test-cert`/`selftest`, `LIBREOFFICE_TIMEOUT_SECONDS` (120). Ao estourar, o filho é encerrado (`taskkill` no Windows, SIGKILL no Linux); pdftool → `PdfToolProcessingException(timeout)`; LibreOffice → `ConversionResult failed (timeout)`.
+**Diretórios temporários exclusivos.** `storage/app/tmp/pdftool/<ulid>` (ou `PDFTOOL_TMP_PATH`), `mkdir 0700`, um por operação, removidos em `finally` — também quando a operação termina em exceção (verificado por teste para PDF corrompido, senha ausente, senha errada, LibreOffice sem saída e timeout do LibreOffice) — com nova tentativa no Windows por causa de handles recém-liberados; destrutor como rede de segurança. O LibreOffice ganha três subpastas: `in/` (entrada copiada com nome neutro `input.docx`), `out/`, `profile/` (perfil de usuário isolado). `storage/app/.gitignore` já ignora `tmp/`.
+
+**Timeouts.** `PDFTOOL_TIMEOUT_SECONDS` (60) por comando, `PDFTOOL_SIGN_TIMEOUT_SECONDS` (120) para `sign`/`gen-test-cert`/`selftest`, `LIBREOFFICE_TIMEOUT_SECONDS` (120). Ao estourar, o filho é encerrado (`taskkill /F /T` no Windows, SIGKILL no Linux); pdftool → `PdfToolProcessingException(timeout)`; LibreOffice → `ConversionResult failed (timeout)` com `details.timeout_seconds`. O caminho do LibreOffice é exercitado por teste com o binário falso atrasado (`FAKE_SOFFICE_SLEEP`) e timeout de 1 s: o processo é encerrado, nenhum PDF é gravado e o diretório temporário é removido.
 
 **O que NUNCA vai para logs:** o valor da passphrase; o ambiente do processo filho; conteúdo dos documentos; o plano de composição com valores de campos (só `fields_drawn`/`skipped`). O que vai: comando, argv (caminhos locais e opções), exit code, duração, correlation id, stderr **truncado** (`pdftool.stderr_log_limit`, 4000 caracteres) e sem caracteres de controle. Nível `debug` em sucesso, `warning` em erro, `error` em timeout.
 
-**Imagens.** `ImageNormalizer` (GD) roda antes do pdftool: MIME real por `finfo` (SVG e qualquer coisa fora de PNG/JPEG/WEBP é recusada — SVG pode conter script e referências externas), dimensões lidas do cabeçalho antes de decodificar (limite 40 MP), verificação de `memory_limit`, orientação EXIF (leitor próprio, não depende da extensão `exif`), redução a 4000 px e reencode do zero (remove EXIF/ICC/XMP/chunks de texto). O pdftool repete a normalização com Pillow. Workers que processam imagens devem ter `memory_limit` ≥ 512M; abaixo disso imagens grandes voltam como `failed (image_too_large)` em vez de derrubar o worker.
+**Imagens.** `ImageNormalizer` (GD) roda antes do pdftool: MIME real por `finfo` (SVG e qualquer coisa fora de PNG/JPEG/WEBP é recusada — SVG pode conter script e referências externas), dimensões lidas do cabeçalho antes de decodificar (limite 40 MP), verificação de `memory_limit`, orientação EXIF (leitor próprio, não depende da extensão `exif`), redução a 4000 px e reencode do zero (remove EXIF/ICC/XMP/chunks de texto). O pdftool repete a normalização com Pillow.
+
+Memória: a memória do GD conta para `memory_limit`. O normalizador mantém no máximo **duas** imagens vivas (a origem é liberada antes de codificar a cópia reduzida; sem redução, JPEG e PNG-com-alfa são reencodados diretamente, sem canvas) e usa `imagefilledrectangle` em vez de `imagefill` (o flood fill aloca uma pilha proporcional à área). Medidas locais (PHP 8.3, GD bundled): 4100×600 PNG → pico +20 MB; 4200×1000 → +34 MB; 800×600 JPEG → +2 MB; 6000×6000 (36 MP) → +244 MB; 6320×6320 (40 MP, o máximo) → +288 MB. Antes de decodificar, `assertFitsInMemory` estima ~8 bytes/pixel (decodificação) ou 4 bytes/pixel da origem + 8 do destino e recusa com `failed (image_too_large)` se não couber no `memory_limit` restante — em vez de derrubar o worker. Recomendação: workers que processam imagens com `memory_limit` **≥ 512M** (processa qualquer imagem dentro dos limites de 40 MP/4000 px); com 256M, imagens acima de ~25 MP são recusadas antes de alocar (coberto por teste). A suíte `--filter=Pdf` foi executada com `memory_limit=512M` sem falhas.
 
 **Confiança.** `validate` só afirma `trusted=true` com cadeia até uma raiz em `PDFTOOL_TRUST_ROOTS`; sem raízes, `trusted=false` e `trust_reason=no_trust_roots_configured`. Revogação (CRL/OCSP) **nunca** é verificada (`revocation=not_checked`) — o pdftool roda sem rede. Para validade jurídica plena (ICP-Brasil), complementar com verificador oficial (ITI).
 
@@ -111,14 +115,14 @@ soffice --headless --norestore --nologo --nodefault --nolockcheck \
         <tmp>/in/input.docx
 ```
 
-| Flag | Efeito |
-|---|---|
-| `--headless` | sem interface, sem diálogos |
-| `--norestore` | não tenta recuperar documentos de sessões anteriores travadas |
-| `--nologo` / `--nodefault` | sem splash, sem documento em branco |
-| `--nolockcheck` | não verifica lock de outra instância (cada conversão tem perfil próprio) |
-| `--convert-to pdf --outdir` | filtro padrão `writer_pdf_Export`; saída `input.pdf` |
-| `-env:UserInstallation=file:///…` | **perfil de usuário isolado** por conversão (veja abaixo) |
+| Flag                              | Efeito                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `--headless`                      | sem interface, sem diálogos                                              |
+| `--norestore`                     | não tenta recuperar documentos de sessões anteriores travadas            |
+| `--nologo` / `--nodefault`        | sem splash, sem documento em branco                                      |
+| `--nolockcheck`                   | não verifica lock de outra instância (cada conversão tem perfil próprio) |
+| `--convert-to pdf --outdir`       | filtro padrão `writer_pdf_Export`; saída `input.pdf`                     |
+| `-env:UserInstallation=file:///…` | **perfil de usuário isolado** por conversão (veja abaixo)                |
 
 ### Perfil isolado e bloqueio de macros/rede
 
@@ -135,7 +139,7 @@ Documentos com macros são convertidos **sem executá-las**; formulários Active
 
 ### Limitações conhecidas
 
-- **LibreOffice não está instalado no ambiente de desenvolvimento local**: o adaptador foi verificado com um binário falso (`tests/Fixtures/fake-soffice.{bat,sh}`) que registra os argumentos e o ambiente recebidos e copia um PDF. O comportamento com o `soffice` real (incluindo a aceitação do `registrymodifications.xcu` pré-semeado) **deve ser verificado no servidor** com `php artisan pdftool:selftest` e uma conversão de teste.
+- **LibreOffice não está instalado no ambiente de desenvolvimento local**: o adaptador foi verificado com um binário falso (`tests/Fixtures/fake-soffice.{bat,sh}`) que registra os argumentos e o ambiente recebidos e copia um PDF. O teste confirma os flags, `--outdir <tmp>/out`, `-env:UserInstallation=file:///<tmp>/profile` (comparado com `LibreOfficeConverter::fileUri()`, tolerando as aspas que o `cmd.exe` acrescenta no Windows), a existência do `registrymodifications.xcu` no perfil, a entrada `<tmp>/in/input.docx`, o ambiente mínimo e o timeout. O comportamento com o `soffice` real (incluindo a aceitação do `registrymodifications.xcu` pré-semeado e o filtro de exportação) **não foi verificado** e deve ser confirmado no servidor com `php artisan pdftool:selftest` e uma conversão de teste.
 - A primeira execução com perfil novo é mais lenta (2–6 s); não há reuso de instância nem de perfil por decisão de isolamento.
 - Fontes ausentes no servidor são substituídas silenciosamente; paginação pode divergir do Word.
 - Apenas `docx` (e `doc`/`odt`/`rtf` pelo mesmo caminho) — planilhas/apresentações não estão no escopo.
@@ -146,13 +150,13 @@ Documentos com macros são convertidos **sem executá-las**; formulários Active
 
 O que **não** é afirmado, nem pela ferramenta nem pela UI:
 
-| Não afirmado | Motivo |
-|---|---|
-| Carimbo do tempo (B-T) | sem TSA; `SignResult::timestamp` é sempre `null`. A data mostrada é a do servidor no momento da assinatura, não uma prova de tempo de terceiro. `TimestampProvider` está reservado para a Fase 2/3. |
-| LTV / LTA / DSS | nenhuma informação de validação é embutida; a verificação futura depende de o certificado ainda ser verificável. |
-| Revogação | CRL/OCSP não consultados (sem rede). `revocation=not_checked` sempre. |
-| Assinatura pessoal do signatário | a assinatura é da **empresa operadora** (certificado A1 dela). O aceite de cada participante é o `SignatureAcceptance` com evidências; a UI usa exatamente esse vocabulário (arquitetura §2). |
-| Validade ICP-Brasil de certificados de teste | ver abaixo. |
+| Não afirmado                                 | Motivo                                                                                                                                                                                              |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Carimbo do tempo (B-T)                       | sem TSA; `SignResult::timestamp` é sempre `null`. A data mostrada é a do servidor no momento da assinatura, não uma prova de tempo de terceiro. `TimestampProvider` está reservado para a Fase 2/3. |
+| LTV / LTA / DSS                              | nenhuma informação de validação é embutida; a verificação futura depende de o certificado ainda ser verificável.                                                                                    |
+| Revogação                                    | CRL/OCSP não consultados (sem rede). `revocation=not_checked` sempre.                                                                                                                               |
+| Assinatura pessoal do signatário             | a assinatura é da **empresa operadora** (certificado A1 dela). O aceite de cada participante é o `SignatureAcceptance` com evidências; a UI usa exatamente esse vocabulário (arquitetura §2).       |
+| Validade ICP-Brasil de certificados de teste | ver abaixo.                                                                                                                                                                                         |
 
 O **hash final** do envelope é calculado **depois** da assinatura e gravado em `verification_records` — nunca dentro do próprio PDF (o hash de um arquivo não pode estar contido nele).
 
@@ -166,16 +170,20 @@ O **hash final** do envelope é calculado **depois** da assinatura e gravado em 
 Gerar um certificado de teste local:
 
 ```bash
-export COMPANY_CERT_PASSPHRASE='senha-forte-local'      # Windows PowerShell: $env:COMPANY_CERT_PASSPHRASE='...'
+export COMPANY_CERT_PASSWORD='senha-forte-local'        # Windows PowerShell: $env:COMPANY_CERT_PASSWORD='...'
 cd tools/pdftool && .venv/bin/python -m pdftool gen-test-cert \
-    --out-pfx ../../storage/app/private/certs/teste.pfx --pass-env COMPANY_CERT_PASSPHRASE \
+    --out-pfx ../../storage/app/private/certs/teste.pfx --pass-env COMPANY_CERT_PASSWORD \
     --out-pem ../../storage/app/private/certs/teste.pem --days 365
-# .env: COMPANY_CERT_PFX_PATH=/abs/storage/app/private/certs/teste.pfx
+# .env: COMPANY_CERT_ENABLED=true
+#       COMPANY_CERT_PFX_PATH=/abs/storage/app/private/certs/teste.pfx
+#       COMPANY_CERT_PASSWORD_ENV=COMPANY_CERT_PASSWORD   # nome da variável; o valor fica só no ambiente
 #       COMPANY_CERT_ENVIRONMENT=test
 #       PDFTOOL_TRUST_ROOTS=/abs/storage/app/private/certs/teste.pem
 ```
 
-Sem certificado (`COMPANY_CERT_PFX_PATH` vazio ou variável de passphrase indefinida), o container resolve `PdfSigner` para `NullPdfSigner`: `isConfigured()=false`, `sign()` lança `SignerNotConfiguredException` e **nenhum** arquivo "assinado" é produzido; o envelope conclui como *aceite eletrônico com evidências* (`signature_status=none`). `validate()` continua disponível.
+Sem certificado (`COMPANY_CERT_ENABLED` diferente de `true`, `COMPANY_CERT_PFX_PATH` vazio/inexistente ou variável de senha indefinida), o container resolve `PdfSigner` para `NullPdfSigner`: `isConfigured()=false`, `sign()` lança `SignerNotConfiguredException` e **nenhum** arquivo "assinado" é produzido; o envelope conclui como _aceite eletrônico com evidências_ (`signature_status=none`). `validate()` continua disponível.
+
+**Teste × produção, em resumo:** em desenvolvimento/CI use `COMPANY_CERT_ENABLED=true` + certificado de `gen-test-cert` + `COMPANY_CERT_ENVIRONMENT=test` (a UI rotula como teste); em produção, `COMPANY_CERT_ENVIRONMENT=production` **somente** com A1 emitido por AC ICP-Brasil, senha no ambiente real do serviço (não no `.env` quando há `config:cache`), `PDFTOOL_TRUST_ROOTS` com a cadeia da AC, e `pdftool:selftest` após cada deploy.
 
 ## 6. Fluxo de finalização (referência para o orquestrador)
 
@@ -201,7 +209,7 @@ Nunca manter transação de banco aberta durante essas chamadas (arquitetura §3
 
 ## 7. Testes
 
-`php artisan test --filter=Pdf` roda `tests/Feature/Pdf/*` contra o **pdftool real** (venv em `tools/pdftool/.venv`; se ausente, os testes são pulados com a instrução de instalação). Fixtures geradas em tempo de teste: PDFs com DOMPDF (1 e 2 páginas, cifrados com senha de proprietário e de usuário, corrompido), PNG/JPEG com GD, certificado com `gen-test-cert`. Estáticos em `tests/Fixtures/` (ver README de lá): PDF fake e binário falso do LibreOffice. Cobertura: inspect, compose, append, sign+validate (com/sem raiz, dupla assinatura, carimbo visível), vazamento de passphrase (ausente e errada), PDF corrompido, conversores (passthrough blocked para assinado/cifrado/corrompido, imagem PNG/JPEG/SVG/limite/corrompida, manager, fake, LibreOffice sem binário/fake/falha/sem saída), ambiente mínimo, selftest.
+`php artisan test --filter=Pdf` roda `tests/Feature/Pdf/*` (44 testes) contra o **pdftool real** (venv em `tools/pdftool/.venv`; se ausente, os testes são pulados com a instrução de instalação). Fixtures geradas em tempo de teste: PDFs com DOMPDF (1 e 2 páginas, cifrados com senha de proprietário e de usuário, corrompido), PNG/JPEG com GD, certificado com `gen-test-cert`. Estáticos em `tests/Fixtures/` (ver README de lá): PDF fake e binário falso do LibreOffice. Cobertura: inspect, compose, append, sign+validate (com/sem raiz, dupla assinatura, carimbo visível), vazamento da senha (variável ausente, senha errada, e registros de log capturados), `COMPANY_CERT_ENABLED=false` → `NullPdfSigner`, PDF corrompido, limpeza do diretório temporário após exceção, conversores (passthrough blocked para assinado/cifrado/corrompido; imagem PNG 4100×600 com pico de memória < 64 MB, JPEG sem canvas intermediário e sem EXIF, SVG, limite de 40 MP, recusa por `memory_limit` sem decodificar, corrompida; manager; fake; LibreOffice sem binário, com binário falso — argumentos/perfil/ambiente —, falha, sem saída e timeout), ambiente mínimo, selftest. A suíte passa com `memory_limit=512M` (o `phpunit.xml` do projeto usa 1G por causa de outras suítes).
 
 ## 8. `php artisan pdftool:selftest`
 
@@ -212,25 +220,34 @@ php artisan pdftool:selftest          # relatório legível
 php artisan pdftool:selftest --json   # para automação; exit code 0 = ok
 ```
 
-Mostra: interpretador e versões (Python, pdftool; pins de pypdf/pyHanko/reportlab/Pillow/cryptography lidos de `requirements.lock.txt`, pois o pdftool não expõe versões de bibliotecas em tempo de execução), diretórios e timeouts; resultado passo a passo do `selftest` do pdftool (compose, append, inspect, image2pdf, gen-test-cert, sign, validate com e sem raiz); estado dos adaptadores (conversor por tipo, LibreOffice configurado/resolvido, certificado A1 configurado + ambiente + problemas, raízes de confiança existentes). **Exit code 1** quando o pdftool está indisponível ou o selftest falha. LibreOffice e certificado ausentes são **avisos** (são opcionais). O valor da passphrase nunca é exibido — apenas o nome da variável.
+Mostra: interpretador e versões (Python, pdftool; pins de pypdf/pyHanko/reportlab/Pillow/cryptography lidos de `requirements.lock.txt`, pois o pdftool não expõe versões de bibliotecas em tempo de execução), diretórios e timeouts; resultado passo a passo do `selftest` do pdftool (compose, append, inspect, image2pdf, gen-test-cert, sign, validate com e sem raiz); estado dos adaptadores (conversor por tipo, LibreOffice configurado/resolvido, certificado A1 ligado (`COMPANY_CERT_ENABLED`)/configurado + ambiente + lista de problemas, raízes de confiança existentes). **Exit code 1** quando o pdftool está indisponível ou o selftest falha; **0** caso contrário (verificado localmente: 11 passos ok, LibreOffice e certificado como avisos). LibreOffice e certificado ausentes são **avisos** (são opcionais). O valor da senha nunca é exibido — apenas o nome da variável.
 
 Rode após cada deploy e ao trocar de certificado. Se falhar: confira `PDFTOOL_PYTHON`/venv (seção 3), permissões de `storage/app/tmp`, e o log (`pdftool: comando executado` com `correlation_id`).
 
 ## 9. Variáveis de ambiente (`config/pdftool.php`)
 
-| Variável | Padrão | Uso |
-|---|---|---|
-| `PDFTOOL_PYTHON` | `tools/pdftool/.venv/bin/python` (Linux) / `.venv/Scripts/python.exe` (Windows) | interpretador do venv |
-| `PDFTOOL_TIMEOUT_SECONDS` | `60` | timeout por comando |
-| `PDFTOOL_SIGN_TIMEOUT_SECONDS` | `120` | timeout de `sign`/`gen-test-cert`/`selftest` |
-| `PDFTOOL_TMP_PATH` | `storage/app/tmp/pdftool` | raiz dos diretórios temporários exclusivos |
-| `LIBREOFFICE_BIN` | *(vazio = DOCX indisponível)* | caminho do `soffice` |
-| `LIBREOFFICE_TIMEOUT_SECONDS` | `120` | timeout da conversão |
-| `COMPANY_CERT_PFX_PATH` | *(vazio = sem assinatura)* | arquivo PKCS#12 do certificado A1 |
-| `COMPANY_CERT_PASSPHRASE_ENV` | `COMPANY_CERT_PASSPHRASE` | **nome** da variável que contém a passphrase |
-| `COMPANY_CERT_PASSPHRASE` | — | a passphrase em si (ou a variável nomeada acima); só no ambiente do processo |
-| `COMPANY_CERT_ENVIRONMENT` | `test` | `test` \| `production` |
-| `COMPANY_CERT_NAME` / `COMPANY_CERT_REASON` / `COMPANY_CERT_LOCATION` | `Certificado da operadora` / `Assinatura eletrônica AssinaVelox` / `Brasil` | rótulo e metadados da assinatura |
-| `PDFTOOL_TRUST_ROOTS` | *(vazio)* | arquivos PEM/DER separados por `;` |
+Presentes no `.env.example`:
+
+| Variável                    | Padrão                                                                          | Uso                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `PDFTOOL_PYTHON`            | `tools/pdftool/.venv/bin/python` (Linux) / `.venv/Scripts/python.exe` (Windows) | interpretador do venv (vazio = padrão)                                    |
+| `LIBREOFFICE_BIN`           | _(vazio = DOCX indisponível)_                                                   | caminho do `soffice`                                                      |
+| `COMPANY_CERT_ENABLED`      | `false`                                                                         | liga a assinatura A1; `false` ⇒ `NullPdfSigner` mesmo com PFX configurado |
+| `COMPANY_CERT_ENVIRONMENT`  | `test`                                                                          | `test` \| `production` (inválido ⇒ `test`)                                |
+| `COMPANY_CERT_PFX_PATH`     | _(vazio = sem assinatura)_                                                      | arquivo PKCS#12 do certificado A1                                         |
+| `COMPANY_CERT_PASSWORD_ENV` | `COMPANY_CERT_PASSWORD`                                                         | **nome** da variável que contém a senha do PKCS#12                        |
+| `COMPANY_CERT_NAME`         | `Certificado da operadora`                                                      | rótulo exibido                                                            |
+
+Lidas pela config mas **ainda não listadas** no `.env.example` (opcionais; integrador deve acrescentá-las):
+
+| Variável                                                                | Padrão                                         | Uso                                                                                          |
+| ----------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `PDFTOOL_TIMEOUT_SECONDS`                                               | `60`                                           | timeout por comando do pdftool                                                               |
+| `PDFTOOL_SIGN_TIMEOUT_SECONDS`                                          | `120`                                          | timeout de `sign`/`gen-test-cert`/`selftest`                                                 |
+| `PDFTOOL_TMP_PATH`                                                      | `storage/app/tmp/pdftool`                      | raiz dos diretórios temporários exclusivos                                                   |
+| `PDFTOOL_TRUST_ROOTS`                                                   | _(vazio)_                                      | arquivos PEM/DER separados por `;` para `validate`                                           |
+| `LIBREOFFICE_TIMEOUT_SECONDS`                                           | `120`                                          | timeout da conversão DOCX                                                                    |
+| `COMPANY_CERT_REASON` / `COMPANY_CERT_LOCATION`                         | `Assinatura eletrônica AssinaVelox` / `Brasil` | metadados da assinatura (`/Reason`, `/Location`)                                             |
+| `COMPANY_CERT_PASSWORD` (ou o nome dado em `COMPANY_CERT_PASSWORD_ENV`) | —                                              | **a senha em si**: só no ambiente do processo PHP (não commitar no `.env.example` com valor) |
 
 `pdftool.converters` (mapa tipo → classe) e `pdftool.libreoffice.env` são fixos em config, não em `.env`.

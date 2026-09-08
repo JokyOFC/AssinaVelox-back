@@ -12,7 +12,11 @@ export default function ConfirmPassword() {
         <>
             <Head title="Confirmar senha" />
 
-            <Form {...store.form()} resetOnSuccess={['password']} className="flex flex-col gap-4">
+            <Form
+                {...store.form()}
+                resetOnSuccess={['password']}
+                className="flex flex-col gap-4"
+            >
                 {({ processing, errors }) => (
                     <>
                         <div className="grid gap-1.5">

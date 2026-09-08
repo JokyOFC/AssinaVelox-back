@@ -1,0 +1,109 @@
+# AssinaVelox — Configuração (variáveis de ambiente, filas, armazenamento)
+
+> Fonte: `.env.example`, `config/assinavelox.php`, `config/pdftool.php` (agente A3), `config/filesystems.php`, `config/horizon.php`, `config/session.php`. Nunca commite valores reais de segredos.
+
+## 1. Requisitos
+
+| Item                    | Observação                                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PHP 8.3+ com **`intl`** | Obrigatória (formatação de datas/moeda em pt-BR e `Number::currency`). No PHP local a extensão não está no `php.ini`: use `php -d extension=intl artisan ...` ou habilite `extension=intl`. |
+| MySQL 8+/9              | Banco alvo (`DB_CONNECTION=mysql`). Testes usam SQLite em memória (`phpunit.xml`).                                                                                                          |
+| Node 20+                | `npm run build` (Vite 8 via vite-plus), `npm run types:check`, `npm run check`.                                                                                                             |
+| Redis                   | **Só em produção** (filas + Horizon + cache). Em dev: filas `database`, cache `database`.                                                                                                   |
+| Python 3 + LibreOffice  | Opcionais; ver `docs/pdf-pipeline.md` (`config/pdftool.php`). Ausentes → adaptadores fake.                                                                                                  |
+| Docker                  | **Não** utilizado.                                                                                                                                                                          |
+
+Comandos úteis: `php -d extension=intl artisan wayfinder:generate` (helpers TS de rotas), `php -d extension=intl artisan route:list --except-vendor`, `vendor/bin/pint --dirty`, `php -d extension=intl artisan test`.
+
+## 2. Variáveis de ambiente
+
+### 2.1 Aplicação (Laravel)
+
+| Variável                                                  | Padrão                               | Uso                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_NAME`                                                | AssinaVelox                          | Nome exibido e `MAIL_FROM_NAME`.                                                                                                                                                                                                                                             |
+| `APP_ENV` / `APP_DEBUG` / `APP_URL`                       | local / true / http://localhost:8000 | `APP_URL` alimenta links de e-mail, Fortify (passkeys) e CSP.                                                                                                                                                                                                                |
+| `APP_LOCALE` / `APP_FALLBACK_LOCALE` / `APP_FAKER_LOCALE` | pt_BR / en / pt_BR                   | Traduções em `lang/pt_BR` (+ `lang/pt_BR.json`). O fuso da aplicação é sempre **UTC** (`config/app.php`); a exibição usa `organizations.timezone` (padrão `America/Sao_Paulo`).                                                                                              |
+| `APP_KEY`                                                 | —                                    | Também criptografa `organizations.tax_id` (cast `encrypted`) e deriva o HMAC dos códigos OTP. Trocar a chave invalida esses dados.                                                                                                                                           |
+| `DB_*`                                                    | mysql / 127.0.0.1 / 3306             | Conexão principal. Para comandos locais sem tocar no MySQL: `DB_CONNECTION=sqlite DB_DATABASE=database/<arquivo>.sqlite`.                                                                                                                                                    |
+| `SESSION_DRIVER` / `SESSION_LIFETIME`                     | database / 120                       | Sessões no banco. `SESSION_SECURE_COOKIE` vazio = `true` em produção. `SESSION_SAME_SITE=lax`.                                                                                                                                                                               |
+| `CACHE_STORE`                                             | database                             | Cache (contadores da sidebar, páginas legais). Produção: `redis`.                                                                                                                                                                                                            |
+| `QUEUE_CONNECTION`                                        | database                             | Dev. Produção: `redis` + Horizon (§3).                                                                                                                                                                                                                                       |
+| `MAIL_*`                                                  | log                                  | Dev registra e-mails no log. Produção: SMTP/HTTP do provedor. `MAIL_FROM_ADDRESS` obrigatório.                                                                                                                                                                               |
+| `FILESYSTEM_DISK`                                         | local                                | Disco padrão do Laravel (não é o dos documentos — ver §4).                                                                                                                                                                                                                   |
+| `BCRYPT_ROUNDS`                                           | 12                                   | Testes usam 4 (`phpunit.xml`).                                                                                                                                                                                                                                               |
+| `TRUSTED_PROXIES`                                         | vazio                                | `*` atrás de balanceador próprio ou lista de IPs/CIDRs separada por vírgula. Define o IP registrado nos aceites e nos eventos de auditoria (`AppServiceProvider::configureTrustedProxies()`, lido de `config('assinavelox.trusted_proxies')` — funciona com `config:cache`). |
+| `INERTIA_ENSURE_PAGES_EXIST`                              | false                                | Testes: exigir que o componente da página exista em `resources/js/pages`.                                                                                                                                                                                                    |
+
+### 2.2 AssinaVelox (`config/assinavelox.php`)
+
+| Variável                                                                                              | Padrão                                                        | Uso                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ASSINAVELOX_TERMS_VERSION`                                                                           | 2026-09                                                       | Versão dos Termos gravada em `users.terms_version` (cadastro) e `envelopes.terms_version`/aceites.                                                                                 |
+| `ASSINAVELOX_DEFAULT_EXPIRATION_DAYS`                                                                 | 30                                                            | Prazo padrão de assinatura; cada organização pode alterar entre `expiration_days.min/max` (1–90).                                                                                  |
+| `ASSINAVELOX_OTP_TTL_MINUTES` / `_OTP_MAX_ATTEMPTS` / `_OTP_RESEND_LIMIT`                             | 10 / 5 / 5                                                    | Código por e-mail do signatário.                                                                                                                                                   |
+| `ASSINAVELOX_SIGNING_SESSION_TTL_MINUTES` / `_AUTHORIZATION_TTL_MINUTES`                              | 30 / 10                                                       | Sessão do signatário e token de autorização do aceite.                                                                                                                             |
+| `ASSINAVELOX_RESEND_THROTTLE_MINUTES` / `ASSINAVELOX_MAX_RESENDS`                                     | 10 / 5                                                        | Reenvio manual de convites por destinatário.                                                                                                                                       |
+| `ASSINAVELOX_PLAN_CONSUMPTION_UNIT`                                                                   | envelope_sent                                                 | Unidade do ledger `plan_consumptions`.                                                                                                                                             |
+| `ASSINAVELOX_EVIDENCE_SHOW_IP`                                                                        | masked                                                        | `masked` \| `full` \| `none` — IP na página de evidências e na trilha.                                                                                                             |
+| `ASSINAVELOX_MAX_UPLOAD_MB`                                                                           | 25                                                            | Upload por envelope (MIME aceitos fixos: PDF, DOCX, PNG, JPEG).                                                                                                                    |
+| `ASSINAVELOX_INVITATION_EXPIRES_DAYS`                                                                 | 7                                                             | Validade dos convites de membros (token de 32 bytes → digest).                                                                                                                     |
+| `ASSINAVELOX_COUNTS_CACHE_TTL` / `ASSINAVELOX_COUNTS_CACHE_STORE`                                     | 60 / vazio                                                    | Cache dos contadores da sidebar por organização+usuário (vazio = `CACHE_STORE`).                                                                                                   |
+| `ASSINAVELOX_ORG_DELETION_GRACE_DAYS`                                                                 | 30                                                            | Dias entre a solicitação de exclusão da organização e a exclusão efetiva.                                                                                                          |
+| `ASSINAVELOX_CSP_ENABLED` / `ASSINAVELOX_CSP_REPORT_ONLY` / `ASSINAVELOX_CSP_EXTRA_SOURCES`           | true / false / vazio                                          | Content-Security-Policy com nonce (middleware `SecurityHeaders`). `REPORT_ONLY=true` emite `Content-Security-Policy-Report-Only`. Origens extras separadas por vírgula (ex.: CDN). |
+| `ASSINAVELOX_HELP_URL` / `ASSINAVELOX_SUPPORT_EMAIL`                                                  | https://ajuda.assinavelox.com.br / suporte@assinavelox.com.br | Links exibidos na interface.                                                                                                                                                       |
+| `MERCADOPAGO_ENVIRONMENT` / `_ACCESS_TOKEN` / `_PUBLIC_KEY` / `_WEBHOOK_SECRET` / `_NOTIFICATION_URL` | sandbox / vazios                                              | Checkout Pro e webhook `POST /webhooks/mercadopago` (sem CSRF; ver `docs/integracoes/mercado-pago.md`).                                                                            |
+
+### 2.3 Ferramentas de PDF (`config/pdftool.php`, agente A3)
+
+`PDFTOOL_PYTHON`, `LIBREOFFICE_BIN`, `COMPANY_CERT_ENABLED`, `COMPANY_CERT_ENVIRONMENT`, `COMPANY_CERT_PFX_PATH`, `COMPANY_CERT_PASSWORD_ENV` (nome da variável que contém a senha — nunca a senha), `COMPANY_CERT_NAME`. Detalhes em `docs/pdf-pipeline.md`. Estas chaves **não** ficam mais em `config/assinavelox.php`.
+
+### 2.4 Horizon
+
+`HORIZON_NAME`, `HORIZON_DOMAIN`, `HORIZON_PATH` (padrão `horizon`), `HORIZON_PREFIX`, `HORIZON_DEFAULT_PROCESSES` (6), `HORIZON_CONVERSIONS_PROCESSES` (2), `HORIZON_FINALIZATION_PROCESSES` (2). Acesso ao painel: `App\Providers\HorizonServiceProvider::gate()`.
+
+## 3. Filas
+
+| Fila (`config('assinavelox.queues')`) | Conteúdo                                           | Supervisor (Horizon)                                  |
+| ------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| `default`                             | jobs gerais                                        | `supervisor-default` (com `notifications`, `billing`) |
+| `notifications`                       | e-mails/notificações (convites de membros, avisos) | idem                                                  |
+| `billing`                             | sincronização de pagamentos                        | idem                                                  |
+| `conversions`                         | DOCX/imagem → PDF (LibreOffice/pdftool)            | `supervisor-conversions`                              |
+| `finalization`                        | consolidação, evidências, assinatura A1            | `supervisor-finalization`                             |
+
+- **Dev**: `QUEUE_CONNECTION=database` → `php artisan queue:work --queue=default,notifications,billing,conversions,finalization` (o script `composer run dev` executa `php artisan dev`; confira se o worker de fila está incluído na sua versão).
+- **Produção**: `QUEUE_CONNECTION=redis` → `php artisan horizon` sob supervisor do SO; `php artisan horizon:terminate` no deploy. Não há Redis local: Horizon não roda em dev.
+- Testes: `QUEUE_CONNECTION=sync`.
+
+## 4. Disco `documents` (privado)
+
+`config/filesystems.php` define o disco `documents`:
+
+| `DOCUMENTS_DISK` | Onde                    | Observações                                                                                                                                                                                                                                               |
+| ---------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `local` (padrão) | `storage/app/documents` | `visibility=private`, `serve=false`: nenhum arquivo é servido diretamente; downloads passam por controllers autorizados (`envelopes.download`, `sign.download`).                                                                                          |
+| `s3`             | bucket S3 compatível    | `DOCUMENTS_S3_KEY`, `DOCUMENTS_S3_SECRET`, `DOCUMENTS_S3_REGION`, `DOCUMENTS_S3_BUCKET`, `DOCUMENTS_S3_ENDPOINT`, `DOCUMENTS_S3_USE_PATH_STYLE_ENDPOINT`, `DOCUMENTS_S3_ROOT` (fallback para `AWS_*`). Sem URLs públicas temporárias (RECONCILIACAO Q23). |
+
+## 5. Autenticação e sessão
+
+- Fortify: registro, verificação de e-mail, reset de senha (`auth.passwords.users.expire = 30` min), TOTP com confirmação (`config/fortify.php`). Sem passkeys na Fase 1.
+- Tema claro apenas: middleware `HandleAppearance` e a rota `settings/appearance` do kit foram removidos.
+- Política de 2FA por organização (`settings.require_two_factor`) aplicada pelo middleware `org.2fa` (ver `docs/autorizacao-e-isolamento.md`).
+- Cookies: `sidebar_state` fica fora da criptografia (lido pelo Inertia para `sidebarOpen`).
+
+## 6. Locale e fuso
+
+- Textos da interface, validação (`lang/pt_BR/validation.php`) e e-mails em pt-BR; identificadores em inglês.
+- Timestamps em UTC no banco; a exibição usa o fuso da organização (`App\Support\Timezones` lista os fusos brasileiros oferecidos nas configurações).
+- Dinheiro em centavos + `currency` (`BRL`).
+
+## 7. Segurança em produção (checklist)
+
+1. `APP_DEBUG=false`, `APP_ENV=production`, `APP_URL` com HTTPS (HSTS é emitido automaticamente em requisições seguras).
+2. `TRUSTED_PROXIES` configurado conforme a topologia (afeta IP dos aceites).
+3. `ASSINAVELOX_CSP_ENABLED=true`; valide antes com `ASSINAVELOX_CSP_REPORT_ONLY=true`.
+4. `DOCUMENTS_DISK=s3` com bucket privado.
+5. `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, Horizon supervisionado.
+6. Usuário MySQL de runtime sem `UPDATE/DELETE` em `audit_events` (ver `docs/banco-de-dados.md` §4.3).
+7. `MERCADOPAGO_WEBHOOK_SECRET` definido; webhook exposto apenas em HTTPS.

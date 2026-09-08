@@ -37,7 +37,11 @@ export function SubscriptionStatusBadge({
     }
 
     return (
-        <Badge variant={subscriptionStatusTones[status]} dot className={className}>
+        <Badge
+            variant={subscriptionStatusTones[status]}
+            dot
+            className={className}
+        >
             {label ?? subscriptionStatusLabels[status]}
         </Badge>
     );

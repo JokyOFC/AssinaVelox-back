@@ -4,7 +4,11 @@ import { PageHeader } from '@/components/page-header';
 import { Phase2EmptyState } from '@/components/phase2-empty-state';
 import { SelectableChip } from '@/components/filter-bar';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { index as envelopesIndex } from '@/routes/envelopes';
 import { index as templatesIndex } from '@/routes/templates';
 
@@ -23,7 +27,10 @@ export default function TemplatesIndex() {
                         <TooltipTrigger asChild>
                             <span>
                                 <Button disabled>
-                                    <Plus className="size-[15px]" strokeWidth={2.5} />
+                                    <Plus
+                                        className="size-[15px]"
+                                        strokeWidth={2.5}
+                                    />
                                     Novo modelo
                                 </Button>
                             </span>
@@ -34,7 +41,11 @@ export default function TemplatesIndex() {
             />
             <div className="flex flex-wrap gap-2">
                 {CATEGORIES.map((category, index) => (
-                    <SelectableChip key={category} selected={index === 0} disabled>
+                    <SelectableChip
+                        key={category}
+                        selected={index === 0}
+                        disabled
+                    >
                         {category}
                     </SelectableChip>
                 ))}

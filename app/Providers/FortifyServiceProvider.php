@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Services\Organizations\Invitations;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -67,9 +68,24 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/register', [
-            'passwordRules' => Password::defaults()->toPasswordRulesString(),
-        ]));
+        Fortify::registerView(function (Request $request) {
+            $invitation = Invitations::findByToken($request->query('invitation'));
+            $pending = $invitation !== null && $invitation->isPending();
+
+            if ($pending) {
+                $request->session()->put(Invitations::PENDING_SESSION_KEY, (string) $request->query('invitation'));
+            }
+
+            return Inertia::render('auth/register', [
+                'passwordRules' => Password::defaults()->toPasswordRulesString(),
+                'termsVersion' => (string) config('assinavelox.terms_version'),
+                'invitation' => $pending ? [
+                    'token' => (string) $request->query('invitation'),
+                    'email' => $invitation->email,
+                    'organization_name' => $invitation->organization->name,
+                ] : null,
+            ]);
+        });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 
@@ -90,6 +106,5 @@ class FortifyServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($throttleKey);
         });
-
     }
 }

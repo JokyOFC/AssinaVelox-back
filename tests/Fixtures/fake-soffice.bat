@@ -9,9 +9,14 @@ rem   FAKE_SOFFICE_LOG   arquivo onde gravar argumentos + ambiente recebido
 rem   FAKE_SOFFICE_PDF   PDF a copiar como resultado
 rem   FAKE_SOFFICE_FAIL  se definido, termina com exit code 1 sem gerar saida
 rem   FAKE_SOFFICE_NOOUT se definido, termina com exit code 0 sem gerar saida
+rem   FAKE_SOFFICE_SLEEP segundos a esperar antes de qualquer coisa (teste de timeout)
 rem Assume o layout de diretorios do LibreOfficeConverter: <tmp>\out e <tmp>\profile.
 rem ---------------------------------------------------------------------------
 setlocal
+if not defined FAKE_SOFFICE_SLEEP goto nosleep
+set /a "PINGS=%FAKE_SOFFICE_SLEEP%+1"
+ping -n %PINGS% 127.0.0.1 >nul
+:nosleep
 set "OUTDIR="
 set "INPUT="
 set "PREV="

@@ -8,7 +8,7 @@ export default function NotFound({ message }: { message?: string | null }) {
     return (
         <>
             <Head title="Página não encontrada" />
-            <div className="rounded-xl border border-border bg-card shadow-card">
+            <div className="border-border bg-card shadow-card rounded-xl border">
                 <EmptyState
                     icon={FileQuestion}
                     title="Página não encontrada"

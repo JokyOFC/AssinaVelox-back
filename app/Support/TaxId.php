@@ -100,7 +100,7 @@ final class TaxId
     }
 
     /**
-     * Máscara para exibição pública/evidências: 123.***.***-45 / 12.345.***/****-90.
+     * Máscara para exibição pública/evidências: 123.xxx.xxx-45 / 12.345.xxx/xxxx-90 (dígitos ocultos com asterisco).
      */
     public static function mask(?string $value): ?string
     {

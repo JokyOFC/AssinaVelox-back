@@ -109,27 +109,6 @@ return [
     ],
 
     /*
-    | Ferramentas externas — apenas caminhos/binários (placeholders).
-    | pdftool: Python com pypdf/reportlab/pyHanko (tools/pdftool).
-    | LibreOffice: conversão DOCX→PDF em processo isolado; ausente em dev = fake.
-    */
-    'pdftool_python' => env('PDFTOOL_PYTHON'),
-    'libreoffice_bin' => env('LIBREOFFICE_BIN'),
-
-    /*
-    | Certificado A1 da empresa operadora (PAdES B-B). Somente REFERÊNCIAS:
-    | caminho do arquivo PFX e NOME da variável que contém a senha — a senha em si
-    | é lida apenas pelo processo de assinatura, nunca gravada em banco/log.
-    */
-    'company_certificate' => [
-        'enabled' => (bool) env('COMPANY_CERT_ENABLED', false),
-        'environment' => env('COMPANY_CERT_ENVIRONMENT', 'test'), // test | production
-        'pfx_path' => env('COMPANY_CERT_PFX_PATH'),
-        'password_env' => env('COMPANY_CERT_PASSWORD_ENV', 'COMPANY_CERT_PASSWORD'),
-        'name' => env('COMPANY_CERT_NAME', 'Certificado da operadora'),
-    ],
-
-    /*
     | Mercado Pago (Checkout Pro). Placeholders vazios em dev; nunca commitar valores.
     | environment: sandbox | production.
     */

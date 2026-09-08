@@ -8,7 +8,7 @@ export default function Forbidden({ message }: { message?: string | null }) {
     return (
         <>
             <Head title="Acesso negado" />
-            <div className="rounded-xl border border-border bg-card shadow-card">
+            <div className="border-border bg-card shadow-card rounded-xl border">
                 <EmptyState
                     icon={ShieldOff}
                     title="Você não tem permissão para acessar esta página"

@@ -25,7 +25,7 @@ export default function Login({ status, canResetPassword }: Props) {
             {status && (
                 <div
                     role="status"
-                    className="rounded-[10px] border border-success-border bg-success-bg px-3.5 py-3 text-[13px] font-medium text-success"
+                    className="border-success-border bg-success-bg text-success rounded-[10px] border px-3.5 py-3 text-[13px] font-medium"
                 >
                     {status}
                 </div>
@@ -49,7 +49,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 tabIndex={1}
                                 autoComplete="email"
                                 placeholder="voce@empresa.com.br"
-                                className="h-10 shadow-card"
+                                className="shadow-card h-10"
                                 aria-invalid={!!errors.email}
                             />
                             <InputError message={errors.email} />
@@ -64,24 +64,28 @@ export default function Login({ status, canResetPassword }: Props) {
                                 tabIndex={2}
                                 autoComplete="current-password"
                                 placeholder="Sua senha"
-                                className="h-10 shadow-card"
+                                className="shadow-card h-10"
                                 aria-invalid={!!errors.password}
                             />
                             <InputError message={errors.password} />
                         </div>
 
                         <div className="flex items-center justify-between gap-3 text-[13px]">
-                            <label className="flex cursor-pointer items-center gap-2 text-text-secondary">
+                            <label className="text-text-secondary flex cursor-pointer items-center gap-2">
                                 <Checkbox
                                     id="remember"
                                     name="remember"
                                     defaultChecked
                                     tabIndex={3}
                                 />
-                                Lembrar de mim
+                                Manter conectado
                             </label>
                             {canResetPassword && (
-                                <TextLink href={request()} tabIndex={5} className="hover:no-underline">
+                                <TextLink
+                                    href={request()}
+                                    tabIndex={5}
+                                    className="hover:no-underline"
+                                >
                                     Esqueci minha senha
                                 </TextLink>
                             )}
@@ -102,7 +106,7 @@ export default function Login({ status, canResetPassword }: Props) {
                 )}
             </Form>
 
-            <p className="text-center text-[13.5px] text-text-secondary">
+            <p className="text-text-secondary text-center text-[13.5px]">
                 Não tem conta?{' '}
                 <TextLink href={register()} tabIndex={6}>
                     Criar conta grátis

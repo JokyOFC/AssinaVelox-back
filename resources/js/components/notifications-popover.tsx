@@ -10,7 +10,10 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { formatRelativeDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { index as notificationsIndex, read as markRead } from '@/routes/notifications';
+import {
+    index as notificationsIndex,
+    read as markRead,
+} from '@/routes/notifications';
 import type { AppNotification, Paginated } from '@/types';
 
 /**
@@ -81,7 +84,8 @@ export function NotificationsPopover({ className }: { className?: string }) {
                         prev
                             ? prev.map((n) => ({
                                   ...n,
-                                  read_at: n.read_at ?? new Date().toISOString(),
+                                  read_at:
+                                      n.read_at ?? new Date().toISOString(),
                               }))
                             : prev,
                     );
@@ -101,23 +105,25 @@ export function NotificationsPopover({ className }: { className?: string }) {
                             : 'Notificações'
                     }
                     className={cn(
-                        'relative flex size-[34px] items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-accent hover:text-foreground',
+                        'text-text-secondary hover:bg-accent hover:text-foreground relative flex size-[34px] items-center justify-center rounded-lg transition-colors',
                         className,
                     )}
                 >
                     <Bell className="size-[17px]" />
                     {unread > 0 && (
-                        <span className="absolute top-[7px] right-2 size-[7px] rounded-full border-2 border-background bg-danger-solid" />
+                        <span className="border-background bg-danger-solid absolute top-[7px] right-2 size-[7px] rounded-full border-2" />
                     )}
                 </button>
             </PopoverTrigger>
             <PopoverContent
                 align="end"
                 sideOffset={8}
-                className="w-[360px] rounded-[10px] p-0 shadow-popover"
+                className="shadow-popover w-[360px] rounded-[10px] p-0"
             >
-                <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                    <span className="text-[13.5px] font-semibold">Notificações</span>
+                <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-3">
+                    <span className="text-[13.5px] font-semibold">
+                        Notificações
+                    </span>
                     <Button
                         variant="link"
                         size="xxs"
@@ -125,18 +131,22 @@ export function NotificationsPopover({ className }: { className?: string }) {
                         onClick={handleMarkAll}
                         className="text-[12.5px]"
                     >
-                        {marking ? <Spinner className="size-3.5" /> : <CheckCheck className="size-3.5" />}
+                        {marking ? (
+                            <Spinner className="size-3.5" />
+                        ) : (
+                            <CheckCheck className="size-3.5" />
+                        )}
                         Marcar todas como lidas
                     </Button>
                 </div>
                 <div className="max-h-[380px] overflow-y-auto">
                     {loading && (
-                        <div className="flex items-center justify-center gap-2 py-8 text-[13px] text-muted-foreground">
+                        <div className="text-muted-foreground flex items-center justify-center gap-2 py-8 text-[13px]">
                             <Spinner className="size-4" /> Carregando…
                         </div>
                     )}
                     {!loading && items && items.length === 0 && (
-                        <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                        <p className="text-muted-foreground px-4 py-8 text-center text-[13px]">
                             Você não tem notificações.
                         </p>
                     )}
@@ -153,7 +163,7 @@ export function NotificationsPopover({ className }: { className?: string }) {
                                     }
                                 }}
                                 className={cn(
-                                    'flex w-full items-start gap-3 border-b border-muted px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-row-hover',
+                                    'border-muted hover:bg-row-hover flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0',
                                 )}
                             >
                                 <span
@@ -169,19 +179,21 @@ export function NotificationsPopover({ className }: { className?: string }) {
                                         className={cn(
                                             'block text-[13.5px] leading-[1.35]',
                                             notification.read_at
-                                                ? 'font-medium text-text-secondary'
-                                                : 'font-semibold text-foreground',
+                                                ? 'text-text-secondary font-medium'
+                                                : 'text-foreground font-semibold',
                                         )}
                                     >
                                         {notification.title}
                                     </span>
                                     {notification.body && (
-                                        <span className="mt-0.5 block text-[12.5px] leading-[1.45] text-muted-foreground">
+                                        <span className="text-muted-foreground mt-0.5 block text-[12.5px] leading-[1.45]">
                                             {notification.body}
                                         </span>
                                     )}
-                                    <span className="mt-1 block text-[11.5px] text-muted-foreground tabular">
-                                        {formatRelativeDateTime(notification.created_at)}
+                                    <span className="text-muted-foreground tabular mt-1 block text-[11.5px]">
+                                        {formatRelativeDateTime(
+                                            notification.created_at,
+                                        )}
                                     </span>
                                 </span>
                             </button>

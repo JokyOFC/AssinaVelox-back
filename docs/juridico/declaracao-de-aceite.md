@@ -22,18 +22,18 @@ Regras:
 
 Variáveis de runtime usadas nos textos:
 
-| Variável | Origem |
-|---|---|
-| `{{NOME_SIGNATARIO}}` | `recipients.name` |
-| `{{EMAIL_MASCARADO}}` | `recipients.email` mascarado (ex.: `m•••@gmail.com`) |
-| `{{TITULO_DOCUMENTO}}` | `envelopes.title` |
-| `{{ORGANIZACAO_REMETENTE}}` | `organizations.name` (ou `legal_name`) |
-| `{{HASH_DOCUMENTO_APRESENTADO}}` | `document_versions.sha256` da `sent_document_version_id` |
-| `{{RAZAO_SOCIAL}}` | Configuração da Operadora |
-| `{{CODIGO_VERIFICACAO}}` | `envelopes.verification_code` formatado `XXXX-XXXX-XXXX` |
-| `{{URL_VERIFICACAO}}` | Configuração (ex.: `assinavelox.com.br/verificar`) |
-| `{{TITULAR_CERTIFICADO}}`, `{{EMISSOR_CERTIFICADO}}`, `{{VALIDADE_CERTIFICADO}}`, `{{AMBIENTE_CERTIFICADO}}` | `certificate_references` |
-| `{{HASH_ORIGINAL}}`, `{{HASH_ENVIADO}}`, `{{HASH_CONSOLIDADO}}`, `{{HASH_FINAL}}` | `verification_records` |
+| Variável                                                                                                     | Origem                                                   |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `{{NOME_SIGNATARIO}}`                                                                                        | `recipients.name`                                        |
+| `{{EMAIL_MASCARADO}}`                                                                                        | `recipients.email` mascarado (ex.: `m•••@gmail.com`)     |
+| `{{TITULO_DOCUMENTO}}`                                                                                       | `envelopes.title`                                        |
+| `{{ORGANIZACAO_REMETENTE}}`                                                                                  | `organizations.name` (ou `legal_name`)                   |
+| `{{HASH_DOCUMENTO_APRESENTADO}}`                                                                             | `document_versions.sha256` da `sent_document_version_id` |
+| `{{RAZAO_SOCIAL}}`                                                                                           | Configuração da Operadora                                |
+| `{{CODIGO_VERIFICACAO}}`                                                                                     | `envelopes.verification_code` formatado `XXXX-XXXX-XXXX` |
+| `{{URL_VERIFICACAO}}`                                                                                        | Configuração (ex.: `assinavelox.com.br/verificar`)       |
+| `{{TITULAR_CERTIFICADO}}`, `{{EMISSOR_CERTIFICADO}}`, `{{VALIDADE_CERTIFICADO}}`, `{{AMBIENTE_CERTIFICADO}}` | `certificate_references`                                 |
+| `{{HASH_ORIGINAL}}`, `{{HASH_ENVIADO}}`, `{{HASH_CONSOLIDADO}}`, `{{HASH_FINAL}}`                            | `verification_records`                                   |
 
 ---
 
@@ -44,6 +44,7 @@ Texto exato (uma única frase, sem truncar):
 > Li o documento **{{TITULO_DOCUMENTO}}** e declaro que concordo com seu conteúdo e que os dados aqui registrados — data e hora, endereço IP, navegador, código confirmado por e-mail, a versão exata do documento e os campos que preenchi — constituem evidência do meu aceite eletrônico.
 
 Regras de UI:
+
 - O botão "Assinar documento" permanece desabilitado até a caixa ser marcada.
 - A caixa **nunca** vem pré-marcada, nem é marcada automaticamente ao rolar o documento.
 - Abaixo do rótulo, exibir a declaração completa da §3 em texto corrido (pode estar dentro de um bloco com rolagem, mas **não** oculto por padrão).
@@ -93,14 +94,14 @@ A página de evidências é gerada em HTML → PDF e anexada ao final do documen
 
 > **Como ler os resumos criptográficos (SHA-256)**
 >
-> Um resumo SHA-256 (*hash*) é uma sequência de 64 caracteres que identifica um arquivo byte a byte: qualquer alteração no arquivo, por menor que seja, produz um resumo completamente diferente. **Um resumo não é uma assinatura**: ele permite conferir se dois arquivos são idênticos, e nada mais. Esta página registra quatro resumos, cada um calculado sobre bytes distintos:
+> Um resumo SHA-256 (_hash_) é uma sequência de 64 caracteres que identifica um arquivo byte a byte: qualquer alteração no arquivo, por menor que seja, produz um resumo completamente diferente. **Um resumo não é uma assinatura**: ele permite conferir se dois arquivos são idênticos, e nada mais. Esta página registra quatro resumos, cada um calculado sobre bytes distintos:
 >
-> | Resumo | Do que foi calculado |
-> |---|---|
-> | **Original** `{{HASH_ORIGINAL}}` | Dos bytes do arquivo exatamente como foi enviado pela organização remetente à plataforma (PDF, DOCX ou imagem), antes de qualquer conversão. |
-> | **Enviado** `{{HASH_ENVIADO}}` | Dos bytes da versão em PDF que foi congelada no envio e **apresentada a todos os signatários**. É este resumo que cada declaração de aceite referencia. Se o original já era um PDF sem conversão, pode coincidir com o resumo original. |
-> | **Consolidado** `{{HASH_CONSOLIDADO}}` | Dos bytes do PDF gerado após a coleta, com os campos preenchidos e as representações visuais de assinatura incorporados às páginas ("achatados"), **antes** do acréscimo desta página de evidências. |
-> | **Final** `{{HASH_FINAL}}` | Dos bytes do arquivo final completo (documento consolidado + esta página de evidências + assinatura criptográfica da operadora, quando aplicada). **Este resumo é calculado depois de o arquivo estar pronto e, por isso, não pode constar dentro do próprio arquivo.** Ele é publicado exclusivamente na página de verificação {{URL_VERIFICACAO}}, sob o código {{CODIGO_VERIFICACAO}}. Para conferir o arquivo que você tem em mãos, calcule o SHA-256 dele e compare com o valor publicado. |
+> | Resumo                                 | Do que foi calculado                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+> | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | **Original** `{{HASH_ORIGINAL}}`       | Dos bytes do arquivo exatamente como foi enviado pela organização remetente à plataforma (PDF, DOCX ou imagem), antes de qualquer conversão.                                                                                                                                                                                                                                                                                                                                                    |
+> | **Enviado** `{{HASH_ENVIADO}}`         | Dos bytes da versão em PDF que foi congelada no envio e **apresentada a todos os signatários**. É este resumo que cada declaração de aceite referencia. Se o original já era um PDF sem conversão, pode coincidir com o resumo original.                                                                                                                                                                                                                                                        |
+> | **Consolidado** `{{HASH_CONSOLIDADO}}` | Dos bytes do PDF gerado após a coleta, com os campos preenchidos e as representações visuais de assinatura incorporados às páginas ("achatados"), **antes** do acréscimo desta página de evidências.                                                                                                                                                                                                                                                                                            |
+> | **Final** `{{HASH_FINAL}}`             | Dos bytes do arquivo final completo (documento consolidado + esta página de evidências + assinatura criptográfica da operadora, quando aplicada). **Este resumo é calculado depois de o arquivo estar pronto e, por isso, não pode constar dentro do próprio arquivo.** Ele é publicado exclusivamente na página de verificação {{URL_VERIFICACAO}}, sob o código {{CODIGO_VERIFICACAO}}. Para conferir o arquivo que você tem em mãos, calcule o SHA-256 dele e compare com o valor publicado. |
 
 ### 5.2 Bloco "Sobre a assinatura criptográfica deste arquivo" — variante `signature_status = company_a1`
 
@@ -150,6 +151,7 @@ Aceite eletrônico com evidências · sem assinatura criptográfica
 ```
 
 Notas de implementação:
+
 - O rodapé é carimbado na etapa de composição (`pdftool compose` / `append`), **antes** de `pdftool sign`, para que fique coberto pela assinatura criptográfica quando ela existir.
 - **Nunca** imprimir o hash final no PDF (é calculado depois do arquivo pronto). Imprimir apenas URL e código.
 - O código é `envelopes.verification_code` (12 caracteres base32 sem `0/1/O/I`), exibido em grupos de 4 separados por hífen.
@@ -159,11 +161,11 @@ Notas de implementação:
 
 ## 7. Rótulos curtos para a página pública de verificação (`/verificar/{code}`)
 
-| `signature_status` | Selo | Texto de apoio |
-|---|---|---|
+| `signature_status`       | Selo                                                    | Texto de apoio                                                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `company_a1` (concluído) | "Concluído · com assinatura criptográfica da operadora" | "O arquivo final foi lacrado pela AssinaVelox com certificado de sua titularidade (perfil {{PERFIL_ASSINATURA}}). Essa assinatura não é a assinatura pessoal dos participantes." |
-| `none` (concluído) | "Concluído · aceite eletrônico com evidências" | "Este envelope não possui assinatura criptográfica. Confira a integridade do arquivo pelo resumo SHA-256 final abaixo." |
-| qualquer (em andamento) | "Em andamento" | "Ainda há participantes pendentes. Os resumos do arquivo final serão publicados na conclusão." |
+| `none` (concluído)       | "Concluído · aceite eletrônico com evidências"          | "Este envelope não possui assinatura criptográfica. Confira a integridade do arquivo pelo resumo SHA-256 final abaixo."                                                          |
+| qualquer (em andamento)  | "Em andamento"                                          | "Ainda há participantes pendentes. Os resumos do arquivo final serão publicados na conclusão."                                                                                   |
 
 **[VALIDAR com design]** O selo verde do mock ("Documento concluído e assinado digitalmente") **não deve** ser usado quando `signature_status = none`; usar o rótulo da segunda linha.
 

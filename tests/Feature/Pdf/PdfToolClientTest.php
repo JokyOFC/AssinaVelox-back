@@ -139,13 +139,14 @@ it('anexa páginas somando os totais', function () {
         ->and($this->client->inspect($out)->pageCount)->toBe(3);
 });
 
-it('rejeita PDF corrompido com PdfToolInputRejectedException', function () {
+it('rejeita PDF corrompido com PdfToolInputRejectedException e limpa o diretório temporário', function () {
     $pdf = PdfFixtures::corruptedPdf($this->work.'/corrompido.pdf');
 
     try {
         $this->client->inspect($pdf);
         $this->fail('Esperava PdfToolInputRejectedException.');
     } catch (PdfToolInputRejectedException $exception) {
+        expect(glob($this->work.'/pdftool-tmp/*') ?: [])->toBe([]);
         expect($exception->errorCode)->toBe('invalid_pdf')
             ->and($exception->isInvalidPdf())->toBeTrue()
             ->and($exception->exitCode)->toBe(PdfToolClient::EXIT_INPUT_REJECTED)
@@ -198,13 +199,25 @@ it('monta um ambiente mínimo para o processo filho', function () {
     }
 
     $passed = array_keys(array_filter($env, fn ($value) => $value !== false));
-    $allowed = ['SYSTEMROOT', 'PATH', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'LANG', 'PDFTEST_EXTRA'];
+    $allowed = PHP_OS_FAMILY === 'Windows'
+        ? ['SYSTEMROOT', 'COMSPEC', 'PATH', 'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'PDFTEST_EXTRA']
+        : ['PATH', 'LANG', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'PDFTEST_EXTRA'];
 
     expect(array_diff($passed, $allowed))->toBe([])
         ->and($env['PDFTEST_LEAK_CHECK'] ?? false)->toBeFalse()
         ->and($env['PDFTEST_EXTRA'])->toBe('ok')
         ->and($env['TEMP'])->toBe($this->work)
+        ->and($env['TMP'])->toBe($this->work)
+        ->and($env['TMPDIR'])->toBe($this->work)
+        ->and($env[PHP_OS_FAMILY === 'Windows' ? 'USERPROFILE' : 'HOME'])->toBe($this->work)
         ->and($env['PATH'] ?? false)->not->toBeFalse();
+
+    // Toda variável visível ao PHP (getenv/$_SERVER/$_ENV) é negada explicitamente.
+    foreach (array_keys(getenv()) as $name) {
+        if (! in_array(strtoupper($name), $allowed, true)) {
+            expect($env[$name] ?? false)->toBeFalse();
+        }
+    }
 
     foreach (['APP_KEY', 'DB_PASSWORD', 'AWS_SECRET_ACCESS_KEY'] as $sensitive) {
         expect($env[$sensitive] ?? false)->toBeFalse();

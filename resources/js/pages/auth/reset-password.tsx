@@ -31,7 +31,7 @@ export default function ResetPassword({ token, email }: Props) {
                                 name="email"
                                 autoComplete="email"
                                 value={email}
-                                className="h-10 bg-muted"
+                                className="bg-muted h-10"
                                 readOnly
                             />
                             <InputError message={errors.email} />
@@ -49,14 +49,16 @@ export default function ResetPassword({ token, email }: Props) {
                                 className="h-10"
                                 aria-invalid={!!errors.password}
                             />
-                            <span className="text-[12px] text-muted-foreground">
+                            <span className="text-muted-foreground text-[12px]">
                                 Use letras, números e um símbolo.
                             </span>
                             <InputError message={errors.password} />
                         </div>
 
                         <div className="grid gap-1.5">
-                            <Label htmlFor="password_confirmation">Confirmar nova senha</Label>
+                            <Label htmlFor="password_confirmation">
+                                Confirmar nova senha
+                            </Label>
                             <PasswordInput
                                 id="password_confirmation"
                                 name="password_confirmation"
@@ -66,7 +68,9 @@ export default function ResetPassword({ token, email }: Props) {
                                 className="h-10"
                                 aria-invalid={!!errors.password_confirmation}
                             />
-                            <InputError message={errors.password_confirmation} />
+                            <InputError
+                                message={errors.password_confirmation}
+                            />
                         </div>
 
                         <Button

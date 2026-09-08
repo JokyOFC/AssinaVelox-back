@@ -13,6 +13,7 @@
 ## Texto completo
 
 <!-- INICIO_AVISO -->
+
 ### Como seus dados são usados nesta página
 
 **Quem é responsável pelos seus dados.** Este documento foi enviado por **{{ORGANIZACAO_REMETENTE}}**, que decidiu solicitar a sua assinatura e é a **controladora** dos seus dados pessoais. A **AssinaVelox** ({{RAZAO_SOCIAL}}, CNPJ {{CNPJ}}) é a **operadora**: trata os dados apenas para executar a assinatura, seguindo as instruções da remetente.
@@ -34,7 +35,7 @@
 
 ## Notas de implementação (não exibir ao signatário)
 
-- Registrar na trilha (`audit_events`) que o aviso foi exibido não é necessário; basta que o texto e sua versão constem no *snapshot* da tela de aceite (`signature_acceptances.consent_statement` referencia `ACCEPTANCE_TERMS_VERSION`; sugere-se versionar o aviso junto: `PRIVACY_NOTICE_VERSION = 'v1-2026-09-08'`).
+- Registrar na trilha (`audit_events`) que o aviso foi exibido não é necessário; basta que o texto e sua versão constem no _snapshot_ da tela de aceite (`signature_acceptances.consent_statement` referencia `ACCEPTANCE_TERMS_VERSION`; sugere-se versionar o aviso junto: `PRIVACY_NOTICE_VERSION = 'v1-2026-09-08'`).
 - O aviso deve aparecer **antes** do `POST /assinar/{token}/codigo` e novamente (recolhido) na tela de aceite, junto ao checkbox desmarcado por padrão.
 - "Recusar assinatura" só está disponível após a autenticação (tela `sign`). Na etapa `identify`, "fechar a página" é a única recusa possível — por isso o texto menciona as duas opções.
 - Se a Organização configurar `evidence_show_ip = none`, o IP continua sendo **registrado** (é evidência), apenas não é **exibido** na página de evidências; o aviso permanece verdadeiro.

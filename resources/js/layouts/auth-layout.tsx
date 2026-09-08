@@ -35,8 +35,8 @@ export default function AuthLayout({
     maxWidth = 400,
 }: AuthLayoutProps) {
     return (
-        <div className="flex min-h-svh bg-background text-[14px] text-foreground">
-            <aside className="relative hidden min-w-[360px] flex-[0_0_44%] flex-col justify-between overflow-hidden bg-navy px-12 py-10 text-white lg:flex">
+        <div className="bg-background text-foreground flex min-h-svh text-[14px]">
+            <aside className="bg-navy relative hidden min-w-[360px] flex-[0_0_44%] flex-col justify-between overflow-hidden px-12 py-10 text-white lg:flex">
                 <div
                     aria-hidden
                     className="pointer-events-none absolute -top-[120px] -right-[120px] size-[420px] rounded-full"
@@ -50,11 +50,11 @@ export default function AuthLayout({
                 </Link>
 
                 <div className="relative">
-                    <p className="mb-4 text-[11px] font-semibold tracking-[.24em] text-on-navy-muted uppercase">
+                    <p className="text-on-navy-muted mb-4 text-[11px] font-semibold tracking-[.24em] uppercase">
                         Plataforma de assinatura eletrônica
                     </p>
                     <h2
-                        className="font-extrabold italic uppercase"
+                        className="font-extrabold uppercase italic"
                         style={{
                             fontSize: 'clamp(36px, 4vw, 56px)',
                             lineHeight: 0.95,
@@ -67,29 +67,33 @@ export default function AuthLayout({
                     </h2>
 
                     <div className="mt-9 max-w-[360px] rounded-xl border border-white/10 bg-white/[.06] px-5 pt-[18px] pb-3.5">
-                        <div className="mb-2 text-[9.5px] font-bold tracking-[.16em] text-on-navy-muted uppercase">
+                        <div className="text-on-navy-muted mb-2 text-[9.5px] font-bold tracking-[.16em] uppercase">
                             Assinatura
                         </div>
                         <div
-                            className="animate-sign-wipe -rotate-2 font-hand text-[34px] leading-none text-white"
-                            style={{ fontFamily: "'Caveat', 'Segoe Script', cursive" }}
+                            className="animate-sign-wipe font-hand -rotate-2 text-[34px] leading-none text-white"
+                            style={{
+                                fontFamily: "'Caveat', 'Segoe Script', cursive",
+                            }}
                         >
                             Maria A. Souza
                         </div>
-                        <div className="mt-3.5 flex items-center justify-between border-t border-dashed border-white/[.14] pt-3 text-[12px] text-on-navy-secondary">
+                        <div className="text-on-navy-secondary mt-3.5 flex items-center justify-between border-t border-dashed border-white/[.14] pt-3 text-[12px]">
                             <span>Contrato de locação · Apto 302</span>
-                            <span className="font-bold text-success-solid">Assinado ✓</span>
+                            <span className="text-success-solid font-bold">
+                                Assinado ✓
+                            </span>
                         </div>
                     </div>
 
-                    <div className="mt-7 flex flex-wrap gap-x-6 gap-y-2.5 text-[12.5px] font-semibold text-on-navy-secondary">
+                    <div className="text-on-navy-secondary mt-7 flex flex-wrap gap-x-6 gap-y-2.5 text-[12.5px] font-semibold">
                         {TRUST_BADGES.map((badge) => (
                             <span key={badge}>✓ {badge}</span>
                         ))}
                     </div>
                 </div>
 
-                <div className="relative flex gap-5 text-[12px] text-on-navy-muted">
+                <div className="text-on-navy-muted relative flex gap-5 text-[12px]">
                     <Link href={terms()} className="hover:text-white">
                         Termos de uso
                     </Link>
@@ -112,7 +116,10 @@ export default function AuthLayout({
                     className="flex w-full flex-col gap-6"
                     style={{ maxWidth }}
                 >
-                    <Link href={home()} className="inline-block w-fit lg:hidden">
+                    <Link
+                        href={home()}
+                        className="inline-block w-fit lg:hidden"
+                    >
                         <AppLogo height={30} />
                     </Link>
                     {!hideHeader && (title || description) && (
@@ -123,7 +130,7 @@ export default function AuthLayout({
                                 </h1>
                             )}
                             {description && (
-                                <p className="mt-2 text-[14px] leading-[1.55] text-text-secondary">
+                                <p className="text-text-secondary mt-2 text-[14px] leading-[1.55]">
                                     {description}
                                 </p>
                             )}

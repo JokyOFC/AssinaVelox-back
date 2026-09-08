@@ -137,14 +137,16 @@ export const recipientTabLabels = {
 // Documento
 // ---------------------------------------------------------------------------
 
-export const documentProcessingLabels: Record<DocumentProcessingStatus, string> =
-    {
-        uploaded: 'Enviado agora',
-        converting: 'Convertendo…',
-        ready: 'Pronto',
-        failed: 'Falha ao processar',
-        blocked: 'Arquivo bloqueado',
-    };
+export const documentProcessingLabels: Record<
+    DocumentProcessingStatus,
+    string
+> = {
+    uploaded: 'Enviado agora',
+    converting: 'Convertendo…',
+    ready: 'Pronto',
+    failed: 'Falha ao processar',
+    blocked: 'Arquivo bloqueado',
+};
 
 export const documentProcessingTones: Record<
     DocumentProcessingStatus,
@@ -270,7 +272,9 @@ export const adminOrgTabLabels = {
 } as const;
 
 /** Agrupa o status bruto do Mercado Pago no status de exibição. */
-export function paymentDisplayStatus(status: PaymentStatus): PaymentDisplayStatus {
+export function paymentDisplayStatus(
+    status: PaymentStatus,
+): PaymentDisplayStatus {
     switch (status) {
         case 'approved':
         case 'authorized':

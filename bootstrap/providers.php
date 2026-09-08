@@ -1,7 +1,15 @@
 <?php
 
+use App\Integrations\IntegrationsServiceProvider;
+use App\Providers\AppServiceProvider;
+use App\Providers\AuthServiceProvider;
+use App\Providers\FortifyServiceProvider;
+use App\Providers\HorizonServiceProvider;
+
 return [
-    App\Providers\AppServiceProvider::class,
-    App\Providers\FortifyServiceProvider::class,
-    App\Providers\HorizonServiceProvider::class,
+    AppServiceProvider::class,
+    AuthServiceProvider::class,
+    FortifyServiceProvider::class,
+    HorizonServiceProvider::class,
+    IntegrationsServiceProvider::class,
 ];

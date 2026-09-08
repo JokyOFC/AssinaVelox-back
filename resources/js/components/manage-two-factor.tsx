@@ -47,13 +47,19 @@ export default function ManageTwoFactor(props: Props) {
     }
 
     return (
-        <div id="2fa" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-card">
+        <div
+            id="2fa"
+            className="border-border bg-card shadow-card flex flex-col gap-4 rounded-xl border p-5"
+        >
             <Heading
                 variant="small"
                 title="Autenticação em duas etapas"
                 description="Um código temporário do seu aplicativo autenticador é exigido a cada login."
                 action={
-                    <Badge variant={twoFactorEnabled ? 'success' : 'neutral'} dot>
+                    <Badge
+                        variant={twoFactorEnabled ? 'success' : 'neutral'}
+                        dot
+                    >
                         {twoFactorEnabled ? 'Ativa' : 'Inativa'}
                     </Badge>
                 }
@@ -61,14 +67,24 @@ export default function ManageTwoFactor(props: Props) {
 
             {twoFactorEnabled ? (
                 <div className="flex flex-col gap-4">
-                    <p className="text-[13px] leading-[1.55] text-text-secondary">
-                        Ao entrar, você informará um código gerado por um aplicativo compatível com TOTP (Google
-                        Authenticator, Authy, 1Password etc.).
+                    <p className="text-text-secondary text-[13px] leading-[1.55]">
+                        Ao entrar, você informará um código gerado por um
+                        aplicativo compatível com TOTP (Google Authenticator,
+                        Authy, 1Password etc.).
                     </p>
-                    <TwoFactorRecoveryCodes recoveryCodesList={recoveryCodesList} fetchRecoveryCodes={fetchRecoveryCodes} errors={errors} />
+                    <TwoFactorRecoveryCodes
+                        recoveryCodesList={recoveryCodesList}
+                        fetchRecoveryCodes={fetchRecoveryCodes}
+                        errors={errors}
+                    />
                     <Form {...disable.form()}>
                         {({ processing }) => (
-                            <Button variant="destructive" size="sm" type="submit" disabled={processing}>
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                type="submit"
+                                disabled={processing}
+                            >
                                 Desativar 2FA
                             </Button>
                         )}
@@ -76,9 +92,10 @@ export default function ManageTwoFactor(props: Props) {
                 </div>
             ) : (
                 <div className="flex flex-col items-start gap-4">
-                    <p className="text-[13px] leading-[1.55] text-text-secondary">
-                        Ao ativar, você precisará de um código do aplicativo autenticador além da senha. Recomendado
-                        para todos os usuários; obrigatório quando a organização exige.
+                    <p className="text-text-secondary text-[13px] leading-[1.55]">
+                        Ao ativar, você precisará de um código do aplicativo
+                        autenticador além da senha. Recomendado para todos os
+                        usuários; obrigatório quando a organização exige.
                     </p>
                     {hasSetupData ? (
                         <Button onClick={() => setShowSetupModal(true)}>
@@ -86,7 +103,10 @@ export default function ManageTwoFactor(props: Props) {
                             Continuar configuração
                         </Button>
                     ) : (
-                        <Form {...enable.form()} onSuccess={() => setShowSetupModal(true)}>
+                        <Form
+                            {...enable.form()}
+                            onSuccess={() => setShowSetupModal(true)}
+                        >
                             {({ processing }) => (
                                 <Button type="submit" disabled={processing}>
                                     <ShieldCheck />

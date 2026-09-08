@@ -29,13 +29,15 @@ export default function Heading({
                 <h2
                     className={cn(
                         'leading-tight font-semibold',
-                        variant === 'small' ? 'text-[15px]' : 'text-[18px] font-bold',
+                        variant === 'small'
+                            ? 'text-[15px]'
+                            : 'text-[18px] font-bold',
                     )}
                 >
                     {title}
                 </h2>
                 {description && (
-                    <p className="mt-1 text-[13px] leading-[1.5] text-muted-foreground">
+                    <p className="text-muted-foreground mt-1 text-[13px] leading-[1.5]">
                         {description}
                     </p>
                 )}

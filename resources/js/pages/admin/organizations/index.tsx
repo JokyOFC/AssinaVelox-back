@@ -13,11 +13,31 @@ import { SubscriptionStatusBadge } from '@/components/status/subscription-status
 import { TablePagination } from '@/components/table-pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatCurrency, formatCurrencyCompact, formatCurrencyShort, formatNumber, formatPercent, formatRelativeDateTime } from '@/lib/format';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+    formatCurrency,
+    formatCurrencyCompact,
+    formatCurrencyShort,
+    formatNumber,
+    formatPercent,
+    formatRelativeDateTime,
+} from '@/lib/format';
 import { adminOrgTabLabels, planLabels } from '@/lib/labels';
-import { exportMethod as adminExport, index as adminOrganizations, show as adminOrganizationShow } from '@/routes/admin/organizations';
+import {
+    exportMethod as adminExport,
+    index as adminOrganizations,
+    show as adminOrganizationShow,
+} from '@/routes/admin/organizations';
 import type { Paginated, PlanCode, SubscriptionStatus, UserRef } from '@/types';
 
 type AdminOrgTab = 'all' | 'active' | 'trialing' | 'past_due' | 'canceled';
@@ -39,29 +59,49 @@ export interface AdminOrganizationRow {
 }
 
 export interface AdminOrganizationsIndexProps {
-    filters: { status: AdminOrgTab; plan: PlanCode | null; created_from: string | null; created_to: string | null; q: string };
+    filters: {
+        status: AdminOrgTab;
+        plan: PlanCode | null;
+        created_from: string | null;
+        created_to: string | null;
+        q: string;
+    };
     kpis: {
         active_accounts: { value: number; new_this_month: number };
         mrr_cents: { value: number; delta_pct: number | null };
-        envelopes_today: { value: number; peak_hour: number | null; peak_count: number | null };
+        envelopes_today: {
+            value: number;
+            peak_hour: number | null;
+            peak_count: number | null;
+        };
         trials_expiring_7d: { value: number; without_envelope: number };
         past_due: { value: number; overdue_cents: number };
     };
     tabs: Record<AdminOrgTab, number>;
-    organizations: Paginated<AdminOrganizationRow>;
+    customers: Paginated<AdminOrganizationRow>;
 }
 
-const PLAN_BADGE: Record<PlanCode, 'planFree' | 'planProfessional' | 'planEnterprise'> = {
+const PLAN_BADGE: Record<
+    PlanCode,
+    'planFree' | 'planProfessional' | 'planEnterprise'
+> = {
     free: 'planFree',
     professional: 'planProfessional',
     enterprise: 'planEnterprise',
 };
 
 /** Painel interno › Clientes (ROUTES §2.20; DESIGN §6.13). */
-export default function AdminOrganizationsIndex({ filters, kpis, tabs, organizations }: AdminOrganizationsIndexProps) {
+export default function AdminOrganizationsIndex({
+    filters,
+    kpis,
+    tabs,
+    customers,
+}: AdminOrganizationsIndexProps) {
     const apply = (next: Partial<AdminOrganizationsIndexProps['filters']>) => {
         router.get(
-            adminOrganizations.url({ query: { ...filters, ...next, page: undefined } }),
+            adminOrganizations.url({
+                query: { ...filters, ...next, page: undefined },
+            }),
             {},
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -74,25 +114,41 @@ export default function AdminOrganizationsIndex({ filters, kpis, tabs, organizat
             width: 'minmax(0,2.2fr)',
             cell: (org, index) => (
                 <div className="flex min-w-0 items-center gap-3">
-                    <AvatarInitials initials={org.initials} index={index} size="lg" />
+                    <AvatarInitials
+                        initials={org.initials}
+                        index={index}
+                        size="lg"
+                    />
                     <span className="min-w-0">
-                        <Link href={adminOrganizationShow(org.id)} className="block truncate font-semibold hover:text-primary">
+                        <Link
+                            href={adminOrganizationShow(org.id)}
+                            className="hover:text-primary block truncate font-semibold"
+                        >
                             {org.name}
                         </Link>
-                        <span className="block truncate text-[12px] text-muted-foreground tabular">
+                        <span className="text-muted-foreground tabular block truncate text-[12px]">
                             {org.public_id} · {org.owner.email}
                         </span>
                     </span>
                 </div>
             ),
         },
-        { key: 'plan', header: 'Plano', width: '1fr', cell: (org) => <Badge variant={PLAN_BADGE[org.plan.key]}>{org.plan.name || planLabels[org.plan.key]}</Badge> },
+        {
+            key: 'plan',
+            header: 'Plano',
+            width: '1fr',
+            cell: (org) => (
+                <Badge variant={PLAN_BADGE[org.plan.key]}>
+                    {org.plan.name || planLabels[org.plan.key]}
+                </Badge>
+            ),
+        },
         {
             key: 'members',
             header: 'Usuários',
             width: '.9fr',
             cell: (org) => (
-                <span className="text-[13px] text-text-secondary tabular">
+                <span className="text-text-secondary tabular text-[13px]">
                     {org.members.used}
                     {org.members.limit !== null && ` / ${org.members.limit}`}
                 </span>
@@ -104,17 +160,46 @@ export default function AdminOrganizationsIndex({ filters, kpis, tabs, organizat
             width: '1.3fr',
             cell: (org) => (
                 <div className="w-full pr-3">
-                    <ProgressMeter label="" used={org.envelopes_cycle.used} limit={org.envelopes_cycle.limit} size="sm" className="[&>div:first-child]:justify-end" />
+                    <ProgressMeter
+                        label=""
+                        used={org.envelopes_cycle.used}
+                        limit={org.envelopes_cycle.limit}
+                        size="sm"
+                        className="[&>div:first-child]:justify-end"
+                    />
                 </div>
             ),
         },
-        { key: 'mrr', header: 'MRR', width: '1fr', cell: (org) => <span className="font-semibold tabular">{formatCurrencyCompact(org.mrr_cents)}</span> },
-        { key: 'status', header: 'Status', width: '1.1fr', cell: (org) => <SubscriptionStatusBadge status={org.subscription_status} label={org.status_label} /> },
+        {
+            key: 'mrr',
+            header: 'MRR',
+            width: '1fr',
+            cell: (org) => (
+                <span className="tabular font-semibold">
+                    {formatCurrencyCompact(org.mrr_cents)}
+                </span>
+            ),
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: '1.1fr',
+            cell: (org) => (
+                <SubscriptionStatusBadge
+                    status={org.subscription_status}
+                    label={org.status_label}
+                />
+            ),
+        },
         {
             key: 'last_seen',
             header: 'Último acesso',
             width: '1fr',
-            cell: (org) => <span className="text-[13px] whitespace-nowrap text-text-secondary tabular">{formatRelativeDateTime(org.last_seen_at)}</span>,
+            cell: (org) => (
+                <span className="text-text-secondary tabular text-[13px] whitespace-nowrap">
+                    {formatRelativeDateTime(org.last_seen_at)}
+                </span>
+            ),
         },
         {
             key: 'actions',
@@ -126,26 +211,40 @@ export default function AdminOrganizationsIndex({ filters, kpis, tabs, organizat
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <span>
-                                <Button variant="outline-sm" size="xxs" disabled>
+                                <Button
+                                    variant="outline-sm"
+                                    size="xxs"
+                                    disabled
+                                >
                                     Acessar como
                                 </Button>
                             </span>
                         </TooltipTrigger>
-                        <TooltipContent>Impersonação chega na Fase 2</TooltipContent>
+                        <TooltipContent>
+                            Impersonação chega na Fase 2
+                        </TooltipContent>
                     </Tooltip>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-xs" aria-label="Ações">
-                                <MoreHorizontal className="size-4 text-muted-foreground" />
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label="Ações"
+                            >
+                                <MoreHorizontal className="text-muted-foreground size-4" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem asChild>
-                                <Link href={adminOrganizationShow(org.id)}>Ver detalhes</Link>
+                                <Link href={adminOrganizationShow(org.id)}>
+                                    Ver detalhes
+                                </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onSelect={() => {
-                                    void navigator.clipboard?.writeText(org.public_id);
+                                    void navigator.clipboard?.writeText(
+                                        org.public_id,
+                                    );
                                     toast.success('ID copiado');
                                 }}
                             >
@@ -159,11 +258,13 @@ export default function AdminOrganizationsIndex({ filters, kpis, tabs, organizat
         },
     ];
 
-    const tabOptions = (Object.keys(adminOrgTabLabels) as AdminOrgTab[]).map((key) => ({
-        value: key,
-        label: adminOrgTabLabels[key],
-        count: tabs[key],
-    }));
+    const tabOptions = (Object.keys(adminOrgTabLabels) as AdminOrgTab[]).map(
+        (key) => ({
+            value: key,
+            label: adminOrgTabLabels[key],
+            count: tabs[key],
+        }),
+    );
 
     return (
         <>
@@ -182,43 +283,96 @@ export default function AdminOrganizationsIndex({ filters, kpis, tabs, organizat
             />
 
             <KpiGrid min={150}>
-                <KpiCard variant="compact" label="Contas ativas" value={formatNumber(kpis.active_accounts.value)} caption={`+${formatNumber(kpis.active_accounts.new_this_month)} este mês`} captionTone="success" />
+                <KpiCard
+                    variant="compact"
+                    label="Contas ativas"
+                    value={formatNumber(kpis.active_accounts.value)}
+                    caption={`+${formatNumber(kpis.active_accounts.new_this_month)} este mês`}
+                    captionTone="success"
+                />
                 <KpiCard
                     variant="compact"
                     label="MRR"
                     value={formatCurrencyShort(kpis.mrr_cents.value)}
-                    caption={kpis.mrr_cents.delta_pct !== null ? `${kpis.mrr_cents.delta_pct >= 0 ? '+' : ''}${formatPercent(kpis.mrr_cents.delta_pct)} vs. mês anterior` : '—'}
-                    captionTone={kpis.mrr_cents.delta_pct !== null && kpis.mrr_cents.delta_pct < 0 ? 'danger' : 'success'}
+                    caption={
+                        kpis.mrr_cents.delta_pct !== null
+                            ? `${kpis.mrr_cents.delta_pct >= 0 ? '+' : ''}${formatPercent(kpis.mrr_cents.delta_pct)} vs. mês anterior`
+                            : '—'
+                    }
+                    captionTone={
+                        kpis.mrr_cents.delta_pct !== null &&
+                        kpis.mrr_cents.delta_pct < 0
+                            ? 'danger'
+                            : 'success'
+                    }
                 />
                 <KpiCard
                     variant="compact"
                     label="Documentos hoje"
                     value={formatNumber(kpis.envelopes_today.value)}
-                    caption={kpis.envelopes_today.peak_hour !== null ? `pico às ${kpis.envelopes_today.peak_hour}h · ${formatNumber(kpis.envelopes_today.peak_count ?? 0)}/h` : 'sem envios ainda'}
+                    caption={
+                        kpis.envelopes_today.peak_hour !== null
+                            ? `pico às ${kpis.envelopes_today.peak_hour}h · ${formatNumber(kpis.envelopes_today.peak_count ?? 0)}/h`
+                            : 'sem envios ainda'
+                    }
                 />
-                <KpiCard variant="compact" label="Trials expirando (7 d)" value={formatNumber(kpis.trials_expiring_7d.value)} caption={`${formatNumber(kpis.trials_expiring_7d.without_envelope)} sem documento enviado`} captionTone="warning" />
-                <KpiCard variant="compact" label="Inadimplentes" value={formatNumber(kpis.past_due.value)} caption={`${formatCurrency(kpis.past_due.overdue_cents)} em atraso`} captionTone="danger" />
+                <KpiCard
+                    variant="compact"
+                    label="Trials expirando (7 d)"
+                    value={formatNumber(kpis.trials_expiring_7d.value)}
+                    caption={`${formatNumber(kpis.trials_expiring_7d.without_envelope)} sem documento enviado`}
+                    captionTone="warning"
+                />
+                <KpiCard
+                    variant="compact"
+                    label="Inadimplentes"
+                    value={formatNumber(kpis.past_due.value)}
+                    caption={`${formatCurrency(kpis.past_due.overdue_cents)} em atraso`}
+                    captionTone="danger"
+                />
             </KpiGrid>
 
-            <div className="rounded-xl border border-border bg-card shadow-card">
-                <UnderlineTabs value={filters.status} onChange={(status) => apply({ status })} options={tabOptions} />
+            <div className="border-border bg-card shadow-card rounded-xl border">
+                <UnderlineTabs
+                    value={filters.status}
+                    onChange={(status) => apply({ status })}
+                    options={tabOptions}
+                />
                 <FilterBar>
-                    <SearchInput value={filters.q} onChange={(q) => apply({ q })} placeholder="Buscar por empresa, CNPJ, e-mail ou ID da conta" />
+                    <SearchInput
+                        value={filters.q}
+                        onChange={(q) => apply({ q })}
+                        placeholder="Buscar por empresa, CNPJ, e-mail ou ID da conta"
+                    />
                     <FilterChip
                         label="Plano"
                         value={filters.plan}
-                        onChange={(plan) => apply({ plan: plan as PlanCode | null })}
-                        options={(Object.keys(planLabels) as PlanCode[]).map((key) => ({ value: key, label: planLabels[key] }))}
+                        onChange={(plan) =>
+                            apply({ plan: plan as PlanCode | null })
+                        }
+                        options={(Object.keys(planLabels) as PlanCode[]).map(
+                            (key) => ({ value: key, label: planLabels[key] }),
+                        )}
                     />
                 </FilterBar>
                 <DataTable
                     columns={columns}
-                    rows={organizations.data}
+                    rows={customers.data}
                     rowKey={(org) => org.id}
                     minWidth={1080}
-                    empty={<EmptyState variant="inline" title="Nenhuma conta encontrada" />}
+                    empty={
+                        <EmptyState
+                            variant="inline"
+                            title="Nenhuma conta encontrada"
+                        />
+                    }
                 />
-                <TablePagination paginated={organizations} entity="contas" entitySingular="conta" showPerPage={false} />
+                <TablePagination
+                    paginated={customers}
+                    entity="contas"
+                    entitySingular="conta"
+                    showPerPage={false}
+                />
             </div>
         </>
     );

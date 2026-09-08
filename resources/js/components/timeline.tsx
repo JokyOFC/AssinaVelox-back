@@ -19,14 +19,17 @@ export function Timeline({
     emptyText = 'Nenhum evento registrado ainda.',
     className,
 }: {
-    events: Pick<AuditEvent, 'id' | 'kind' | 'title' | 'meta' | 'occurred_at'>[];
+    events: Pick<
+        AuditEvent,
+        'id' | 'kind' | 'title' | 'meta' | 'occurred_at'
+    >[];
     footer?: ReactNode;
     emptyText?: string;
     className?: string;
 }) {
     if (events.length === 0) {
         return (
-            <p className="px-1 py-6 text-center text-[13.5px] text-muted-foreground">
+            <p className="text-muted-foreground px-1 py-6 text-center text-[13.5px]">
                 {emptyText}
             </p>
         );
@@ -53,14 +56,14 @@ export function Timeline({
                                     {index + 1}
                                 </span>
                                 {!last && (
-                                    <span className="my-1 w-0.5 flex-1 bg-accent" />
+                                    <span className="bg-accent my-1 w-0.5 flex-1" />
                                 )}
                             </div>
                             <div className={cn(!last && 'pb-4')}>
                                 <p className="text-[13.5px] leading-[1.3] font-semibold">
                                     {event.title}
                                 </p>
-                                <p className="mt-[3px] text-[12px] text-muted-foreground tabular">
+                                <p className="text-muted-foreground tabular mt-[3px] text-[12px]">
                                     {formatDateTime(event.occurred_at)}
                                     {event.meta && ` · ${event.meta}`}
                                 </p>
@@ -89,15 +92,17 @@ export function HashBox({
     return (
         <div
             className={cn(
-                'rounded-lg border border-border bg-sidebar p-3 text-[12px]',
+                'border-border bg-sidebar rounded-lg border p-3 text-[12px]',
                 className,
             )}
         >
             <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-text-secondary">{label}</span>
+                <span className="text-text-secondary font-semibold">
+                    {label}
+                </span>
                 {action}
             </div>
-            <code className="mt-1 block font-mono break-all text-foreground">
+            <code className="text-foreground mt-1 block font-mono break-all">
                 {value ?? '—'}
             </code>
         </div>

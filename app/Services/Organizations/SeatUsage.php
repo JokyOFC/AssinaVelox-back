@@ -40,7 +40,7 @@ class SeatUsage
             'limit' => $limit,
             'pending_invitations' => $pending,
             'available' => $limit === null ? null : max(0, $limit - $used - $pending),
-            'plan_name' => $plan?->name ?? 'Grátis',
+            'plan_name' => $plan->name ?? 'Grátis',
         ];
     }
 

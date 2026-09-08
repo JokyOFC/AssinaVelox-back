@@ -69,7 +69,9 @@ export function AvatarInitials({
     size?: keyof typeof SIZES;
 }) {
     const color =
-        tone === 'palette' ? PALETTE[Math.abs(index) % PALETTE.length] : TONES[tone];
+        tone === 'palette'
+            ? PALETTE[Math.abs(index) % PALETTE.length]
+            : TONES[tone];
 
     return (
         <span
@@ -125,7 +127,7 @@ export function AvatarStack({
                 )}
             </div>
             {progress && (
-                <span className="text-[12.5px] whitespace-nowrap text-text-secondary tabular">
+                <span className="text-text-secondary tabular text-[12.5px] whitespace-nowrap">
                     {progress}
                 </span>
             )}

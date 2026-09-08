@@ -23,8 +23,8 @@ export default function VerifyEmail({ status }: Props) {
         <>
             <Head title="Verifique seu e-mail" />
 
-            <div className="flex flex-col gap-4 rounded-xl border border-success-border bg-success-bg p-6">
-                <span className="flex size-10 items-center justify-center rounded-[10px] bg-success-solid text-white">
+            <div className="border-success-border bg-success-bg flex flex-col gap-4 rounded-xl border p-6">
+                <span className="bg-success-solid flex size-10 items-center justify-center rounded-[10px] text-white">
                     {status === 'verification-link-sent' ? (
                         <Check className="size-5 stroke-[2.5]" />
                     ) : (
@@ -32,15 +32,20 @@ export default function VerifyEmail({ status }: Props) {
                     )}
                 </span>
                 <div>
-                    <h1 className="text-[20px] font-bold">Verifique seu e-mail</h1>
-                    <p className="mt-2 text-[14px] leading-[1.55] text-success">
+                    <h1 className="text-[20px] font-bold">
+                        Verifique seu e-mail
+                    </h1>
+                    <p className="text-success mt-2 text-[14px] leading-[1.55]">
                         Enviamos um link de confirmação para{' '}
                         <b>{auth.user?.email}</b>. Clique nele para ativar sua
-                        conta. Se não aparecer em alguns minutos, confira a pasta
-                        de spam.
+                        conta. Se não aparecer em alguns minutos, confira a
+                        pasta de spam.
                     </p>
                 </div>
-                <Form {...send.form()} className="flex flex-wrap items-center gap-3">
+                <Form
+                    {...send.form()}
+                    className="flex flex-wrap items-center gap-3"
+                >
                     {({ processing }) => (
                         <Button
                             type="submit"
@@ -55,13 +60,13 @@ export default function VerifyEmail({ status }: Props) {
                 </Form>
             </div>
 
-            <p className="text-center text-[13.5px] text-text-secondary">
+            <p className="text-text-secondary text-center text-[13.5px]">
                 E-mail errado?{' '}
                 <Link
                     href={logout()}
                     method="post"
                     as="button"
-                    className="font-semibold text-primary hover:underline"
+                    className="text-primary font-semibold hover:underline"
                 >
                     Sair e entrar com outra conta
                 </Link>

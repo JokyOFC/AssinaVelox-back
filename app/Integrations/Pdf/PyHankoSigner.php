@@ -19,11 +19,13 @@ use Psr\Log\LoggerInterface;
  * Assinatura PAdES B-B com o certificado A1 da empresa operadora via
  * `pdftool sign` (pyHanko).
  *
- * Configuração (config/pdftool.php, company_certificate): pfx_path e o NOME da
- * variável de ambiente com a passphrase. O valor da passphrase fica apenas no
- * ambiente do PHP e é injetado pelo PdfToolClient no ambiente do processo filho
- * sob esse nome — nunca em argv, log, fila ou banco. isConfigured() exige o
- * arquivo PFX existente e a variável definida.
+ * Configuração (config/pdftool.php, company_certificate): enabled
+ * (COMPANY_CERT_ENABLED), pfx_path (COMPANY_CERT_PFX_PATH) e o NOME da variável
+ * de ambiente com a senha do PKCS#12 (COMPANY_CERT_PASSWORD_ENV, padrão
+ * COMPANY_CERT_PASSWORD). O valor da senha fica apenas no ambiente do PHP e é
+ * injetado pelo PdfToolClient no ambiente do processo filho sob esse nome —
+ * nunca em argv, log, fila ou banco. isConfigured() exige enabled=true, arquivo
+ * PFX existente, variável de senha definida e pdftool disponível.
  *
  * O que NÃO é afirmado: carimbo do tempo (B-T), LTV/LTA, verificação de
  * revogação. `environment` (test|production) rotula o certificado; certificados
@@ -41,14 +43,22 @@ class PyHankoSigner implements PdfSigner
         private readonly LoggerInterface $logger,
     ) {}
 
+    public function isEnabled(): bool
+    {
+        return filter_var($this->certificate('enabled', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
     public function pfxPath(): string
     {
         return trim((string) $this->certificate('pfx_path', ''));
     }
 
-    public function passphraseEnvName(): string
+    /**
+     * NOME da variável de ambiente que contém a senha do PKCS#12 (nunca o valor).
+     */
+    public function passwordEnvName(): string
     {
-        return trim((string) $this->certificate('passphrase_env', 'COMPANY_CERT_PASSPHRASE'));
+        return trim((string) $this->certificate('password_env', 'COMPANY_CERT_PASSWORD'));
     }
 
     public function certificateName(): string
@@ -102,6 +112,10 @@ class PyHankoSigner implements PdfSigner
     {
         $problems = [];
 
+        if (! $this->isEnabled()) {
+            $problems[] = 'COMPANY_CERT_ENABLED não é true (assinatura criptográfica desligada).';
+        }
+
         $pfx = $this->pfxPath();
         if ($pfx === '') {
             $problems[] = 'COMPANY_CERT_PFX_PATH não definido.';
@@ -109,11 +123,11 @@ class PyHankoSigner implements PdfSigner
             $problems[] = 'Arquivo PKCS#12 não encontrado em COMPANY_CERT_PFX_PATH.';
         }
 
-        $envName = $this->passphraseEnvName();
+        $envName = $this->passwordEnvName();
         if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $envName) !== 1) {
-            $problems[] = 'COMPANY_CERT_PASSPHRASE_ENV não é um nome de variável válido.';
-        } elseif (! $this->passphraseIsPresent($envName)) {
-            $problems[] = sprintf('Variável de ambiente %s (passphrase) não definida ou vazia no ambiente do PHP.', $envName);
+            $problems[] = 'COMPANY_CERT_PASSWORD_ENV não é um nome de variável válido.';
+        } elseif (! $this->passwordIsPresent($envName)) {
+            $problems[] = sprintf('Variável de ambiente %s (senha do PKCS#12) não definida ou vazia no ambiente do PHP.', $envName);
         }
 
         if (! $this->client->isAvailable()) {
@@ -144,7 +158,7 @@ class PyHankoSigner implements PdfSigner
             $request->inputPath,
             $request->outputPath,
             $this->pfxPath(),
-            $this->passphraseEnvName(),
+            $this->passwordEnvName(),
             $options,
             $correlationId,
         );
@@ -173,7 +187,7 @@ class PyHankoSigner implements PdfSigner
         return $this->client->validate($pdfPath, $trustRoots === [] ? $this->trustRoots() : $trustRoots);
     }
 
-    private function passphraseIsPresent(string $envName): bool
+    private function passwordIsPresent(string $envName): bool
     {
         $value = Env::getRepository()->get($envName);
 

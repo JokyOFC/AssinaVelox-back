@@ -56,7 +56,10 @@ export function CommandSearch({ className }: { className?: string }) {
 
     useEffect(() => {
         const handler = (event: KeyboardEvent) => {
-            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+            if (
+                (event.metaKey || event.ctrlKey) &&
+                event.key.toLowerCase() === 'k'
+            ) {
                 event.preventDefault();
                 setOpen((prev) => !prev);
             }
@@ -89,11 +92,14 @@ export function CommandSearch({ className }: { className?: string }) {
             abortRef.current = controller;
 
             try {
-                const response = await fetch(searchIndex.url({ query: { q: term } }), {
-                    headers: { Accept: 'application/json' },
-                    credentials: 'same-origin',
-                    signal: controller.signal,
-                });
+                const response = await fetch(
+                    searchIndex.url({ query: { q: term } }),
+                    {
+                        headers: { Accept: 'application/json' },
+                        credentials: 'same-origin',
+                        signal: controller.signal,
+                    },
+                );
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
@@ -124,7 +130,8 @@ export function CommandSearch({ className }: { className?: string }) {
         router.visit(showEnvelope(id).url);
     };
 
-    const hasResults = results.envelopes.length > 0 || results.recipients.length > 0;
+    const hasResults =
+        results.envelopes.length > 0 || results.recipients.length > 0;
 
     return (
         <>
@@ -133,7 +140,7 @@ export function CommandSearch({ className }: { className?: string }) {
                 onClick={() => setOpen(true)}
                 aria-label="Buscar (⌘K)"
                 className={cn(
-                    'flex h-[34px] w-[clamp(160px,24vw,260px)] items-center gap-2 rounded-lg border border-input bg-white px-[10px] text-muted-foreground transition-colors hover:bg-accent-subtle',
+                    'border-input text-muted-foreground hover:bg-accent-subtle flex h-[34px] w-[clamp(160px,24vw,260px)] items-center gap-2 rounded-lg border bg-white px-[10px] transition-colors',
                     className,
                 )}
             >
@@ -158,17 +165,19 @@ export function CommandSearch({ className }: { className?: string }) {
                 />
                 <CommandList>
                     {loading && (
-                        <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+                        <div className="text-muted-foreground flex items-center justify-center gap-2 py-6 text-[13px]">
                             <Spinner className="size-4" /> Buscando…
                         </div>
                     )}
                     {!loading && query.trim().length < 2 && (
-                        <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">
+                        <p className="text-muted-foreground px-4 py-6 text-center text-[13px]">
                             Digite ao menos 2 caracteres para buscar.
                         </p>
                     )}
                     {!loading && query.trim().length >= 2 && !hasResults && (
-                        <CommandEmpty>Nenhum resultado para “{query}”.</CommandEmpty>
+                        <CommandEmpty>
+                            Nenhum resultado para “{query}”.
+                        </CommandEmpty>
                     )}
                     {!loading && results.envelopes.length > 0 && (
                         <CommandGroup heading="Documentos">
@@ -179,16 +188,17 @@ export function CommandSearch({ className }: { className?: string }) {
                                     onSelect={() => openEnvelope(envelope.id)}
                                     className="gap-3"
                                 >
-                                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-primary">
+                                    <span className="bg-accent-subtle text-primary flex size-8 shrink-0 items-center justify-center rounded-lg">
                                         <FileText className="size-4" />
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <span className="block truncate font-semibold">
                                             {envelope.title}
                                         </span>
-                                        <span className="block truncate text-[12px] text-muted-foreground tabular">
+                                        <span className="text-muted-foreground tabular block truncate text-[12px]">
                                             {envelope.display_code}
-                                            {envelope.folder && ` · ${envelope.folder}`}
+                                            {envelope.folder &&
+                                                ` · ${envelope.folder}`}
                                         </span>
                                     </span>
                                     <EnvelopeStatusBadge
@@ -209,18 +219,21 @@ export function CommandSearch({ className }: { className?: string }) {
                                 <CommandItem
                                     key={recipient.id}
                                     value={`rec-${recipient.id}`}
-                                    onSelect={() => openEnvelope(recipient.envelope_id)}
+                                    onSelect={() =>
+                                        openEnvelope(recipient.envelope_id)
+                                    }
                                     className="gap-3"
                                 >
-                                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warning-bg text-warning">
+                                    <span className="bg-warning-bg text-warning flex size-8 shrink-0 items-center justify-center rounded-lg">
                                         <UserRound className="size-4" />
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <span className="block truncate font-semibold">
                                             {recipient.name}
                                         </span>
-                                        <span className="block truncate text-[12px] text-muted-foreground">
-                                            {recipient.email} · {recipient.envelope_title}
+                                        <span className="text-muted-foreground block truncate text-[12px]">
+                                            {recipient.email} ·{' '}
+                                            {recipient.envelope_title}
                                         </span>
                                     </span>
                                 </CommandItem>

@@ -26,7 +26,11 @@ import {
     SidebarHeader,
     useSidebar,
 } from '@/components/ui/sidebar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
 import type { RouteDefinition } from '@/wayfinder';
@@ -37,14 +41,21 @@ import { index as adminOrganizations } from '@/routes/admin/organizations';
 import { index as adminSettings } from '@/routes/admin/settings';
 import { index as adminUsers } from '@/routes/admin/users';
 import { index as billingIndex } from '@/routes/billing';
-import { create as envelopesCreate, index as envelopesIndex } from '@/routes/envelopes';
+import {
+    create as envelopesCreate,
+    index as envelopesIndex,
+} from '@/routes/envelopes';
 import { index as integrationsIndex } from '@/routes/integrations';
 import { index as membersIndex } from '@/routes/members';
 import { index as plansIndex } from '@/routes/plans';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as recipientsIndex } from '@/routes/recipients';
 import { edit as securityEdit } from '@/routes/security';
-import { general as settingsGeneral, notifications as settingsNotifications, signing as settingsSigning } from '@/routes/settings';
+import {
+    general as settingsGeneral,
+    notifications as settingsNotifications,
+    signing as settingsSigning,
+} from '@/routes/settings';
 import { index as templatesIndex } from '@/routes/templates';
 
 export type SidebarMode = 'client' | 'admin';
@@ -64,7 +75,13 @@ type NavEntry = {
 
 type NavGroup = { label: string; items: NavEntry[] };
 
-function NavItem({ item, onNavigate }: { item: NavEntry; onNavigate: () => void }) {
+function NavItem({
+    item,
+    onNavigate,
+}: {
+    item: NavEntry;
+    onNavigate: () => void;
+}) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const href = toUrl(item.href);
     const prefixes = item.activePrefixes ?? [href];
@@ -73,9 +90,10 @@ function NavItem({ item, onNavigate }: { item: NavEntry; onNavigate: () => void 
     const classes = cn(
         'flex h-[34px] w-full items-center gap-[10px] rounded-lg px-[10px] text-[13.5px] transition-colors',
         active
-            ? 'bg-primary-soft font-semibold text-primary'
-            : 'font-medium text-text-secondary hover:bg-accent hover:text-foreground',
-        item.disabled && 'cursor-not-allowed opacity-70 hover:bg-transparent hover:text-text-secondary',
+            ? 'bg-primary-soft text-primary font-semibold'
+            : 'text-text-secondary hover:bg-accent hover:text-foreground font-medium',
+        item.disabled &&
+            'hover:text-text-secondary cursor-not-allowed opacity-70 hover:bg-transparent',
     );
 
     const content = (
@@ -97,13 +115,21 @@ function NavItem({ item, onNavigate }: { item: NavEntry; onNavigate: () => void 
                         {content}
                     </span>
                 </TooltipTrigger>
-                <TooltipContent side="right">Disponível na Fase 2</TooltipContent>
+                <TooltipContent side="right">
+                    Disponível na Fase 2
+                </TooltipContent>
             </Tooltip>
         );
     }
 
     return (
-        <Link href={href} prefetch onClick={onNavigate} className={classes} aria-current={active ? 'page' : undefined}>
+        <Link
+            href={href}
+            prefetch
+            onClick={onNavigate}
+            className={classes}
+            aria-current={active ? 'page' : undefined}
+        >
             {content}
         </Link>
     );
@@ -177,7 +203,9 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                 {
                     key: 'settings',
                     title: 'Configurações',
-                    href: isMember ? settingsNotifications() : settingsGeneral(),
+                    href: isMember
+                        ? settingsNotifications()
+                        : settingsGeneral(),
                     icon: SlidersHorizontal,
                     activePrefixes: [
                         settingsGeneral.url(),
@@ -254,10 +282,18 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
     const groups = mode === 'admin' ? adminGroups : clientGroups;
 
     return (
-        <Sidebar collapsible="offcanvas" variant="sidebar" className="border-r border-border">
+        <Sidebar
+            collapsible="offcanvas"
+            variant="sidebar"
+            className="border-border border-r"
+        >
             <SidebarHeader className="gap-0 p-0">
                 <div className="px-4 pt-[18px] pb-2.5">
-                    <Link href={dashboard()} onClick={onNavigate} className="inline-block">
+                    <Link
+                        href={dashboard()}
+                        onClick={onNavigate}
+                        className="inline-block"
+                    >
                         <AppLogo height={30} />
                     </Link>
                 </div>
@@ -273,28 +309,40 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                             <Link
                                 href={envelopesCreate()}
                                 onClick={onNavigate}
-                                className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[13.5px] font-semibold text-white shadow-primary transition-colors hover:bg-primary-hover"
+                                className="bg-primary shadow-primary hover:bg-primary-hover flex h-9 w-full items-center justify-center gap-2 rounded-lg text-[13.5px] font-semibold text-white transition-colors"
                             >
-                                <Plus className="size-[15px]" strokeWidth={2.5} />
+                                <Plus
+                                    className="size-[15px]"
+                                    strokeWidth={2.5}
+                                />
                                 Nova solicitação
                             </Link>
                         </div>
                     </>
                 ) : (
-                    <div className="mx-3 mt-1.5 mb-2.5 flex items-center gap-2.5 rounded-lg bg-navy px-2.5 py-2 text-white">
-                        <ShieldCheck className="size-4 shrink-0 text-primary-bright" />
+                    <div className="bg-navy mx-3 mt-1.5 mb-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-white">
+                        <ShieldCheck className="text-primary-bright size-4 shrink-0" />
                         <span className="min-w-0 flex-1">
-                            <span className="block text-[12.5px] font-semibold">Painel interno</span>
-                            <span className="block text-[11px] text-on-navy-subtle">Equipe AssinaVelox</span>
+                            <span className="block text-[12.5px] font-semibold">
+                                Painel interno
+                            </span>
+                            <span className="text-on-navy-subtle block text-[11px]">
+                                Equipe AssinaVelox
+                            </span>
                         </span>
                     </div>
                 )}
             </SidebarHeader>
 
             <SidebarContent className="gap-0 px-3 py-1">
-                <nav className="flex flex-col gap-3.5" aria-label="Navegação principal">
+                <nav
+                    className="flex flex-col gap-3.5"
+                    aria-label="Navegação principal"
+                >
                     {groups.map((group) => {
-                        const visible = group.items.filter((item) => !item.hidden);
+                        const visible = group.items.filter(
+                            (item) => !item.hidden,
+                        );
 
                         if (visible.length === 0) {
                             return null;
@@ -302,13 +350,16 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
 
                         return (
                             <div key={group.label}>
-                                <div className="flex h-7 items-center px-[10px] text-[10.5px] font-bold tracking-[.14em] text-muted-foreground uppercase">
+                                <div className="text-muted-foreground flex h-7 items-center px-[10px] text-[10.5px] font-bold tracking-[.14em] uppercase">
                                     {group.label}
                                 </div>
                                 <ul className="flex flex-col gap-0.5">
                                     {visible.map((item) => (
                                         <li key={item.key}>
-                                            <NavItem item={item} onNavigate={onNavigate} />
+                                            <NavItem
+                                                item={item}
+                                                onNavigate={onNavigate}
+                                            />
                                         </li>
                                     ))}
                                 </ul>
@@ -318,7 +369,7 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                 </nav>
             </SidebarContent>
 
-            <SidebarFooter className="border-t border-border p-3">
+            <SidebarFooter className="border-border border-t p-3">
                 {auth.user && <AccountMenu />}
             </SidebarFooter>
         </Sidebar>

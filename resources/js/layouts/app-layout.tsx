@@ -36,14 +36,16 @@ export default function AppLayout({
 }: AppLayoutProps) {
     const { sidebarOpen, auth, organization } = usePage().props;
     const { currentUrl } = useCurrentUrl();
-    const mode: SidebarMode = currentUrl.startsWith('/admin') ? 'admin' : 'client';
+    const mode: SidebarMode = currentUrl.startsWith('/admin')
+        ? 'admin'
+        : 'client';
 
     setTimeZone(organization?.timezone ?? auth.user?.timezone);
 
     return (
         <SidebarProvider defaultOpen={sidebarOpen ?? true}>
             <AppSidebar mode={mode} />
-            <SidebarInset className="min-w-0 overflow-x-clip bg-background">
+            <SidebarInset className="bg-background min-w-0 overflow-x-clip">
                 <AppTopbar
                     breadcrumbs={breadcrumbs}
                     mode={mode}

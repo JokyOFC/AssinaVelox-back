@@ -29,7 +29,9 @@ export function Stepper({
 }) {
     if (variant === 'pills') {
         return (
-            <ol className={cn('flex flex-wrap items-center gap-1.5', className)}>
+            <ol
+                className={cn('flex flex-wrap items-center gap-1.5', className)}
+            >
                 {steps.map((step, index) => {
                     const state =
                         index < current
@@ -77,7 +79,7 @@ export function Stepper({
     return (
         <ol
             className={cn(
-                'flex items-center gap-3 overflow-x-auto rounded-xl border border-border bg-card px-4 py-3 shadow-card',
+                'border-border bg-card shadow-card flex items-center gap-3 overflow-x-auto rounded-xl border px-4 py-3',
                 className,
             )}
         >
@@ -88,7 +90,8 @@ export function Stepper({
                         : index === current
                           ? 'current'
                           : 'future';
-                const clickable = !!onSelect && !step.disabled && state !== 'future';
+                const clickable =
+                    !!onSelect && !step.disabled && state !== 'future';
 
                 return (
                     <Fragment key={step.key}>
@@ -110,9 +113,9 @@ export function Stepper({
                                         state === 'done' &&
                                             'border-primary bg-primary text-white',
                                         state === 'current' &&
-                                            'border-primary bg-white text-primary',
+                                            'border-primary text-primary bg-white',
                                         state === 'future' &&
-                                            'border-input bg-white text-muted-foreground',
+                                            'border-input text-muted-foreground bg-white',
                                     )}
                                 >
                                     {state === 'done' ? (
@@ -133,7 +136,7 @@ export function Stepper({
                                         {step.title}
                                     </span>
                                     {step.subtitle && (
-                                        <span className="text-[11.5px] whitespace-nowrap text-muted-foreground">
+                                        <span className="text-muted-foreground text-[11.5px] whitespace-nowrap">
                                             {step.subtitle}
                                         </span>
                                     )}
@@ -145,7 +148,9 @@ export function Stepper({
                                 aria-hidden
                                 className={cn(
                                     'h-0.5 min-w-6 flex-1 rounded-full',
-                                    index < current ? 'bg-primary' : 'bg-border',
+                                    index < current
+                                        ? 'bg-primary'
+                                        : 'bg-border',
                                 )}
                             />
                         )}

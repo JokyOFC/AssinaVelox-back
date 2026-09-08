@@ -1,9 +1,19 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowRight, Download, FileText, MoreHorizontal, Plus } from 'lucide-react';
+import {
+    ArrowRight,
+    Download,
+    FileText,
+    MoreHorizontal,
+    Plus,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AvatarInitials, AvatarStack } from '@/components/avatar-initials';
-import { DataTable, TitleCell, type DataTableColumn } from '@/components/data-table';
+import {
+    DataTable,
+    TitleCell,
+    type DataTableColumn,
+} from '@/components/data-table';
 import { EmptyState } from '@/components/empty-state';
 import { KpiCard, KpiGrid } from '@/components/kpi-card';
 import { PageHeader } from '@/components/page-header';
@@ -33,7 +43,12 @@ import { cn } from '@/lib/utils';
 import { getTimeZone } from '@/lib/format';
 import { dashboard } from '@/routes';
 import { exportMethod as dashboardExport } from '@/routes/dashboard';
-import { create as envelopesCreate, index as envelopesIndex, show as envelopesShow } from '@/routes/envelopes';
+import {
+    create as envelopesCreate,
+    download as envelopeDownload,
+    index as envelopesIndex,
+    show as envelopesShow,
+} from '@/routes/envelopes';
 import { resend as resendRecipient } from '@/routes/envelopes/recipients';
 import { index as recipientsIndex } from '@/routes/recipients';
 import { index as billingIndex } from '@/routes/billing';
@@ -96,7 +111,11 @@ const RANGE_OPTIONS: { value: Range; label: string }[] = [
 
 function salutation(now = new Date()): string {
     const hour = Number(
-        new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hour12: false, timeZone: getTimeZone() }).format(now),
+        new Intl.DateTimeFormat('pt-BR', {
+            hour: 'numeric',
+            hour12: false,
+            timeZone: getTimeZone(),
+        }).format(now),
     );
 
     if (hour >= 5 && hour < 12) {
@@ -150,15 +169,22 @@ export default function Dashboard({
         );
     };
 
-    const remind = (recipient: DashboardProps['pending_recipients'][number]) => {
+    const remind = (
+        recipient: DashboardProps['pending_recipients'][number],
+    ) => {
         setResending(recipient.id);
         router.post(
-            resendRecipient({ envelope: recipient.envelope_id, recipient: recipient.id }).url,
+            resendRecipient({
+                envelope: recipient.envelope_id,
+                recipient: recipient.id,
+            }).url,
             {},
             {
                 preserveScroll: true,
-                onSuccess: () => toast.success(`Convite reenviado para ${recipient.name}`),
-                onError: () => toast.error('Aguarde alguns minutos antes de reenviar'),
+                onSuccess: () =>
+                    toast.success(`Convite reenviado para ${recipient.name}`),
+                onError: () =>
+                    toast.error('Aguarde alguns minutos antes de reenviar'),
                 onFinish: () => setResending(null),
             },
         );
@@ -180,7 +206,9 @@ export default function Dashboard({
                     meta={[
                         row.display_code,
                         row.folder?.name,
-                        row.document?.pages ? `PDF · ${plural(row.document.pages, 'pág')}` : null,
+                        row.document?.pages
+                            ? `PDF · ${plural(row.document.pages, 'pág')}`
+                            : null,
                     ]
                         .filter(Boolean)
                         .join(' · ')}
@@ -194,7 +222,10 @@ export default function Dashboard({
             cell: (row) => (
                 <AvatarStack
                     items={row.recipients}
-                    progress={formatProgress(row.signed_count, row.recipients_count)}
+                    progress={formatProgress(
+                        row.signed_count,
+                        row.recipients_count,
+                    )}
                 />
             ),
         },
@@ -215,7 +246,7 @@ export default function Dashboard({
             header: 'Atualizado',
             width: '1fr',
             cell: (row) => (
-                <span className="text-[13px] whitespace-nowrap text-text-secondary tabular">
+                <span className="text-text-secondary tabular text-[13px] whitespace-nowrap">
                     {formatRelativeDateTime(row.updated_at)}
                 </span>
             ),
@@ -228,8 +259,12 @@ export default function Dashboard({
             cell: (row) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-xs" aria-label="Ações">
-                            <MoreHorizontal className="size-4 text-muted-foreground" />
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Ações"
+                        >
+                            <MoreHorizontal className="text-muted-foreground size-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -238,7 +273,14 @@ export default function Dashboard({
                         </DropdownMenuItem>
                         {row.can.download_signed && (
                             <DropdownMenuItem asChild>
-                                <a href={`${envelopesShow(row.id).url}/download/signed`}>
+                                <a
+                                    href={
+                                        envelopeDownload({
+                                            envelope: row.id,
+                                            type: 'signed',
+                                        }).url
+                                    }
+                                >
                                     <Download className="size-3.5" />
                                     Baixar PDF assinado
                                 </a>
@@ -256,7 +298,11 @@ export default function Dashboard({
 
             <PageHeader
                 eyebrow="Visão geral"
-                title={greeting.first_name ? `${salutation()}, ${greeting.first_name}` : salutation()}
+                title={
+                    greeting.first_name
+                        ? `${salutation()}, ${greeting.first_name}`
+                        : salutation()
+                }
                 subtitle={`${greeting.date_label} · ${plural(greeting.pending_count, 'documento aguarda assinatura', 'documentos aguardam assinatura')}`}
                 actions={
                     <>
@@ -268,7 +314,10 @@ export default function Dashboard({
                         </Button>
                         <Button asChild>
                             <Link href={envelopesCreate()}>
-                                <Plus className="size-[15px]" strokeWidth={2.5} />
+                                <Plus
+                                    className="size-[15px]"
+                                    strokeWidth={2.5}
+                                />
                                 Nova solicitação
                             </Link>
                         </Button>
@@ -279,7 +328,10 @@ export default function Dashboard({
             <KpiGrid>
                 {reloading ? (
                     Array.from({ length: 4 }, (_, i) => (
-                        <div key={i} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-card">
+                        <div
+                            key={i}
+                            className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-5"
+                        >
                             <Skeleton className="h-3.5 w-2/3" />
                             <Skeleton className="h-8 w-1/3" />
                             <Skeleton className="h-3 w-1/2" />
@@ -293,9 +345,17 @@ export default function Dashboard({
                             delta={
                                 kpis.sent.delta_pct !== null
                                     ? {
-                                          label: formatPercent(kpis.sent.delta_pct),
-                                          tone: kpis.sent.delta_pct >= 0 ? 'success' : 'danger',
-                                          direction: kpis.sent.delta_pct >= 0 ? 'up' : 'down',
+                                          label: formatPercent(
+                                              kpis.sent.delta_pct,
+                                          ),
+                                          tone:
+                                              kpis.sent.delta_pct >= 0
+                                                  ? 'success'
+                                                  : 'danger',
+                                          direction:
+                                              kpis.sent.delta_pct >= 0
+                                                  ? 'up'
+                                                  : 'down',
                                       }
                                     : null
                             }
@@ -332,15 +392,24 @@ export default function Dashboard({
                             value={
                                 kpis.avg_time_to_complete.minutes === null
                                     ? '—'
-                                    : formatNumber(Math.round(kpis.avg_time_to_complete.minutes))
+                                    : formatNumber(
+                                          Math.round(
+                                              kpis.avg_time_to_complete.minutes,
+                                          ),
+                                      )
                             }
-                            unit={kpis.avg_time_to_complete.minutes === null ? undefined : 'min'}
+                            unit={
+                                kpis.avg_time_to_complete.minutes === null
+                                    ? undefined
+                                    : 'min'
+                            }
                             delta={
                                 kpis.avg_time_to_complete.delta_minutes !== null
                                     ? {
                                           label: `${kpis.avg_time_to_complete.delta_minutes > 0 ? '+' : '−'}${Math.abs(kpis.avg_time_to_complete.delta_minutes)} min`,
                                           tone:
-                                              kpis.avg_time_to_complete.delta_minutes <= 0
+                                              kpis.avg_time_to_complete
+                                                  .delta_minutes <= 0
                                                   ? 'success'
                                                   : 'warning',
                                       }
@@ -353,35 +422,61 @@ export default function Dashboard({
             </KpiGrid>
 
             <div className="flex flex-wrap items-start gap-4">
-                <div className="min-w-0 flex-[2_1_380px] rounded-xl border border-border bg-card shadow-card">
+                <div className="border-border bg-card shadow-card min-w-0 flex-[2_1_380px] rounded-xl border">
                     <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-5">
                         <div>
-                            <div className="text-[15px] font-semibold">Assinaturas por dia</div>
-                            <div className="mt-1 text-[13px] text-muted-foreground">
+                            <div className="text-[15px] font-semibold">
+                                Assinaturas por dia
+                            </div>
+                            <div className="text-muted-foreground mt-1 text-[13px]">
                                 {RANGE_SUBTITLES[range]}
                             </div>
                         </div>
-                        <SegmentedControl value={range} onChange={changeRange} options={RANGE_OPTIONS} ariaLabel="Período" />
+                        <SegmentedControl
+                            value={range}
+                            onChange={changeRange}
+                            options={RANGE_OPTIONS}
+                            ariaLabel="Período"
+                        />
                     </div>
-                    <div className="flex gap-[18px] px-5 pt-3.5 text-[12.5px] text-text-secondary">
+                    <div className="text-text-secondary flex gap-[18px] px-5 pt-3.5 text-[12.5px]">
                         <span className="inline-flex items-center gap-1.5">
-                            <span className="size-2.5 rounded-[3px] bg-chart-1" />
-                            Concluídas <b className="text-foreground tabular">{formatNumber(chart.totals.completed)}</b>
+                            <span className="bg-chart-1 size-2.5 rounded-[3px]" />
+                            Concluídas{' '}
+                            <b className="text-foreground tabular">
+                                {formatNumber(chart.totals.completed)}
+                            </b>
                         </span>
                         <span className="inline-flex items-center gap-1.5">
-                            <span className="size-2.5 rounded-[3px] bg-chart-2" />
-                            Enviadas <b className="text-foreground tabular">{formatNumber(chart.totals.sent)}</b>
+                            <span className="bg-chart-2 size-2.5 rounded-[3px]" />
+                            Enviadas{' '}
+                            <b className="text-foreground tabular">
+                                {formatNumber(chart.totals.sent)}
+                            </b>
                         </span>
                     </div>
-                    <div className={cn('flex h-[190px] items-end gap-1 px-5 pt-4', reloading && 'opacity-50')}>
+                    <div
+                        className={cn(
+                            'flex h-[190px] items-end gap-1 px-5 pt-4',
+                            reloading && 'opacity-50',
+                        )}
+                    >
                         {chart.buckets.length === 0 ? (
-                            <p className="w-full self-center text-center text-[13px] text-muted-foreground">
+                            <p className="text-muted-foreground w-full self-center text-center text-[13px]">
                                 Sem dados no período.
                             </p>
                         ) : (
                             chart.buckets.map((bucket) => {
-                                const sentPct = Math.round((bucket.sent / maxSent) * 100);
-                                const donePct = bucket.sent > 0 ? Math.round((bucket.completed / bucket.sent) * 100) : 0;
+                                const sentPct = Math.round(
+                                    (bucket.sent / maxSent) * 100,
+                                );
+                                const donePct =
+                                    bucket.sent > 0
+                                        ? Math.round(
+                                              (bucket.completed / bucket.sent) *
+                                                  100,
+                                          )
+                                        : 0;
 
                                 return (
                                     <div
@@ -390,12 +485,16 @@ export default function Dashboard({
                                         title={`${formatDayMonth(bucket.date)} · ${bucket.sent} enviados · ${bucket.completed} concluídos`}
                                     >
                                         <div
-                                            className="relative rounded-t-[3px] bg-chart-2"
-                                            style={{ height: `${Math.max(sentPct, bucket.sent > 0 ? 3 : 0)}%` }}
+                                            className="bg-chart-2 relative rounded-t-[3px]"
+                                            style={{
+                                                height: `${Math.max(sentPct, bucket.sent > 0 ? 3 : 0)}%`,
+                                            }}
                                         >
                                             <div
-                                                className="absolute inset-x-0 bottom-0 rounded-t-[3px] bg-chart-1"
-                                                style={{ height: `${donePct}%` }}
+                                                className="bg-chart-1 absolute inset-x-0 bottom-0 rounded-t-[3px]"
+                                                style={{
+                                                    height: `${donePct}%`,
+                                                }}
                                             />
                                         </div>
                                     </div>
@@ -403,7 +502,7 @@ export default function Dashboard({
                             })
                         )}
                     </div>
-                    <div className="flex justify-between border-t border-muted px-5 pt-2 pb-4 text-[11.5px] text-muted-foreground">
+                    <div className="border-muted text-muted-foreground flex justify-between border-t px-5 pt-2 pb-4 text-[11.5px]">
                         {chart.axis_labels.map((label, i) => (
                             <span key={`${label}-${i}`}>{label}</span>
                         ))}
@@ -411,38 +510,64 @@ export default function Dashboard({
                 </div>
 
                 <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
-                    <div className="flex flex-col rounded-xl border border-border bg-card shadow-card">
+                    <div className="border-border bg-card shadow-card flex flex-col rounded-xl border">
                         <div className="flex items-center justify-between gap-3 px-5 pt-[18px] pb-3">
                             <div>
-                                <div className="text-[15px] font-semibold">Pendências</div>
-                                <div className="mt-1 text-[13px] text-muted-foreground">Signatários sem resposta</div>
+                                <div className="text-[15px] font-semibold">
+                                    Pendências
+                                </div>
+                                <div className="text-muted-foreground mt-1 text-[13px]">
+                                    Signatários sem resposta
+                                </div>
                             </div>
                             {pending_recipients_total > 0 && (
-                                <Badge variant="warning" className="text-[12px] font-bold">
+                                <Badge
+                                    variant="warning"
+                                    className="text-[12px] font-bold"
+                                >
                                     {formatNumber(pending_recipients_total)}
                                 </Badge>
                             )}
                         </div>
                         {pending_recipients.length === 0 ? (
-                            <p className="border-t border-muted px-5 py-6 text-center text-[13px] text-muted-foreground">
+                            <p className="border-muted text-muted-foreground border-t px-5 py-6 text-center text-[13px]">
                                 Nenhum signatário pendente 🎉
                             </p>
                         ) : (
                             pending_recipients.map((recipient, index) => (
-                                <div key={recipient.id} className="flex items-center gap-3 border-t border-muted px-5 py-2.5">
-                                    <AvatarInitials initials={recipient.initials} index={index} size="sm" />
+                                <div
+                                    key={recipient.id}
+                                    className="border-muted flex items-center gap-3 border-t px-5 py-2.5"
+                                >
+                                    <AvatarInitials
+                                        initials={recipient.initials}
+                                        index={index}
+                                        size="sm"
+                                    />
                                     <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-[13.5px] font-semibold">{recipient.name}</span>
-                                        <span className="block truncate text-[12px] text-muted-foreground">
-                                            {recipient.envelope_title} · {formatTimeAgo(recipient.waiting_since)}
+                                        <span className="block truncate text-[13.5px] font-semibold">
+                                            {recipient.name}
+                                        </span>
+                                        <span className="text-muted-foreground block truncate text-[12px]">
+                                            {recipient.envelope_title} ·{' '}
+                                            {formatTimeAgo(
+                                                recipient.waiting_since,
+                                            )}
                                         </span>
                                     </span>
                                     <Button
                                         variant="outline-sm"
                                         size="xxs"
-                                        disabled={!recipient.can_resend || resending === recipient.id}
+                                        disabled={
+                                            !recipient.can_resend ||
+                                            resending === recipient.id
+                                        }
                                         onClick={() => remind(recipient)}
-                                        title={recipient.can_resend ? 'Reenviar convite' : 'Reenviado há menos de 10 minutos'}
+                                        title={
+                                            recipient.can_resend
+                                                ? 'Reenviar convite'
+                                                : 'Reenviado há menos de 10 minutos'
+                                        }
                                     >
                                         Lembrar
                                     </Button>
@@ -450,45 +575,73 @@ export default function Dashboard({
                             ))
                         )}
                         <Link
-                            href={recipientsIndex({ query: { status: 'pending' } })}
-                            className="flex items-center justify-center gap-1.5 border-t border-muted p-3 text-[13px] font-semibold text-primary hover:text-primary-hover"
+                            href={recipientsIndex({
+                                query: { status: 'pending' },
+                            })}
+                            className="border-muted text-primary hover:text-primary-hover flex items-center justify-center gap-1.5 border-t p-3 text-[13px] font-semibold"
                         >
                             Ver todas as pendências
                             <ArrowRight className="size-3.5" />
                         </Link>
                     </div>
 
-                    <div className="flex flex-col gap-3.5 rounded-xl border border-border bg-card px-5 py-[18px] shadow-card">
+                    <div className="border-border bg-card shadow-card flex flex-col gap-3.5 rounded-xl border px-5 py-[18px]">
                         <div className="flex items-center justify-between gap-3">
                             <div>
-                                <div className="text-[15px] font-semibold">Uso do plano</div>
-                                <div className="mt-1 text-[13px] text-muted-foreground">
+                                <div className="text-[15px] font-semibold">
+                                    Uso do plano
+                                </div>
+                                <div className="text-muted-foreground mt-1 text-[13px]">
                                     {plan_usage.plan_name}
-                                    {plan_usage.renews_at && ` · renova em ${formatDayMonth(plan_usage.renews_at)}`}
+                                    {plan_usage.renews_at &&
+                                        ` · renova em ${formatDayMonth(plan_usage.renews_at)}`}
                                 </div>
                             </div>
-                            <Link href={billingIndex()} className="text-[13px] font-semibold text-primary hover:text-primary-hover">
+                            <Link
+                                href={billingIndex()}
+                                className="text-primary hover:text-primary-hover text-[13px] font-semibold"
+                            >
                                 Gerenciar
                             </Link>
                         </div>
-                        <ProgressMeter label="Documentos" used={plan_usage.envelopes.used} limit={plan_usage.envelopes.limit} />
-                        <ProgressMeter label="Usuários" used={plan_usage.members.used} limit={plan_usage.members.limit} />
+                        <ProgressMeter
+                            label="Documentos"
+                            used={plan_usage.envelopes.used}
+                            limit={plan_usage.envelopes.limit}
+                        />
+                        <ProgressMeter
+                            label="Usuários"
+                            used={plan_usage.members.used}
+                            limit={plan_usage.members.limit}
+                        />
                         <ProgressMeter
                             label="Armazenamento"
                             used={plan_usage.storage.used_bytes}
                             limit={plan_usage.storage.limit_bytes}
-                            usedLabel={formatBytes(plan_usage.storage.used_bytes)}
-                            limitLabel={plan_usage.storage.limit_bytes ? formatBytes(plan_usage.storage.limit_bytes) : undefined}
+                            usedLabel={formatBytes(
+                                plan_usage.storage.used_bytes,
+                            )}
+                            limitLabel={
+                                plan_usage.storage.limit_bytes
+                                    ? formatBytes(
+                                          plan_usage.storage.limit_bytes,
+                                      )
+                                    : undefined
+                            }
                         />
                     </div>
                 </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-card shadow-card">
+            <div className="border-border bg-card shadow-card rounded-xl border">
                 <div className="flex items-center justify-between gap-3 px-5 pt-[18px] pb-3">
                     <div>
-                        <div className="text-[15px] font-semibold">Documentos recentes</div>
-                        <div className="mt-1 text-[13px] text-muted-foreground">Atualizados nos últimos 7 dias</div>
+                        <div className="text-[15px] font-semibold">
+                            Documentos recentes
+                        </div>
+                        <div className="text-muted-foreground mt-1 text-[13px]">
+                            Atualizados nos últimos 7 dias
+                        </div>
                     </div>
                     <Button asChild variant="outline" size="xs">
                         <Link href={envelopesIndex()}>Ver todos</Link>
@@ -506,7 +659,10 @@ export default function Dashboard({
                             action={
                                 <Button asChild>
                                     <Link href={envelopesCreate()}>
-                                        <Plus className="size-[15px]" strokeWidth={2.5} />
+                                        <Plus
+                                            className="size-[15px]"
+                                            strokeWidth={2.5}
+                                        />
                                         Nova solicitação
                                     </Link>
                                 </Button>
@@ -515,11 +671,15 @@ export default function Dashboard({
                     }
                 />
                 {recent_envelopes.length > 0 && (
-                    <div className="flex items-center justify-between px-5 py-3 text-[12.5px] text-muted-foreground">
+                    <div className="text-muted-foreground flex items-center justify-between px-5 py-3 text-[12.5px]">
                         <span className="tabular">
-                            Mostrando {recent_envelopes.length} de {formatNumber(recent_total)} documentos
+                            Mostrando {recent_envelopes.length} de{' '}
+                            {formatNumber(recent_total)} documentos
                         </span>
-                        <Link href={envelopesIndex()} className="font-semibold text-primary hover:text-primary-hover">
+                        <Link
+                            href={envelopesIndex()}
+                            className="text-primary hover:text-primary-hover font-semibold"
+                        >
                             Abrir lista completa
                         </Link>
                     </div>

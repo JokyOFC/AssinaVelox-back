@@ -51,9 +51,11 @@ export function formatDate(value: string | null | undefined): string {
     const date = toDate(value);
 
     return isValid(date)
-        ? formatter({ day: '2-digit', month: '2-digit', year: 'numeric' }).format(
-              date,
-          )
+        ? formatter({
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+          }).format(date)
         : '—';
 }
 
@@ -122,9 +124,11 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 function dayKey(date: Date): string {
-    return formatter({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(
-        date,
-    );
+    return formatter({
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(date);
 }
 
 /**
@@ -253,7 +257,9 @@ export function formatCurrency(
 }
 
 /** "R$ 49" quando inteiro, "R$ 59,80" quando há centavos. */
-export function formatCurrencyCompact(cents: number | null | undefined): string {
+export function formatCurrencyCompact(
+    cents: number | null | undefined,
+): string {
     if (cents === null || cents === undefined) {
         return '—';
     }
@@ -488,7 +494,9 @@ export function displayCode(number: number): string {
 }
 
 /** "ABCDEFGHJKLM" → "ABCD-EFGH-JKLM" */
-export function formatVerificationCode(code: string | null | undefined): string {
+export function formatVerificationCode(
+    code: string | null | undefined,
+): string {
     if (!code) {
         return '—';
     }

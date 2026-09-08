@@ -82,7 +82,7 @@ export function SearchInput({
     return (
         <label
             className={cn(
-                'flex h-[34px] w-full max-w-[340px] min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-input bg-white px-[10px] text-muted-foreground focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/18',
+                'border-input text-muted-foreground focus-within:border-primary focus-within:ring-primary/18 flex h-[34px] w-full max-w-[340px] min-w-[180px] flex-1 items-center gap-2 rounded-lg border bg-white px-[10px] focus-within:ring-[3px]',
                 className,
             )}
         >
@@ -93,7 +93,7 @@ export function SearchInput({
                 autoFocus={autoFocus}
                 onChange={(e) => setLocal(e.target.value)}
                 placeholder={placeholder}
-                className="min-w-0 flex-1 border-0 bg-transparent text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground"
+                className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 border-0 bg-transparent text-[13.5px] outline-none"
             />
             {local && (
                 <button
@@ -103,7 +103,7 @@ export function SearchInput({
                         setLocal('');
                         onChange('');
                     }}
-                    className="rounded p-0.5 hover:bg-accent hover:text-foreground"
+                    className="hover:bg-accent hover:text-foreground rounded p-0.5"
                 >
                     <X className="size-3.5" />
                 </button>
@@ -138,8 +138,8 @@ export function FilterChip({
                 <button
                     type="button"
                     className={cn(
-                        'inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-dashed border-border-dashed bg-white px-[10px] text-[13px] font-medium text-text-secondary hover:bg-accent-subtle hover:text-foreground',
-                        selected && 'border-solid border-primary text-primary',
+                        'border-border-dashed text-text-secondary hover:bg-accent-subtle hover:text-foreground inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-dashed bg-white px-[10px] text-[13px] font-medium',
+                        selected && 'border-primary text-primary border-solid',
                         className,
                     )}
                 >
@@ -148,21 +148,27 @@ export function FilterChip({
                     {selected && (
                         <>
                             <span className="text-border-dashed">|</span>
-                            <span className="font-semibold">{selected.label}</span>
+                            <span className="font-semibold">
+                                {selected.label}
+                            </span>
                         </>
                     )}
-                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                    <ChevronDown className="text-muted-foreground size-3.5" />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-48">
-                <DropdownMenuLabel className="text-[11px] font-bold tracking-[.12em] text-muted-foreground uppercase">
+                <DropdownMenuLabel className="text-muted-foreground text-[11px] font-bold tracking-[.12em] uppercase">
                     {label}
                 </DropdownMenuLabel>
                 <DropdownMenuRadioGroup
                     value={value ?? ''}
-                    onValueChange={(next) => onChange(next === '' ? null : next)}
+                    onValueChange={(next) =>
+                        onChange(next === '' ? null : next)
+                    }
                 >
-                    <DropdownMenuRadioItem value="">{allLabel}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="">
+                        {allLabel}
+                    </DropdownMenuRadioItem>
                     {options.map((option) => (
                         <DropdownMenuRadioItem
                             key={option.value}
@@ -170,7 +176,7 @@ export function FilterChip({
                         >
                             <span className="flex-1">{option.label}</span>
                             {option.count !== undefined && (
-                                <span className="text-[11.5px] text-muted-foreground tabular">
+                                <span className="text-muted-foreground tabular text-[11.5px]">
                                     {option.count}
                                 </span>
                             )}
@@ -221,20 +227,20 @@ export function FilterMultiChip({
                 <button
                     type="button"
                     className={cn(
-                        'inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-dashed border-border-dashed bg-white px-[10px] text-[13px] font-medium text-text-secondary hover:bg-accent-subtle hover:text-foreground',
+                        'border-border-dashed text-text-secondary hover:bg-accent-subtle hover:text-foreground inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-dashed bg-white px-[10px] text-[13px] font-medium',
                         values.length > 0 &&
-                            'border-solid border-primary text-primary',
+                            'border-primary text-primary border-solid',
                         className,
                     )}
                 >
                     {icon}
                     {label}
                     {values.length > 0 && (
-                        <span className="rounded-md bg-primary-soft px-[6px] text-[11.5px] font-semibold text-primary">
+                        <span className="bg-primary-soft text-primary rounded-md px-[6px] text-[11.5px] font-semibold">
                             {values.length}
                         </span>
                     )}
-                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                    <ChevronDown className="text-muted-foreground size-3.5" />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-48">
@@ -287,7 +293,7 @@ export function SelectableChip({
                 'inline-flex h-[30px] items-center gap-1 rounded-full border px-[10px] text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                 selected
                     ? 'border-primary bg-primary-soft text-primary'
-                    : 'border-input bg-white text-text-secondary hover:bg-accent-subtle',
+                    : 'border-input text-text-secondary hover:bg-accent-subtle bg-white',
                 className,
             )}
         >

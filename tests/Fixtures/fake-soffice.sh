@@ -9,9 +9,14 @@
 #   FAKE_SOFFICE_PDF   PDF a copiar como resultado
 #   FAKE_SOFFICE_FAIL  se definido, termina com exit code 1 sem gerar saida
 #   FAKE_SOFFICE_NOOUT se definido, termina com exit code 0 sem gerar saida
+#   FAKE_SOFFICE_SLEEP segundos a esperar antes de qualquer coisa (teste de timeout)
 # Assume o layout de diretorios do LibreOfficeConverter: <tmp>/out e <tmp>/profile.
 # O teste aplica chmod +x antes de executar.
 # ---------------------------------------------------------------------------
+if [ -n "$FAKE_SOFFICE_SLEEP" ]; then
+  sleep "$FAKE_SOFFICE_SLEEP"
+fi
+
 outdir=""
 prev=""
 input=""

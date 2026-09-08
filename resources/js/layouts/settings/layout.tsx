@@ -43,7 +43,10 @@ export type SettingsLayoutProps = PropsWithChildren<{
  * cobrança (+ Perfil), e coluna de conteúdo `max-w-[820px] gap-4`.
  * No mobile, o rail vira um Select.
  */
-export default function SettingsLayout({ children, header }: SettingsLayoutProps) {
+export default function SettingsLayout({
+    children,
+    header,
+}: SettingsLayoutProps) {
     const { organization } = usePage().props;
     const { isCurrentOrParentUrl, currentUrl } = useCurrentUrl();
     const permissions = organization?.permissions;
@@ -65,7 +68,7 @@ export default function SettingsLayout({ children, header }: SettingsLayoutProps
             items: [
                 {
                     key: 'general',
-                    title: 'Geral',
+                    title: 'Geral e segurança',
                     href: settingsGeneral(),
                     hidden: !(permissions?.manage_settings ?? false),
                 },
@@ -98,7 +101,9 @@ export default function SettingsLayout({ children, header }: SettingsLayoutProps
                 : isCurrentOrParentUrl(prefix),
         );
 
-    const visibleItems = groups.flatMap((g) => g.items.filter((i) => !i.hidden));
+    const visibleItems = groups.flatMap((g) =>
+        g.items.filter((i) => !i.hidden),
+    );
     const activeItem = visibleItems.find(isActive);
 
     return (
@@ -113,20 +118,33 @@ export default function SettingsLayout({ children, header }: SettingsLayoutProps
             <div className="flex flex-wrap items-start gap-5">
                 <aside className="hidden w-[200px] shrink-0 flex-col gap-4 md:flex">
                     {groups.map((group) => {
-                        const items = group.items.filter((item) => !item.hidden);
+                        const items = group.items.filter(
+                            (item) => !item.hidden,
+                        );
 
                         if (items.length === 0) {
                             return null;
                         }
 
                         return (
-                            <nav key={group.label} aria-label={group.label} className="flex flex-col gap-0.5">
-                                <span className="flex h-7 items-center px-3 text-[10.5px] font-bold tracking-[.14em] text-muted-foreground uppercase">
+                            <nav
+                                key={group.label}
+                                aria-label={group.label}
+                                className="flex flex-col gap-0.5"
+                            >
+                                <span className="text-muted-foreground flex h-7 items-center px-3 text-[10.5px] font-bold tracking-[.14em] uppercase">
                                     {group.label}
                                 </span>
                                 {items.map((item) => (
-                                    <Link key={item.key} href={item.href} prefetch>
-                                        <RailNavButton active={isActive(item)} asChild>
+                                    <Link
+                                        key={item.key}
+                                        href={item.href}
+                                        prefetch
+                                    >
+                                        <RailNavButton
+                                            active={isActive(item)}
+                                            asChild
+                                        >
                                             {item.title}
                                         </RailNavButton>
                                     </Link>
@@ -140,7 +158,9 @@ export default function SettingsLayout({ children, header }: SettingsLayoutProps
                     <Select
                         value={activeItem?.key}
                         onValueChange={(key) => {
-                            const target = visibleItems.find((i) => i.key === key);
+                            const target = visibleItems.find(
+                                (i) => i.key === key,
+                            );
 
                             if (target) {
                                 window.location.assign(toUrl(target.href));

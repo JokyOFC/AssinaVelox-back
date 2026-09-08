@@ -24,7 +24,7 @@ export default function Security(props: Props) {
         <>
             <Head title="Segurança da conta" />
 
-            <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-card">
+            <div className="border-border bg-card shadow-card flex flex-col gap-4 rounded-xl border p-5">
                 <Heading
                     variant="small"
                     title="Alterar senha"
@@ -34,7 +34,11 @@ export default function Security(props: Props) {
                 <Form
                     {...SecurityController.update.form()}
                     options={{ preserveScroll: true }}
-                    resetOnError={['password', 'password_confirmation', 'current_password']}
+                    resetOnError={[
+                        'password',
+                        'password_confirmation',
+                        'current_password',
+                    ]}
                     resetOnSuccess
                     onError={(errors) => {
                         if (errors.password) {
@@ -50,7 +54,9 @@ export default function Security(props: Props) {
                     {({ errors, processing }) => (
                         <>
                             <div className="grid gap-1.5">
-                                <Label htmlFor="current_password">Senha atual</Label>
+                                <Label htmlFor="current_password">
+                                    Senha atual
+                                </Label>
                                 <PasswordInput
                                     id="current_password"
                                     ref={currentPasswordInput}
@@ -61,7 +67,13 @@ export default function Security(props: Props) {
                                 />
                                 <InputError message={errors.current_password} />
                             </div>
-                            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                            <div
+                                className="grid gap-3"
+                                style={{
+                                    gridTemplateColumns:
+                                        'repeat(auto-fit, minmax(220px, 1fr))',
+                                }}
+                            >
                                 <div className="grid gap-1.5">
                                     <Label htmlFor="password">Nova senha</Label>
                                     <PasswordInput
@@ -76,21 +88,33 @@ export default function Security(props: Props) {
                                     <InputError message={errors.password} />
                                 </div>
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor="password_confirmation">Confirmar nova senha</Label>
+                                    <Label htmlFor="password_confirmation">
+                                        Confirmar nova senha
+                                    </Label>
                                     <PasswordInput
                                         id="password_confirmation"
                                         name="password_confirmation"
                                         autoComplete="new-password"
                                         placeholder="Repita a nova senha"
                                         passwordrules={props.passwordRules}
-                                        aria-invalid={!!errors.password_confirmation}
+                                        aria-invalid={
+                                            !!errors.password_confirmation
+                                        }
                                     />
-                                    <InputError message={errors.password_confirmation} />
+                                    <InputError
+                                        message={errors.password_confirmation}
+                                    />
                                 </div>
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] text-muted-foreground">Use letras, números e um símbolo.</span>
-                                <Button type="submit" disabled={processing} data-test="update-password-button">
+                                <span className="text-muted-foreground text-[12px]">
+                                    Use letras, números e um símbolo.
+                                </span>
+                                <Button
+                                    type="submit"
+                                    disabled={processing}
+                                    data-test="update-password-button"
+                                >
                                     {processing && <Spinner />}
                                     Salvar nova senha
                                 </Button>

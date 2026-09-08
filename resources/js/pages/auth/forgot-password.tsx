@@ -35,24 +35,30 @@ export default function ForgotPassword({ status }: Props) {
 
             <Link
                 href={login()}
-                className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-primary"
+                className="text-text-secondary hover:text-primary inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold"
             >
                 <ArrowLeft className="size-3.5" />
                 Voltar para o login
             </Link>
 
             {sent ? (
-                <div className="flex flex-col gap-4 rounded-xl border border-success-border bg-success-bg p-6">
-                    <span className="flex size-10 items-center justify-center rounded-[10px] bg-success-solid text-white">
+                <div className="border-success-border bg-success-bg flex flex-col gap-4 rounded-xl border p-6">
+                    <span className="bg-success-solid flex size-10 items-center justify-center rounded-[10px] text-white">
                         <Check className="size-5 stroke-[2.5]" />
                     </span>
                     <div>
-                        <h1 className="text-[20px] font-bold">Verifique seu e-mail</h1>
-                        <p className="mt-2 text-[14px] leading-[1.55] text-success">
-                            Enviamos um link para <b>{submittedEmail}</b>. Se não
-                            aparecer em alguns minutos, confira a pasta de spam.
+                        <h1 className="text-[20px] font-bold">
+                            Verifique seu e-mail
+                        </h1>
+                        <p className="text-success mt-2 text-[14px] leading-[1.55]">
+                            Enviamos um link para <b>{submittedEmail}</b>. Se
+                            não aparecer em alguns minutos, confira a pasta de
+                            spam.
                         </p>
-                        <InputError message={form.errors.email} className="mt-2" />
+                        <InputError
+                            message={form.errors.email}
+                            className="mt-2"
+                        />
                     </div>
                     <Button
                         type="button"
@@ -72,9 +78,9 @@ export default function ForgotPassword({ status }: Props) {
                         <h1 className="text-[26px] font-bold tracking-[-.01em]">
                             Recuperar senha
                         </h1>
-                        <p className="mt-2 text-[14px] leading-[1.55] text-text-secondary">
-                            Informe o e-mail da sua conta. Enviaremos um link para
-                            redefinir a senha, válido por 30 minutos.
+                        <p className="text-text-secondary mt-2 text-[14px] leading-[1.55]">
+                            Informe o e-mail da sua conta. Enviaremos um link
+                            para redefinir a senha, válido por 30 minutos.
                         </p>
                     </div>
                     <form onSubmit={submit} className="flex flex-col gap-4">
@@ -90,7 +96,9 @@ export default function ForgotPassword({ status }: Props) {
                                 placeholder="voce@empresa.com.br"
                                 className="h-10"
                                 value={form.data.email}
-                                onChange={(e) => form.setData('email', e.target.value)}
+                                onChange={(e) =>
+                                    form.setData('email', e.target.value)
+                                }
                                 aria-invalid={!!form.errors.email}
                             />
                             <InputError message={form.errors.email} />

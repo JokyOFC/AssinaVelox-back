@@ -44,17 +44,17 @@ export function KpiCard({
         return (
             <div
                 className={cn(
-                    'flex flex-col gap-1.5 rounded-xl border border-border bg-card px-[18px] py-4 shadow-card',
+                    'border-border bg-card shadow-card flex flex-col gap-1.5 rounded-xl border px-[18px] py-4',
                     className,
                 )}
             >
-                <span className="text-[12.5px] font-medium text-text-secondary">
+                <span className="text-text-secondary text-[12.5px] font-medium">
                     {label}
                 </span>
-                <span className="text-[26px] leading-none font-bold tracking-[-.02em] tabular">
+                <span className="tabular text-[26px] leading-none font-bold tracking-[-.02em]">
                     {value}
                     {unit && (
-                        <span className="ml-1 text-[14px] font-semibold text-muted-foreground">
+                        <span className="text-muted-foreground ml-1 text-[14px] font-semibold">
                             {unit}
                         </span>
                     )}
@@ -71,12 +71,12 @@ export function KpiCard({
     return (
         <div
             className={cn(
-                'flex flex-col gap-2.5 rounded-xl border border-border bg-card p-5 pb-[18px] shadow-card',
+                'border-border bg-card shadow-card flex flex-col gap-2.5 rounded-xl border p-5 pb-[18px]',
                 className,
             )}
         >
             <div className="flex flex-wrap items-start justify-between gap-2">
-                <span className="text-[13px] font-medium text-text-secondary">
+                <span className="text-text-secondary text-[13px] font-medium">
                     {label}
                 </span>
                 {delta && (
@@ -94,10 +94,10 @@ export function KpiCard({
                     </Badge>
                 )}
             </div>
-            <div className="text-[30px] leading-none font-bold tracking-[-.02em] tabular">
+            <div className="tabular text-[30px] leading-none font-bold tracking-[-.02em]">
                 {value}
                 {unit && (
-                    <span className="ml-1 text-[16px] font-semibold text-muted-foreground">
+                    <span className="text-muted-foreground ml-1 text-[16px] font-semibold">
                         {unit}
                     </span>
                 )}

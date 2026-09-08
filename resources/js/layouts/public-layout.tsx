@@ -29,15 +29,15 @@ export default function PublicLayout({
     const { auth } = usePage().props;
 
     return (
-        <div className="flex min-h-svh flex-col bg-background text-[14px] text-foreground">
-            <header className="flex h-[60px] items-center gap-4 border-b border-border bg-white px-4 md:px-6">
+        <div className="bg-background text-foreground flex min-h-svh flex-col text-[14px]">
+            <header className="border-border flex h-[60px] items-center gap-4 border-b bg-white px-4 md:px-6">
                 <Link href={home()} className="inline-block">
                     <AppLogo height={28} />
                 </Link>
                 <nav className="ml-auto flex items-center gap-2 text-[13.5px]">
                     <Link
                         href={verifyIndex()}
-                        className="hidden px-2 font-medium text-text-secondary hover:text-primary sm:inline"
+                        className="text-text-secondary hover:text-primary hidden px-2 font-medium sm:inline"
                     >
                         Verificar documento
                     </Link>
@@ -50,8 +50,14 @@ export default function PublicLayout({
                             <Button asChild variant="outline" size="sm">
                                 <Link href={login()}>Entrar</Link>
                             </Button>
-                            <Button asChild size="sm" className="hidden sm:inline-flex">
-                                <Link href={register()}>Criar conta grátis</Link>
+                            <Button
+                                asChild
+                                size="sm"
+                                className="hidden sm:inline-flex"
+                            >
+                                <Link href={register()}>
+                                    Criar conta grátis
+                                </Link>
                             </Button>
                         </>
                     )}
@@ -66,9 +72,12 @@ export default function PublicLayout({
             >
                 {children}
             </main>
-            <footer className="border-t border-border bg-white px-6 py-5 text-[12px] text-muted-foreground">
+            <footer className="border-border text-muted-foreground border-t bg-white px-6 py-5 text-[12px]">
                 <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3">
-                    <span>© {new Date().getFullYear()} AssinaVelox · Assinatura eletrônica com trilha de auditoria</span>
+                    <span>
+                        © {new Date().getFullYear()} AssinaVelox · Assinatura
+                        eletrônica com trilha de auditoria
+                    </span>
                     <div className="flex gap-4">
                         <Link href={terms()} className="hover:text-primary">
                             Termos de uso
@@ -76,7 +85,10 @@ export default function PublicLayout({
                         <Link href={privacy()} className="hover:text-primary">
                             Privacidade
                         </Link>
-                        <Link href={verifyIndex()} className="hover:text-primary">
+                        <Link
+                            href={verifyIndex()}
+                            className="hover:text-primary"
+                        >
                             Verificar documento
                         </Link>
                     </div>

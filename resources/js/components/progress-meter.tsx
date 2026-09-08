@@ -30,11 +30,13 @@ export function ProgressMeter({
 
     return (
         <div className={cn('flex flex-col', className)}>
-            <div className="flex justify-between gap-3 text-[12.5px] text-text-secondary">
+            <div className="text-text-secondary flex justify-between gap-3 text-[12.5px]">
                 <span>{label}</span>
                 <span className="tabular">
                     <b className="text-foreground">{usedLabel ?? used}</b>
-                    {limit !== null ? ` / ${limitLabel ?? limit}` : ' · ilimitado'}
+                    {limit !== null
+                        ? ` / ${limitLabel ?? limit}`
+                        : ' · ilimitado'}
                 </span>
             </div>
             {pct !== null && (
@@ -44,7 +46,7 @@ export function ProgressMeter({
                     aria-valuemax={100}
                     aria-valuenow={pct}
                     className={cn(
-                        'mt-1.5 overflow-hidden rounded-full bg-accent',
+                        'bg-accent mt-1.5 overflow-hidden rounded-full',
                         size === 'sm' ? 'h-[5px]' : 'h-2',
                     )}
                 >
@@ -58,7 +60,7 @@ export function ProgressMeter({
                 </div>
             )}
             {hint && (
-                <p className="mt-1 text-[12px] text-muted-foreground">{hint}</p>
+                <p className="text-muted-foreground mt-1 text-[12px]">{hint}</p>
             )}
         </div>
     );

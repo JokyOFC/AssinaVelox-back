@@ -19,6 +19,9 @@ use Illuminate\Support\Str;
  */
 class Invitations
 {
+    /** Chave de sessão com o token bruto de um convite aguardando cadastro/verificação de e-mail. */
+    public const PENDING_SESSION_KEY = 'invitation.pending_token';
+
     public static function digest(string $token): string
     {
         return hash('sha256', $token);
@@ -26,7 +29,7 @@ class Invitations
 
     public static function generateToken(): string
     {
-        $bytes = (int) config('assinavelox.invitations.token_bytes', 32);
+        $bytes = max(16, (int) config('assinavelox.invitations.token_bytes', 32));
 
         return rtrim(strtr(base64_encode(random_bytes($bytes)), '+/', '-_'), '=');
     }
@@ -94,7 +97,7 @@ class Invitations
     public function accept(MembershipInvitation $invitation, User $user): Membership
     {
         return DB::transaction(function () use ($invitation, $user): Membership {
-            $invitation = MembershipInvitation::query()->lockForUpdate()->findOrFail($invitation->getKey());
+            $invitation = MembershipInvitation::query()->lockForUpdate()->whereKey($invitation->getKey())->firstOrFail();
 
             $membership = Membership::query()
                 ->where('organization_id', $invitation->organization_id)

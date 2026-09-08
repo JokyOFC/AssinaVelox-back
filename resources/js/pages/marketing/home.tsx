@@ -29,7 +29,7 @@ export default function Home() {
     return (
         <>
             <Head title="Assinatura eletrônica de documentos" />
-            <section className="relative overflow-hidden bg-navy px-6 py-16 text-white md:py-24">
+            <section className="bg-navy relative overflow-hidden px-6 py-16 text-white md:py-24">
                 <div
                     aria-hidden
                     className="pointer-events-none absolute -top-[160px] -right-[120px] size-[520px] rounded-full"
@@ -39,20 +39,25 @@ export default function Home() {
                     }}
                 />
                 <div className="relative mx-auto flex max-w-[1100px] flex-col items-start gap-6">
-                    <p className="text-[11px] font-semibold tracking-[.24em] text-on-navy-muted uppercase">
+                    <p className="text-on-navy-muted text-[11px] font-semibold tracking-[.24em] uppercase">
                         Plataforma de assinatura eletrônica
                     </p>
                     <h1
-                        className="font-extrabold italic uppercase"
-                        style={{ fontSize: 'clamp(36px, 5vw, 64px)', lineHeight: 0.95, letterSpacing: '-.015em' }}
+                        className="font-extrabold uppercase italic"
+                        style={{
+                            fontSize: 'clamp(36px, 5vw, 64px)',
+                            lineHeight: 0.95,
+                            letterSpacing: '-.015em',
+                        }}
                     >
                         Assine documentos
                         <br />
                         em <span className="text-primary-bright">minutos</span>
                     </h1>
-                    <p className="max-w-[560px] text-[15px] leading-[1.6] text-on-navy-secondary">
-                        Envie contratos, propostas e termos para assinatura, acompanhe cada
-                        signatário e receba o PDF final com evidências e verificação pública.
+                    <p className="text-on-navy-secondary max-w-[560px] text-[15px] leading-[1.6]">
+                        Envie contratos, propostas e termos para assinatura,
+                        acompanhe cada signatário e receba o PDF final com
+                        evidências e verificação pública.
                     </p>
                     <div className="flex flex-wrap gap-3">
                         {auth.user ? (
@@ -62,7 +67,9 @@ export default function Home() {
                         ) : (
                             <>
                                 <Button asChild size="xl" variant="onNavy">
-                                    <Link href={register()}>Criar conta grátis</Link>
+                                    <Link href={register()}>
+                                        Criar conta grátis
+                                    </Link>
                                 </Button>
                                 <Button asChild size="xl" variant="ghostOnNavy">
                                     <Link href={login()}>Entrar</Link>
@@ -70,7 +77,7 @@ export default function Home() {
                             </>
                         )}
                     </div>
-                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-[12.5px] font-semibold text-on-navy-secondary">
+                    <div className="text-on-navy-secondary flex flex-wrap gap-x-6 gap-y-2 text-[12.5px] font-semibold">
                         <span>✓ Validade jurídica</span>
                         <span>✓ Conforme LGPD</span>
                         <span>✓ Certificado A1 da operadora</span>
@@ -81,22 +88,32 @@ export default function Home() {
 
             <section className="mx-auto grid w-full max-w-[1100px] gap-4 px-6 py-12 md:grid-cols-3">
                 {FEATURES.map((feature) => (
-                    <div key={feature.title} className="rounded-xl border border-border bg-card p-5 shadow-card">
-                        <span className="flex size-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                    <div
+                        key={feature.title}
+                        className="border-border bg-card shadow-card rounded-xl border p-5"
+                    >
+                        <span className="bg-primary-soft text-primary flex size-11 items-center justify-center rounded-xl">
                             <feature.icon className="size-5" />
                         </span>
-                        <h2 className="mt-4 text-[15px] font-semibold">{feature.title}</h2>
-                        <p className="mt-1.5 text-[13.5px] leading-[1.55] text-text-secondary">{feature.text}</p>
+                        <h2 className="mt-4 text-[15px] font-semibold">
+                            {feature.title}
+                        </h2>
+                        <p className="text-text-secondary mt-1.5 text-[13.5px] leading-[1.55]">
+                            {feature.text}
+                        </p>
                     </div>
                 ))}
             </section>
 
             <section className="mx-auto w-full max-w-[1100px] px-6 pb-16">
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-6 shadow-card">
+                <div className="border-border bg-card shadow-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-6">
                     <div>
-                        <h2 className="text-[18px] font-bold">Recebeu um documento assinado?</h2>
-                        <p className="mt-1 text-[13.5px] text-text-secondary">
-                            Confira a autenticidade pelo código de verificação impresso no PDF.
+                        <h2 className="text-[18px] font-bold">
+                            Recebeu um documento assinado?
+                        </h2>
+                        <p className="text-text-secondary mt-1 text-[13.5px]">
+                            Confira a autenticidade pelo código de verificação
+                            impresso no PDF.
                         </p>
                     </div>
                     <Button asChild variant="outline">

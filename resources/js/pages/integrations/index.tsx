@@ -20,9 +20,24 @@ export default function IntegrationsIndex() {
                         value="docs"
                         onChange={() => undefined}
                         options={[
-                            { value: 'docs', label: 'Documentação', disabled: true, title: 'Disponível na Fase 2' },
-                            { value: 'keys', label: 'Chaves e webhooks', disabled: true, title: 'Disponível na Fase 2' },
-                            { value: 'logs', label: 'Logs', disabled: true, title: 'Disponível na Fase 2' },
+                            {
+                                value: 'docs',
+                                label: 'Documentação',
+                                disabled: true,
+                                title: 'Disponível na Fase 2',
+                            },
+                            {
+                                value: 'keys',
+                                label: 'Chaves e webhooks',
+                                disabled: true,
+                                title: 'Disponível na Fase 2',
+                            },
+                            {
+                                value: 'logs',
+                                label: 'Logs',
+                                disabled: true,
+                                title: 'Disponível na Fase 2',
+                            },
                         ]}
                     />
                 }
@@ -33,7 +48,12 @@ export default function IntegrationsIndex() {
                 ctaHref={envelopesIndex.url()}
                 ctaLabel="Ir para Documentos"
                 extra={
-                    <Button variant="dashed" size="sm" disabled title="Em breve">
+                    <Button
+                        variant="dashed"
+                        size="sm"
+                        disabled
+                        title="Em breve"
+                    >
                         <Code className="size-[15px]" />
                         Avisar-me quando lançar
                     </Button>

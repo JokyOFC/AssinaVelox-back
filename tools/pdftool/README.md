@@ -24,13 +24,13 @@ Ferramenta de linha de comando autocontida, em Python, usada pelo backend Larave
 - Python **3.13** (testado com 3.13.14) em Windows ou Linux. Nao ha dependencias de sistema (sem Docker, sem Ghostscript, sem poppler).
 - Dependencias fixadas em `requirements.txt` (e o congelamento completo em `requirements.lock.txt`):
 
-| Pacote | Versao |
-|---|---|
-| pypdf | 6.18.0 |
-| reportlab | 5.0.1 |
-| pyHanko | 0.37.0 (traz pyhanko-certvalidator 0.32.0 e cryptography 50.0.1) |
-| Pillow | 12.3.0 |
-| pytest | 9.1.1 |
+| Pacote    | Versao                                                           |
+| --------- | ---------------------------------------------------------------- |
+| pypdf     | 6.18.0                                                           |
+| reportlab | 5.0.1                                                            |
+| pyHanko   | 0.37.0 (traz pyhanko-certvalidator 0.32.0 e cryptography 50.0.1) |
+| Pillow    | 12.3.0                                                           |
+| pytest    | 9.1.1                                                            |
 
 Instalacao (a partir de `tools/pdftool/`):
 
@@ -98,12 +98,12 @@ Sempre leia stdout como **UTF-8** (o JSON e emitido com `ensure_ascii=False`). U
 - Sucesso: objeto com `"ok": true` e os campos do comando.
 - Erro: `{"ok": false, "error": {"code": "<snake_case>", "message": "<texto legivel, sem segredos>"}}`.
 
-| Codigo de saida | Significado |
-|---|---|
-| `0` | sucesso |
-| `2` | erro de uso: argumentos invalidos, plano invalido, variavel de ambiente ausente (`missing_passphrase`) |
-| `3` | erro de processamento (falha inesperada com entrada aparentemente valida; `internal_error`, `signing_failed`, `pdf_write_failed`) |
-| `4` | entrada rejeitada: PDF corrompido (`invalid_pdf`), criptografado (`encrypted_pdf`), imagem invalida/nao suportada, arquivo ausente |
+| Codigo de saida | Significado                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `0`             | sucesso                                                                                                                            |
+| `2`             | erro de uso: argumentos invalidos, plano invalido, variavel de ambiente ausente (`missing_passphrase`)                             |
+| `3`             | erro de processamento (falha inesperada com entrada aparentemente valida; `internal_error`, `signing_failed`, `pdf_write_failed`)  |
+| `4`             | entrada rejeitada: PDF corrompido (`invalid_pdf`), criptografado (`encrypted_pdf`), imagem invalida/nao suportada, arquivo ausente |
 
 ## Convencao de coordenadas
 
@@ -123,12 +123,42 @@ Usada por `compose` (campos) e por `sign --visible`:
 Descreve o PDF sem modifica-lo.
 
 ```json
-{"ok":true,"pdf_version":"1.7","page_count":2,"encrypted":false,"openable":true,
- "has_signatures":true,"signature_count":1,"signature_fields":["AssinaVelox"],
- "has_acroform":true,"has_xfa":false,
- "metadata":{"title":null,"author":null,"producer":"ReportLab PDF Library","creator":"ReportLab"},
- "pages":[{"index":1,"rotation":0,"mediabox":[0,0,595.2756,841.8898],"cropbox":[0,0,595.2756,841.8898],"width_pt":595.2756,"height_pt":841.8898},
-          {"index":2,"rotation":90,"mediabox":[0,0,595.2756,841.8898],"cropbox":[0,0,595.2756,841.8898],"width_pt":841.8898,"height_pt":595.2756}]}
+{
+    "ok": true,
+    "pdf_version": "1.7",
+    "page_count": 2,
+    "encrypted": false,
+    "openable": true,
+    "has_signatures": true,
+    "signature_count": 1,
+    "signature_fields": ["AssinaVelox"],
+    "has_acroform": true,
+    "has_xfa": false,
+    "metadata": {
+        "title": null,
+        "author": null,
+        "producer": "ReportLab PDF Library",
+        "creator": "ReportLab"
+    },
+    "pages": [
+        {
+            "index": 1,
+            "rotation": 0,
+            "mediabox": [0, 0, 595.2756, 841.8898],
+            "cropbox": [0, 0, 595.2756, 841.8898],
+            "width_pt": 595.2756,
+            "height_pt": 841.8898
+        },
+        {
+            "index": 2,
+            "rotation": 90,
+            "mediabox": [0, 0, 595.2756, 841.8898],
+            "cropbox": [0, 0, 595.2756, 841.8898],
+            "width_pt": 841.8898,
+            "height_pt": 595.2756
+        }
+    ]
+}
 ```
 
 - PDFs criptografados: tenta a senha de usuario vazia. Se abrir, responde `"encrypted": true` e inclui `"permissions": [...]` (ex.: `["print","modify",...]`). Se nao abrir: `encrypted_pdf`, saida 4.
@@ -151,15 +181,66 @@ Saida: o mesmo objeto de `inspect` para o PDF gerado, mais `"source":{"width_px"
 Achata ("flatten") os valores dos campos sobre o PDF de origem, preservando todas as paginas e caixas.
 
 ```json
-{"source":"C:/tmp/contrato.pdf",
- "font":{"path":"C:/fonts/Inter.ttf","name":"Inter"},
- "fields":[
-  {"id":"fld_1","page":1,"type":"signature","x":0.10,"y":0.70,"width":0.30,"height":0.08,"image":"C:/tmp/assinatura.png"},
-  {"id":"fld_2","page":1,"type":"name","x":0.10,"y":0.79,"width":0.30,"height":0.04,"value":"Joao da Silva","font_size":10,"align":"left"},
-  {"id":"fld_3","page":1,"type":"date","x":0.10,"y":0.84,"width":0.30,"height":0.04,"value":"08/09/2026","align":"center"},
-  {"id":"fld_4","page":2,"type":"checkbox","x":0.05,"y":0.05,"width":0.03,"height":0.03,"value":true},
-  {"id":"fld_5","page":2,"type":"text","x":0.10,"y":0.05,"width":0.50,"height":0.04,"value":"Li e concordo","box":"cropbox"}
- ]}
+{
+    "source": "C:/tmp/contrato.pdf",
+    "font": { "path": "C:/fonts/Inter.ttf", "name": "Inter" },
+    "fields": [
+        {
+            "id": "fld_1",
+            "page": 1,
+            "type": "signature",
+            "x": 0.1,
+            "y": 0.7,
+            "width": 0.3,
+            "height": 0.08,
+            "image": "C:/tmp/assinatura.png"
+        },
+        {
+            "id": "fld_2",
+            "page": 1,
+            "type": "name",
+            "x": 0.1,
+            "y": 0.79,
+            "width": 0.3,
+            "height": 0.04,
+            "value": "Joao da Silva",
+            "font_size": 10,
+            "align": "left"
+        },
+        {
+            "id": "fld_3",
+            "page": 1,
+            "type": "date",
+            "x": 0.1,
+            "y": 0.84,
+            "width": 0.3,
+            "height": 0.04,
+            "value": "08/09/2026",
+            "align": "center"
+        },
+        {
+            "id": "fld_4",
+            "page": 2,
+            "type": "checkbox",
+            "x": 0.05,
+            "y": 0.05,
+            "width": 0.03,
+            "height": 0.03,
+            "value": true
+        },
+        {
+            "id": "fld_5",
+            "page": 2,
+            "type": "text",
+            "x": 0.1,
+            "y": 0.05,
+            "width": 0.5,
+            "height": 0.04,
+            "value": "Li e concordo",
+            "box": "cropbox"
+        }
+    ]
+}
 ```
 
 - `type`: `signature` | `initials` (imagem PNG/JPEG/WEBP ajustada e centralizada na caixa, transparencia preservada), `name` | `date` | `text` (texto em uma linha; fonte reduzida automaticamente ate caber na largura/altura, minimo 5 pt; centralizado verticalmente; 2 pt de margem interna; `align` = `left` | `center` | `right`), `checkbox` (`true` desenha um quadrado com marca de duas linhas; `false` nao desenha nada).
@@ -184,11 +265,21 @@ Aplica **uma** assinatura **PAdES B-B** (`/ETSI.CAdES.detached`, SHA-256) com py
 - PDFs criptografados sao rejeitados (`encrypted_pdf`, 4). PDFs corrompidos: `invalid_pdf` (4). Recusa do pyHanko (ex.: documento certificado que proibe alteracoes): `signing_failed` (3).
 
 ```json
-{"ok":true,"profile":"PAdES-B-B","field_name":"AssinaVelox",
- "signer_subject":"CN=AssinaVelox TESTE,O=AssinaVelox,C=BR","issuer":"CN=AssinaVelox TESTE,O=AssinaVelox,C=BR",
- "serial_hex":"034b9be4...","cert_fingerprint_sha256":"0f1a64b4...",
- "not_before":"2026-09-08T16:23:13+00:00","not_after":"2026-10-08T16:28:13+00:00",
- "md_algorithm":"sha256","timestamp":null,"visible":false,"page_count":3}
+{
+    "ok": true,
+    "profile": "PAdES-B-B",
+    "field_name": "AssinaVelox",
+    "signer_subject": "CN=AssinaVelox TESTE,O=AssinaVelox,C=BR",
+    "issuer": "CN=AssinaVelox TESTE,O=AssinaVelox,C=BR",
+    "serial_hex": "034b9be4...",
+    "cert_fingerprint_sha256": "0f1a64b4...",
+    "not_before": "2026-09-08T16:23:13+00:00",
+    "not_after": "2026-10-08T16:28:13+00:00",
+    "md_algorithm": "sha256",
+    "timestamp": null,
+    "visible": false,
+    "page_count": 3
+}
 ```
 
 ### `validate --in <pdf> [--trust <pem|der>]... [--no-revocation]`
@@ -201,28 +292,53 @@ Valida cada assinatura com `pyhanko.sign.validation.validate_pdf_signature`.
 - Chave do certificado: aceita `nonRepudiation` **ou** `digitalSignature`.
 
 ```json
-{"ok":true,"signature_count":1,"all_intact":true,"all_valid":true,"trust_roots_configured":1,"revocation":"not_checked",
- "signatures":[{"field_name":"AssinaVelox","intact":true,"valid":true,"trusted":true,"trust_reason":null,
-   "signer_subject":"CN=...","issuer":"CN=...","serial_hex":"...","cert_fingerprint_sha256":"...",
-   "not_before":"...","not_after":"...","signing_time":"2026-09-08T16:28:13+00:00",
-   "md_algorithm":"sha256","subfilter":"/ETSI.CAdES.detached",
-   "coverage":"ENTIRE_FILE","modification_level":"NONE","docmdp_ok":null,
-   "revocation":"not_checked","summary":"INTACT:TRUSTED,UNTOUCHED","errors":[]}]}
+{
+    "ok": true,
+    "signature_count": 1,
+    "all_intact": true,
+    "all_valid": true,
+    "trust_roots_configured": 1,
+    "revocation": "not_checked",
+    "signatures": [
+        {
+            "field_name": "AssinaVelox",
+            "intact": true,
+            "valid": true,
+            "trusted": true,
+            "trust_reason": null,
+            "signer_subject": "CN=...",
+            "issuer": "CN=...",
+            "serial_hex": "...",
+            "cert_fingerprint_sha256": "...",
+            "not_before": "...",
+            "not_after": "...",
+            "signing_time": "2026-09-08T16:28:13+00:00",
+            "md_algorithm": "sha256",
+            "subfilter": "/ETSI.CAdES.detached",
+            "coverage": "ENTIRE_FILE",
+            "modification_level": "NONE",
+            "docmdp_ok": null,
+            "revocation": "not_checked",
+            "summary": "INTACT:TRUSTED,UNTOUCHED",
+            "errors": []
+        }
+    ]
+}
 ```
 
 Campos por assinatura:
 
-| Campo | Significado |
-|---|---|
-| `intact` | os bytes cobertos pelo `/ByteRange` nao foram alterados (digest confere) |
-| `valid` | a assinatura CMS e criptograficamente valida |
-| `trusted` | `valid`, `intact` **e** cadeia validada ate uma raiz de `--trust` |
-| `trust_reason` | `null` quando confiavel; senao `no_trust_roots_configured`, indicacao do pyHanko (ex.: `NO_CERTIFICATE_CHAIN_FOUND`), `signature_invalid`, `validation_error` |
-| `coverage` | `ENTIRE_FILE`, `ENTIRE_REVISION`, `CONTIGUOUS_BLOCK_FROM_START`, `UNCLEAR` |
-| `modification_level` | `NONE`, `LTA_UPDATES`, `FORM_FILLING`, `ANNOTATIONS`, `OTHER` (ou `null` se a analise de diferencas nao for conclusiva) |
-| `docmdp_ok` | respeito ao nivel DocMDP (`null` se nao ha assinatura de certificacao) |
-| `summary` | `summary()` do pyHanko (`INTACT:...` ou `INVALID`) |
-| `errors` | lista legivel: `digest_mismatch`, `invalid_signature`, `trust: ...`, `suspicious_modification`, `docmdp_violation`, `validation_error` |
+| Campo                | Significado                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `intact`             | os bytes cobertos pelo `/ByteRange` nao foram alterados (digest confere)                                                                                      |
+| `valid`              | a assinatura CMS e criptograficamente valida                                                                                                                  |
+| `trusted`            | `valid`, `intact` **e** cadeia validada ate uma raiz de `--trust`                                                                                             |
+| `trust_reason`       | `null` quando confiavel; senao `no_trust_roots_configured`, indicacao do pyHanko (ex.: `NO_CERTIFICATE_CHAIN_FOUND`), `signature_invalid`, `validation_error` |
+| `coverage`           | `ENTIRE_FILE`, `ENTIRE_REVISION`, `CONTIGUOUS_BLOCK_FROM_START`, `UNCLEAR`                                                                                    |
+| `modification_level` | `NONE`, `LTA_UPDATES`, `FORM_FILLING`, `ANNOTATIONS`, `OTHER` (ou `null` se a analise de diferencas nao for conclusiva)                                       |
+| `docmdp_ok`          | respeito ao nivel DocMDP (`null` se nao ha assinatura de certificacao)                                                                                        |
+| `summary`            | `summary()` do pyHanko (`INTACT:...` ou `INVALID`)                                                                                                            |
+| `errors`             | lista legivel: `digest_mismatch`, `invalid_signature`, `trust: ...`, `suspicious_modification`, `docmdp_violation`, `validation_error`                        |
 
 `all_intact`/`all_valid` sao `false` quando o PDF nao tem assinaturas (`signature_count: 0`).
 
@@ -240,24 +356,24 @@ Em um diretorio temporario: gera um PDF de 2 paginas (a segunda com `/Rotate 90`
 
 ## Codigos de erro
 
-| `error.code` | Saida | Comandos | Situacao |
-|---|---|---|---|
-| `usage_error` | 2 | todos | argumentos invalidos/ausentes |
-| `missing_passphrase` | 2 | sign, gen-test-cert | variavel de ambiente ausente ou vazia |
-| `invalid_env_name` | 2 | sign, gen-test-cert | nome de variavel invalido |
-| `invalid_plan`, `missing_plan` | 2 | compose | plano JSON malformado ou inexistente |
-| `same_path` | 2 | compose, append, sign | `--out` igual a entrada |
-| `invalid_visible` | 2 | sign | especificacao `--visible` invalida |
-| `invalid_page_size`, `invalid_margin` | 2 | image2pdf | opcoes invalidas |
-| `invalid_subject`, `invalid_days` | 2 | gen-test-cert | parametros invalidos |
-| `trust_file_not_found`, `invalid_trust_file` | 2 | validate | arquivo de `--trust` ausente/ilegivel |
-| `missing_input`, `missing_source`, `missing_image`, `missing_font`, `pfx_not_found` | 4 | varios | arquivo de entrada inexistente |
-| `invalid_pdf` | 4 | todos com PDF | PDF corrompido/ilegivel |
-| `encrypted_pdf` | 4 | inspect, compose, append, validate, sign | criptografado sem senha vazia (sign rejeita qualquer criptografia) |
-| `unsupported_image`, `invalid_image`, `image_too_large` | 4 | image2pdf, compose | imagem rejeitada |
-| `invalid_font` | 4 | compose | TTF ilegivel |
-| `pfx_load_failed` | 4 | sign | senha errada ou PKCS#12 invalido |
-| `signing_failed`, `pdf_write_failed`, `write_failed`, `selftest_failed`, `internal_error` | 3 | varios | falha de processamento |
+| `error.code`                                                                              | Saida | Comandos                                 | Situacao                                                           |
+| ----------------------------------------------------------------------------------------- | ----- | ---------------------------------------- | ------------------------------------------------------------------ |
+| `usage_error`                                                                             | 2     | todos                                    | argumentos invalidos/ausentes                                      |
+| `missing_passphrase`                                                                      | 2     | sign, gen-test-cert                      | variavel de ambiente ausente ou vazia                              |
+| `invalid_env_name`                                                                        | 2     | sign, gen-test-cert                      | nome de variavel invalido                                          |
+| `invalid_plan`, `missing_plan`                                                            | 2     | compose                                  | plano JSON malformado ou inexistente                               |
+| `same_path`                                                                               | 2     | compose, append, sign                    | `--out` igual a entrada                                            |
+| `invalid_visible`                                                                         | 2     | sign                                     | especificacao `--visible` invalida                                 |
+| `invalid_page_size`, `invalid_margin`                                                     | 2     | image2pdf                                | opcoes invalidas                                                   |
+| `invalid_subject`, `invalid_days`                                                         | 2     | gen-test-cert                            | parametros invalidos                                               |
+| `trust_file_not_found`, `invalid_trust_file`                                              | 2     | validate                                 | arquivo de `--trust` ausente/ilegivel                              |
+| `missing_input`, `missing_source`, `missing_image`, `missing_font`, `pfx_not_found`       | 4     | varios                                   | arquivo de entrada inexistente                                     |
+| `invalid_pdf`                                                                             | 4     | todos com PDF                            | PDF corrompido/ilegivel                                            |
+| `encrypted_pdf`                                                                           | 4     | inspect, compose, append, validate, sign | criptografado sem senha vazia (sign rejeita qualquer criptografia) |
+| `unsupported_image`, `invalid_image`, `image_too_large`                                   | 4     | image2pdf, compose                       | imagem rejeitada                                                   |
+| `invalid_font`                                                                            | 4     | compose                                  | TTF ilegivel                                                       |
+| `pfx_load_failed`                                                                         | 4     | sign                                     | senha errada ou PKCS#12 invalido                                   |
+| `signing_failed`, `pdf_write_failed`, `write_failed`, `selftest_failed`, `internal_error` | 3     | varios                                   | falha de processamento                                             |
 
 ## Seguranca
 

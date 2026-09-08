@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 
 type Props = ComponentProps<typeof Link>;
 
+/** Link textual azul 600 (padrão dos mocks de auth e rodapés de card). */
 export default function TextLink({
     className = '',
     children,
@@ -12,7 +13,7 @@ export default function TextLink({
     return (
         <Link
             className={cn(
-                'text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500',
+                'font-semibold text-primary transition-colors hover:text-primary-hover hover:underline',
                 className,
             )}
             {...props}

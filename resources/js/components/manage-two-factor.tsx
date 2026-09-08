@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Heading from '@/components/heading';
 import TwoFactorRecoveryCodes from '@/components/two-factor-recovery-codes';
 import TwoFactorSetupModal from '@/components/two-factor-setup-modal';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTwoFactorAuth } from '@/hooks/use-two-factor-auth';
 import { disable, enable } from '@/routes/two-factor';
@@ -14,6 +15,7 @@ export type Props = {
     twoFactorEnabled?: boolean;
 };
 
+/** Card "Autenticação em duas etapas" (TOTP via Fortify). */
 export default function ManageTwoFactor(props: Props) {
     const requiresConfirmation = props.requiresConfirmation ?? false;
     const twoFactorEnabled = props.twoFactorEnabled ?? false;
@@ -29,7 +31,7 @@ export default function ManageTwoFactor(props: Props) {
         fetchRecoveryCodes,
         errors,
     } = useTwoFactorAuth();
-    const [showSetupModal, setShowSetupModal] = useState<boolean>(false);
+    const [showSetupModal, setShowSetupModal] = useState(false);
     const prevTwoFactorEnabled = useRef(twoFactorEnabled);
 
     useEffect(() => {
@@ -45,68 +47,54 @@ export default function ManageTwoFactor(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
+        <div id="2fa" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-card">
             <Heading
                 variant="small"
-                title="Two-factor authentication"
-                description="Manage your two-factor authentication settings"
+                title="Autenticação em duas etapas"
+                description="Um código temporário do seu aplicativo autenticador é exigido a cada login."
+                action={
+                    <Badge variant={twoFactorEnabled ? 'success' : 'neutral'} dot>
+                        {twoFactorEnabled ? 'Ativa' : 'Inativa'}
+                    </Badge>
+                }
             />
-            {twoFactorEnabled ? (
-                <div className="flex flex-col items-start justify-start space-y-4">
-                    <p className="text-muted-foreground text-sm">
-                        You will be prompted for a secure, random pin during
-                        login, which you can retrieve from the TOTP-supported
-                        application on your phone.
-                    </p>
 
-                    <div className="relative inline">
-                        <Form {...disable.form()}>
+            {twoFactorEnabled ? (
+                <div className="flex flex-col gap-4">
+                    <p className="text-[13px] leading-[1.55] text-text-secondary">
+                        Ao entrar, você informará um código gerado por um aplicativo compatível com TOTP (Google
+                        Authenticator, Authy, 1Password etc.).
+                    </p>
+                    <TwoFactorRecoveryCodes recoveryCodesList={recoveryCodesList} fetchRecoveryCodes={fetchRecoveryCodes} errors={errors} />
+                    <Form {...disable.form()}>
+                        {({ processing }) => (
+                            <Button variant="destructive" size="sm" type="submit" disabled={processing}>
+                                Desativar 2FA
+                            </Button>
+                        )}
+                    </Form>
+                </div>
+            ) : (
+                <div className="flex flex-col items-start gap-4">
+                    <p className="text-[13px] leading-[1.55] text-text-secondary">
+                        Ao ativar, você precisará de um código do aplicativo autenticador além da senha. Recomendado
+                        para todos os usuários; obrigatório quando a organização exige.
+                    </p>
+                    {hasSetupData ? (
+                        <Button onClick={() => setShowSetupModal(true)}>
+                            <ShieldCheck />
+                            Continuar configuração
+                        </Button>
+                    ) : (
+                        <Form {...enable.form()} onSuccess={() => setShowSetupModal(true)}>
                             {({ processing }) => (
-                                <Button
-                                    variant="destructive"
-                                    type="submit"
-                                    disabled={processing}
-                                >
-                                    Disable 2FA
+                                <Button type="submit" disabled={processing}>
+                                    <ShieldCheck />
+                                    Ativar 2FA
                                 </Button>
                             )}
                         </Form>
-                    </div>
-
-                    <TwoFactorRecoveryCodes
-                        recoveryCodesList={recoveryCodesList}
-                        fetchRecoveryCodes={fetchRecoveryCodes}
-                        errors={errors}
-                    />
-                </div>
-            ) : (
-                <div className="flex flex-col items-start justify-start space-y-4">
-                    <p className="text-muted-foreground text-sm">
-                        When you enable two-factor authentication, you will be
-                        prompted for a secure pin during login. This pin can be
-                        retrieved from a TOTP-supported application on your
-                        phone.
-                    </p>
-
-                    <div>
-                        {hasSetupData ? (
-                            <Button onClick={() => setShowSetupModal(true)}>
-                                <ShieldCheck />
-                                Continue setup
-                            </Button>
-                        ) : (
-                            <Form
-                                {...enable.form()}
-                                onSuccess={() => setShowSetupModal(true)}
-                            >
-                                {({ processing }) => (
-                                    <Button type="submit" disabled={processing}>
-                                        Enable 2FA
-                                    </Button>
-                                )}
-                            </Form>
-                        )}
-                    </div>
+                    )}
                 </div>
             )}
 

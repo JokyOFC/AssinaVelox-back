@@ -1,78 +1,169 @@
-import { Link } from '@inertiajs/react';
-import type { PropsWithChildren } from 'react';
-import Heading from '@/components/heading';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { Link, usePage } from '@inertiajs/react';
+import type { PropsWithChildren, ReactNode } from 'react';
+import { PageHeader } from '@/components/page-header';
+import { RailNavButton } from '@/components/segmented-control';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { useCurrentUrl } from '@/hooks/use-current-url';
-import { cn, toUrl } from '@/lib/utils';
-import { edit as editAppearance } from '@/routes/appearance';
-import { edit } from '@/routes/profile';
-import { edit as editSecurity } from '@/routes/security';
-import type { NavItem } from '@/types';
+import { toUrl } from '@/lib/utils';
+import type { RouteDefinition } from '@/wayfinder';
+import { index as billingIndex } from '@/routes/billing';
+import { index as plansIndex } from '@/routes/plans';
+import { edit as profileEdit } from '@/routes/profile';
+import { edit as securityEdit } from '@/routes/security';
+import {
+    general as settingsGeneral,
+    notifications as settingsNotifications,
+    signing as settingsSigning,
+} from '@/routes/settings';
 
-const sidebarNavItems: NavItem[] = [
-    {
-        title: 'Profile',
-        href: edit(),
-        icon: null,
-    },
-    {
-        title: 'Security',
-        href: editSecurity(),
-        icon: null,
-    },
-    {
-        title: 'Appearance',
-        href: editAppearance(),
-        icon: null,
-    },
-];
+type RailItem = {
+    key: string;
+    title: string;
+    href: RouteDefinition<'get'>;
+    prefixes?: string[];
+    hidden?: boolean;
+};
 
-export default function SettingsLayout({ children }: PropsWithChildren) {
-    const { isCurrentOrParentUrl } = useCurrentUrl();
+type RailGroup = { label: string; items: RailItem[] };
+
+export type SettingsLayoutProps = PropsWithChildren<{
+    /** Substitui o cabeçalho padrão "Configurações". */
+    header?: ReactNode;
+}>;
+
+/**
+ * Layout de Configurações (DESIGN §6.11): rail vertical de 200px com itens
+ * Geral · Segurança da conta · Padrões de assinatura · Notificações · Plano e
+ * cobrança (+ Perfil), e coluna de conteúdo `max-w-[820px] gap-4`.
+ * No mobile, o rail vira um Select.
+ */
+export default function SettingsLayout({ children, header }: SettingsLayoutProps) {
+    const { organization } = usePage().props;
+    const { isCurrentOrParentUrl, currentUrl } = useCurrentUrl();
+    const permissions = organization?.permissions;
+
+    const groups: RailGroup[] = [
+        {
+            label: 'Minha conta',
+            items: [
+                { key: 'profile', title: 'Perfil', href: profileEdit() },
+                {
+                    key: 'security',
+                    title: 'Segurança da conta',
+                    href: securityEdit(),
+                },
+            ],
+        },
+        {
+            label: 'Organização',
+            items: [
+                {
+                    key: 'general',
+                    title: 'Geral',
+                    href: settingsGeneral(),
+                    hidden: !(permissions?.manage_settings ?? false),
+                },
+                {
+                    key: 'signing',
+                    title: 'Padrões de assinatura',
+                    href: settingsSigning(),
+                    hidden: !(permissions?.manage_settings ?? false),
+                },
+                {
+                    key: 'notifications',
+                    title: 'Notificações',
+                    href: settingsNotifications(),
+                },
+                {
+                    key: 'billing',
+                    title: 'Plano e cobrança',
+                    href: billingIndex(),
+                    prefixes: [billingIndex.url(), plansIndex.url()],
+                    hidden: !(permissions?.manage_billing ?? false),
+                },
+            ],
+        },
+    ];
+
+    const isActive = (item: RailItem) =>
+        (item.prefixes ?? [toUrl(item.href)]).some((prefix) =>
+            prefix === settingsGeneral.url()
+                ? currentUrl === prefix
+                : isCurrentOrParentUrl(prefix),
+        );
+
+    const visibleItems = groups.flatMap((g) => g.items.filter((i) => !i.hidden));
+    const activeItem = visibleItems.find(isActive);
 
     return (
-        <div className="px-4 py-6">
-            <Heading
-                title="Settings"
-                description="Manage your profile and account settings"
-            />
+        <>
+            {header ?? (
+                <PageHeader
+                    title="Configurações"
+                    subtitle="Conta, padrões de assinatura, notificações e plano."
+                />
+            )}
 
-            <div className="flex flex-col lg:flex-row lg:space-x-12">
-                <aside className="w-full max-w-xl lg:w-48">
-                    <nav
-                        className="flex flex-col space-y-1 space-x-0"
-                        aria-label="Settings"
-                    >
-                        {sidebarNavItems.map((item, index) => (
-                            <Button
-                                key={`${toUrl(item.href)}-${index}`}
-                                size="sm"
-                                variant="ghost"
-                                asChild
-                                className={cn('w-full justify-start', {
-                                    'bg-muted': isCurrentOrParentUrl(item.href),
-                                })}
-                            >
-                                <Link href={item.href}>
-                                    {item.icon && (
-                                        <item.icon className="h-4 w-4" />
-                                    )}
-                                    {item.title}
-                                </Link>
-                            </Button>
-                        ))}
-                    </nav>
+            <div className="flex flex-wrap items-start gap-5">
+                <aside className="hidden w-[200px] shrink-0 flex-col gap-4 md:flex">
+                    {groups.map((group) => {
+                        const items = group.items.filter((item) => !item.hidden);
+
+                        if (items.length === 0) {
+                            return null;
+                        }
+
+                        return (
+                            <nav key={group.label} aria-label={group.label} className="flex flex-col gap-0.5">
+                                <span className="flex h-7 items-center px-3 text-[10.5px] font-bold tracking-[.14em] text-muted-foreground uppercase">
+                                    {group.label}
+                                </span>
+                                {items.map((item) => (
+                                    <Link key={item.key} href={item.href} prefetch>
+                                        <RailNavButton active={isActive(item)} asChild>
+                                            {item.title}
+                                        </RailNavButton>
+                                    </Link>
+                                ))}
+                            </nav>
+                        );
+                    })}
                 </aside>
 
-                <Separator className="my-6 lg:hidden" />
+                <div className="w-full md:hidden">
+                    <Select
+                        value={activeItem?.key}
+                        onValueChange={(key) => {
+                            const target = visibleItems.find((i) => i.key === key);
 
-                <div className="flex-1 md:max-w-2xl">
-                    <section className="max-w-xl space-y-12">
-                        {children}
-                    </section>
+                            if (target) {
+                                window.location.assign(toUrl(target.href));
+                            }
+                        }}
+                    >
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Seção" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {visibleItems.map((item) => (
+                                <SelectItem key={item.key} value={item.key}>
+                                    {item.title}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
+
+                <section className="flex min-w-0 flex-[1_1_480px] flex-col gap-4 md:max-w-[820px]">
+                    {children}
+                </section>
             </div>
-        </div>
+        </>
     );
 }

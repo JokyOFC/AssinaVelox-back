@@ -1,6 +1,7 @@
 import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
+/** Mensagem de validação sob o campo (DESIGN §4.2: `text-danger text-[12px]`). */
 export default function InputError({
     message,
     className = '',
@@ -9,7 +10,8 @@ export default function InputError({
     return message ? (
         <p
             {...props}
-            className={cn('text-sm text-red-600 dark:text-red-400', className)}
+            role="alert"
+            className={cn('text-[12px] font-medium text-danger', className)}
         >
             {message}
         </p>

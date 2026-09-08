@@ -38,6 +38,34 @@ return [
             'report' => false,
         ],
 
+        /*
+        | Disco privado dos documentos (originais, convertidos, finais, evidências,
+        | imagens de assinatura). Driver por DOCUMENTS_DISK=local|s3. Nunca público:
+        | downloads passam sempre por controller autorizado.
+        */
+        'documents' => env('DOCUMENTS_DISK', 'local') === 's3'
+            ? [
+                'driver' => 's3',
+                'key' => env('DOCUMENTS_S3_KEY', env('AWS_ACCESS_KEY_ID')),
+                'secret' => env('DOCUMENTS_S3_SECRET', env('AWS_SECRET_ACCESS_KEY')),
+                'region' => env('DOCUMENTS_S3_REGION', env('AWS_DEFAULT_REGION')),
+                'bucket' => env('DOCUMENTS_S3_BUCKET', env('AWS_BUCKET')),
+                'endpoint' => env('DOCUMENTS_S3_ENDPOINT', env('AWS_ENDPOINT')),
+                'use_path_style_endpoint' => (bool) env('DOCUMENTS_S3_USE_PATH_STYLE_ENDPOINT', env('AWS_USE_PATH_STYLE_ENDPOINT', false)),
+                'root' => env('DOCUMENTS_S3_ROOT', ''),
+                'visibility' => 'private',
+                'throw' => true,
+                'report' => false,
+            ]
+            : [
+                'driver' => 'local',
+                'root' => storage_path('app/documents'),
+                'visibility' => 'private',
+                'serve' => false,
+                'throw' => true,
+                'report' => false,
+            ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

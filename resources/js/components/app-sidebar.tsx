@@ -1,64 +1,325 @@
-import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import {
+    ArrowLeft,
+    Building2,
+    Code,
+    CreditCard,
+    FileText,
+    History,
+    LayoutDashboard,
+    LayoutTemplate,
+    PenLine,
+    Plus,
+    ShieldCheck,
+    SlidersHorizontal,
+    Users,
+    type LucideIcon,
+} from 'lucide-react';
+import { AccountMenu } from '@/components/account-menu';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
-import { NavMain } from '@/components/nav-main';
-import { NavUser } from '@/components/nav-user';
+import { OrgSwitcher } from '@/components/org-switcher';
+import { Badge } from '@/components/ui/badge';
 import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useCurrentUrl } from '@/hooks/use-current-url';
+import { cn, toUrl } from '@/lib/utils';
+import type { RouteDefinition } from '@/wayfinder';
 import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import { index as adminAudit } from '@/routes/admin/audit';
+import { index as adminBilling } from '@/routes/admin/billing';
+import { index as adminOrganizations } from '@/routes/admin/organizations';
+import { index as adminSettings } from '@/routes/admin/settings';
+import { index as adminUsers } from '@/routes/admin/users';
+import { index as billingIndex } from '@/routes/billing';
+import { create as envelopesCreate, index as envelopesIndex } from '@/routes/envelopes';
+import { index as integrationsIndex } from '@/routes/integrations';
+import { index as membersIndex } from '@/routes/members';
+import { index as plansIndex } from '@/routes/plans';
+import { edit as profileEdit } from '@/routes/profile';
+import { index as recipientsIndex } from '@/routes/recipients';
+import { edit as securityEdit } from '@/routes/security';
+import { general as settingsGeneral, notifications as settingsNotifications, signing as settingsSigning } from '@/routes/settings';
+import { index as templatesIndex } from '@/routes/templates';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+export type SidebarMode = 'client' | 'admin';
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
+type NavEntry = {
+    key: string;
+    title: string;
+    href: RouteDefinition<'get'> | string;
+    icon: LucideIcon;
+    /** Prefixos de URL que marcam o item como ativo. */
+    activePrefixes?: string[];
+    badge?: number;
+    phase2?: boolean;
+    disabled?: boolean;
+    hidden?: boolean;
+};
 
-export function AppSidebar() {
+type NavGroup = { label: string; items: NavEntry[] };
+
+function NavItem({ item, onNavigate }: { item: NavEntry; onNavigate: () => void }) {
+    const { isCurrentOrParentUrl } = useCurrentUrl();
+    const href = toUrl(item.href);
+    const prefixes = item.activePrefixes ?? [href];
+    const active = prefixes.some((prefix) => isCurrentOrParentUrl(prefix));
+
+    const classes = cn(
+        'flex h-[34px] w-full items-center gap-[10px] rounded-lg px-[10px] text-[13.5px] transition-colors',
+        active
+            ? 'bg-primary-soft font-semibold text-primary'
+            : 'font-medium text-text-secondary hover:bg-accent hover:text-foreground',
+        item.disabled && 'cursor-not-allowed opacity-70 hover:bg-transparent hover:text-text-secondary',
+    );
+
+    const content = (
+        <>
+            <item.icon className="size-4 shrink-0" strokeWidth={2} />
+            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            {item.badge !== undefined && item.badge > 0 && (
+                <Badge variant="count">{item.badge}</Badge>
+            )}
+            {item.phase2 && <Badge variant="phase">Fase 2</Badge>}
+        </>
+    );
+
+    if (item.disabled) {
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span role="link" aria-disabled className={classes}>
+                        {content}
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent side="right">Disponível na Fase 2</TooltipContent>
+            </Tooltip>
+        );
+    }
+
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
+        <Link href={href} prefetch onClick={onNavigate} className={classes} aria-current={active ? 'page' : undefined}>
+            {content}
+        </Link>
+    );
+}
+
+/**
+ * Sidebar da aplicação (DESIGN §3.1; ROUTES §5). `mode` é derivado da rota
+ * atual (`/admin/*` → admin). Vira Sheet abaixo de `md` (shadcn Sidebar).
+ */
+export function AppSidebar({ mode }: { mode: SidebarMode }) {
+    const { auth, organization, counts } = usePage().props;
+    const { isMobile, setOpenMobile } = useSidebar();
+    const onNavigate = () => {
+        if (isMobile) {
+            setOpenMobile(false);
+        }
+    };
+
+    const permissions = organization?.permissions;
+    const isMember = organization?.role === 'member';
+
+    const clientGroups: NavGroup[] = [
+        {
+            label: 'Plataforma',
+            items: [
+                {
+                    key: 'dashboard',
+                    title: 'Dashboard',
+                    href: dashboard(),
+                    icon: LayoutDashboard,
+                },
+                {
+                    key: 'envelopes',
+                    title: 'Documentos',
+                    href: envelopesIndex(),
+                    icon: FileText,
+                    badge: counts?.pending_envelopes ?? 0,
+                },
+                {
+                    key: 'recipients',
+                    title: 'Assinaturas',
+                    href: recipientsIndex(),
+                    icon: PenLine,
+                },
+                {
+                    key: 'templates',
+                    title: 'Modelos',
+                    href: templatesIndex(),
+                    icon: LayoutTemplate,
+                    phase2: true,
+                },
+            ],
+        },
+        {
+            label: 'Conta',
+            items: [
+                {
+                    key: 'members',
+                    title: 'Usuários',
+                    href: membersIndex(),
+                    icon: Users,
+                    hidden: !(permissions?.manage_members ?? false),
+                },
+                {
+                    key: 'integrations',
+                    title: 'API e integrações',
+                    href: integrationsIndex(),
+                    icon: Code,
+                    phase2: true,
+                },
+                {
+                    key: 'settings',
+                    title: 'Configurações',
+                    href: isMember ? settingsNotifications() : settingsGeneral(),
+                    icon: SlidersHorizontal,
+                    activePrefixes: [
+                        settingsGeneral.url(),
+                        settingsSigning.url(),
+                        settingsNotifications.url(),
+                        billingIndex.url(),
+                        plansIndex.url(),
+                        profileEdit.url(),
+                        securityEdit.url(),
+                    ],
+                },
+            ],
+        },
+    ];
+
+    const adminGroups: NavGroup[] = [
+        {
+            label: 'Operação',
+            items: [
+                {
+                    key: 'admin-organizations',
+                    title: 'Clientes',
+                    href: adminOrganizations(),
+                    icon: Building2,
+                },
+                {
+                    key: 'admin-billing',
+                    title: 'Planos e faturamento',
+                    href: adminBilling(),
+                    icon: CreditCard,
+                    phase2: true,
+                    disabled: true,
+                },
+                {
+                    key: 'admin-users',
+                    title: 'Usuários da plataforma',
+                    href: adminUsers(),
+                    icon: Users,
+                    phase2: true,
+                    disabled: true,
+                },
+                {
+                    key: 'admin-audit',
+                    title: 'Logs e auditoria',
+                    href: adminAudit(),
+                    icon: History,
+                    phase2: true,
+                    disabled: true,
+                },
+            ],
+        },
+        {
+            label: 'Sistema',
+            items: [
+                {
+                    key: 'admin-settings',
+                    title: 'Configurações globais',
+                    href: adminSettings(),
+                    icon: SlidersHorizontal,
+                    phase2: true,
+                    disabled: true,
+                },
+                {
+                    key: 'back',
+                    title: 'Voltar ao app',
+                    href: dashboard(),
+                    icon: ArrowLeft,
+                    activePrefixes: ['/__never__'],
+                },
+            ],
+        },
+    ];
+
+    const groups = mode === 'admin' ? adminGroups : clientGroups;
+
+    return (
+        <Sidebar collapsible="offcanvas" variant="sidebar" className="border-r border-border">
+            <SidebarHeader className="gap-0 p-0">
+                <div className="px-4 pt-[18px] pb-2.5">
+                    <Link href={dashboard()} onClick={onNavigate} className="inline-block">
+                        <AppLogo height={30} />
+                    </Link>
+                </div>
+
+                {mode === 'client' ? (
+                    <>
+                        {organization && (
+                            <div className="px-3 pt-1.5 pb-1">
+                                <OrgSwitcher />
+                            </div>
+                        )}
+                        <div className="px-3 pt-1.5 pb-2.5">
+                            <Link
+                                href={envelopesCreate()}
+                                onClick={onNavigate}
+                                className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[13.5px] font-semibold text-white shadow-primary transition-colors hover:bg-primary-hover"
+                            >
+                                <Plus className="size-[15px]" strokeWidth={2.5} />
+                                Nova solicitação
                             </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+                        </div>
+                    </>
+                ) : (
+                    <div className="mx-3 mt-1.5 mb-2.5 flex items-center gap-2.5 rounded-lg bg-navy px-2.5 py-2 text-white">
+                        <ShieldCheck className="size-4 shrink-0 text-primary-bright" />
+                        <span className="min-w-0 flex-1">
+                            <span className="block text-[12.5px] font-semibold">Painel interno</span>
+                            <span className="block text-[11px] text-on-navy-subtle">Equipe AssinaVelox</span>
+                        </span>
+                    </div>
+                )}
             </SidebarHeader>
 
-            <SidebarContent>
-                <NavMain items={mainNavItems} />
+            <SidebarContent className="gap-0 px-3 py-1">
+                <nav className="flex flex-col gap-3.5" aria-label="Navegação principal">
+                    {groups.map((group) => {
+                        const visible = group.items.filter((item) => !item.hidden);
+
+                        if (visible.length === 0) {
+                            return null;
+                        }
+
+                        return (
+                            <div key={group.label}>
+                                <div className="flex h-7 items-center px-[10px] text-[10.5px] font-bold tracking-[.14em] text-muted-foreground uppercase">
+                                    {group.label}
+                                </div>
+                                <ul className="flex flex-col gap-0.5">
+                                    {visible.map((item) => (
+                                        <li key={item.key}>
+                                            <NavItem item={item} onNavigate={onNavigate} />
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        );
+                    })}
+                </nav>
             </SidebarContent>
 
-            <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
-                <NavUser />
+            <SidebarFooter className="border-t border-border p-3">
+                {auth.user && <AccountMenu />}
             </SidebarFooter>
         </Sidebar>
     );

@@ -1,46 +1,73 @@
-// Components
-import { Form, Head } from '@inertiajs/react';
-import TextLink from '@/components/text-link';
+import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { Check, MailCheck } from 'lucide-react';
+import { useEffect } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { logout } from '@/routes';
 import { send } from '@/routes/verification';
 
-export default function VerifyEmail({ status }: { status?: string }) {
+type Props = { status?: 'verification-link-sent' | null };
+
+/** Verificar e-mail (ROUTES §2.3): card verde reaproveitado do mock de recuperação. */
+export default function VerifyEmail({ status }: Props) {
+    const { auth } = usePage().props;
+
+    useEffect(() => {
+        if (status === 'verification-link-sent') {
+            toast.success('Novo link enviado');
+        }
+    }, [status]);
+
     return (
         <>
-            <Head title="Email verification" />
+            <Head title="Verifique seu e-mail" />
 
-            {status === 'verification-link-sent' && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    A new verification link has been sent to the email address
-                    you provided during registration.
+            <div className="flex flex-col gap-4 rounded-xl border border-success-border bg-success-bg p-6">
+                <span className="flex size-10 items-center justify-center rounded-[10px] bg-success-solid text-white">
+                    {status === 'verification-link-sent' ? (
+                        <Check className="size-5 stroke-[2.5]" />
+                    ) : (
+                        <MailCheck className="size-5" />
+                    )}
+                </span>
+                <div>
+                    <h1 className="text-[20px] font-bold">Verifique seu e-mail</h1>
+                    <p className="mt-2 text-[14px] leading-[1.55] text-success">
+                        Enviamos um link de confirmação para{' '}
+                        <b>{auth.user?.email}</b>. Clique nele para ativar sua
+                        conta. Se não aparecer em alguns minutos, confira a pasta
+                        de spam.
+                    </p>
                 </div>
-            )}
-
-            <Form {...send.form()} className="space-y-6 text-center">
-                {({ processing }) => (
-                    <>
-                        <Button disabled={processing} variant="secondary">
-                            {processing && <Spinner />}
-                            Resend verification email
-                        </Button>
-
-                        <TextLink
-                            href={logout()}
-                            className="mx-auto block text-sm"
+                <Form {...send.form()} className="flex flex-wrap items-center gap-3">
+                    {({ processing }) => (
+                        <Button
+                            type="submit"
+                            variant="success"
+                            size="sm"
+                            disabled={processing}
                         >
-                            Log out
-                        </TextLink>
-                    </>
-                )}
-            </Form>
+                            {processing && <Spinner />}
+                            Reenviar link
+                        </Button>
+                    )}
+                </Form>
+            </div>
+
+            <p className="text-center text-[13.5px] text-text-secondary">
+                E-mail errado?{' '}
+                <Link
+                    href={logout()}
+                    method="post"
+                    as="button"
+                    className="font-semibold text-primary hover:underline"
+                >
+                    Sair e entrar com outra conta
+                </Link>
+            </p>
         </>
     );
 }
 
-VerifyEmail.layout = {
-    title: 'Email verification',
-    description:
-        'Please verify your email address by clicking on the link we just emailed to you.',
-};
+VerifyEmail.layout = { hideHeader: true };

@@ -63,7 +63,9 @@ return [
 
     'testing' => [
 
-        'ensure_pages_exist' => true,
+        // Desativado: o front (resources/js/pages) é construído em paralelo; os testes de
+        // backend validam props e status, não a existência do componente.
+        'ensure_pages_exist' => (bool) env('INERTIA_ENSURE_PAGES_EXIST', false),
 
     ],
 

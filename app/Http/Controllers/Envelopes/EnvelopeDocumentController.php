@@ -30,7 +30,7 @@ class EnvelopeDocumentController extends Controller
         ], [], ['file' => 'arquivo']);
 
         // TODO(Wave B): gravar DocumentVersion(kind=original) + sha256, despachar processamento.
-        return back()->with('info', 'Upload de documentos estará disponível em breve (Wave B).');
+        return back()->with('info', 'Upload de documentos estará disponível em breve.');
     }
 
     public function destroy(Request $request, Envelope $envelope): RedirectResponse

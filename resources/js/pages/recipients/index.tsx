@@ -399,6 +399,7 @@ export default function RecipientsIndex({
                     paginated={recipients}
                     entity="assinaturas"
                     entitySingular="assinatura"
+                    gender="f"
                 />
             </div>
 

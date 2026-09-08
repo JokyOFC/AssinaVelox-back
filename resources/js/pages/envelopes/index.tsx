@@ -125,7 +125,7 @@ type PendingAction =
 
 /**
  * Documentos (ROUTES §2.5; DESIGN §6.3): rail de pastas, abas por status,
- * filtros, tabela com seleção e ações em lote. Versão inicial funcional; Wave B refina.
+ * filtros, tabela com seleção e ações em lote. Versão inicial funcional; refinada na etapa seguinte.
  */
 export default function EnvelopesIndex({
     filters,

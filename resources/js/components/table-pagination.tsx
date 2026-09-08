@@ -75,6 +75,7 @@ export function TablePagination<T>({
     paginated,
     entity = 'registros',
     entitySingular,
+    gender = 'm',
     showPerPage = true,
     onPerPageChange,
     extra,
@@ -83,6 +84,8 @@ export function TablePagination<T>({
     paginated: Paginated<T>;
     entity?: string;
     entitySingular?: string;
+    /** Gênero do substantivo, para a concordância de "Nenhum(a) {entidade}". */
+    gender?: 'm' | 'f';
     showPerPage?: boolean;
     onPerPageChange?: (perPage: number) => void;
     /** Slot à esquerda (ex.: link "Abrir lista completa"). */
@@ -123,7 +126,7 @@ export function TablePagination<T>({
             <div className="flex items-center gap-3">
                 <span className="tabular">
                     {total === 0
-                        ? `Nenhum ${entitySingular ?? entity}`
+                        ? `${gender === 'f' ? 'Nenhuma' : 'Nenhum'} ${entitySingular ?? entity}`
                         : meta.from !== null &&
                             meta.to !== null &&
                             meta.from !== meta.to

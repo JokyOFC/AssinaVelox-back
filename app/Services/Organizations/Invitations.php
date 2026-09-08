@@ -12,6 +12,7 @@ use App\Notifications\MembershipInvitationNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 /**
  * Emissão, reenvio e aceite de convites de membros. O token bruto (32 bytes → base64url)
@@ -69,15 +70,20 @@ class Invitations
 
     /**
      * Reenvia gerando um NOVO token (o anterior deixa de valer) e renovando a expiração.
+     * Revogar é terminal: um convite cancelado (ou já aceito) NÃO volta a valer por reenvio —
+     * emita um convite novo. Os assentos são verificados por quem chama (SeatUsage).
      */
     public function resend(MembershipInvitation $invitation): MembershipInvitation
     {
+        if ($invitation->accepted_at !== null || $invitation->revoked_at !== null) {
+            throw new InvalidArgumentException('Convite já aceito ou cancelado não pode ser reenviado.');
+        }
+
         $token = self::generateToken();
 
         $invitation->forceFill([
             'token_digest' => self::digest($token),
             'expires_at' => now()->addDays((int) config('assinavelox.invitations.expires_in_days', 7)),
-            'revoked_at' => null,
         ])->save();
 
         $this->send($invitation, $token);

@@ -20,11 +20,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
     formatCurrency,
     formatCurrencyCompact,
     formatCurrencyShort,
@@ -208,22 +203,8 @@ export default function AdminOrganizationsIndex({
             align: 'right',
             cell: (org) => (
                 <div className="flex items-center justify-end gap-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span>
-                                <Button
-                                    variant="outline-sm"
-                                    size="xxs"
-                                    disabled
-                                >
-                                    Acessar como
-                                </Button>
-                            </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            Impersonação chega na Fase 2
-                        </TooltipContent>
-                    </Tooltip>
+                    {/* ROUTES §1.5/§2.20: a ação de impersonação fica OCULTA na Fase 1
+                        (a rota admin.organizations.impersonate nem existe). Extensão da Fase 2. */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button
@@ -371,6 +352,7 @@ export default function AdminOrganizationsIndex({
                     paginated={customers}
                     entity="contas"
                     entitySingular="conta"
+                    gender="f"
                     showPerPage={false}
                 />
             </div>

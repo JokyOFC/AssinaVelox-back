@@ -7,6 +7,8 @@ function Toaster({ ...props }: ToasterProps) {
             theme="light"
             className="toaster group"
             position="bottom-right"
+            // Sem isto o sonner anuncia a live region como "Notifications" (inglês).
+            containerAriaLabel="Notificações"
             style={
                 {
                     '--normal-bg': 'var(--popover)',

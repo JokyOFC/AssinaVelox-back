@@ -7,28 +7,29 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Conta do usuário (starter kit): perfil e segurança (senha, 2FA).
+| Conta do usuário: perfil e segurança (senha, 2FA).
 |--------------------------------------------------------------------------
-| Não passam pelo middleware `org` — o usuário pode gerenciar a própria conta
-| mesmo sem organização ativa (ex.: convidado ainda sem membership).
+| URIs em PT-BR (ROUTES_AND_PAGES §1.2: `profile.edit` é GET /perfil); os NOMES de rota
+| continuam em inglês (`profile.edit`, `security.edit`, `user-password.update`) porque são
+| o contrato dos helpers Wayfinder e do front.
+|
+| Não passam pelo middleware `org` — o usuário pode gerenciar a própria conta mesmo sem
+| organização ativa (ex.: convidado ainda sem membership).
 */
 
 Route::middleware(['auth'])->group(function () {
-    Route::redirect('settings', '/settings/profile');
-    Route::redirect('perfil', '/settings/profile');
-
-    Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('perfil', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('perfil', [ProfileController::class, 'update'])->name('profile.update');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::delete('perfil', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    Route::get('settings/security', [SecurityController::class, 'edit'])
+    Route::get('perfil/seguranca', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)
         ->name('security.edit');
 
-    Route::put('settings/password', [SecurityController::class, 'update'])
+    Route::put('perfil/senha', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1')
         ->name('user-password.update');
 });

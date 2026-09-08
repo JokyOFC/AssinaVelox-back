@@ -136,7 +136,7 @@ const STEP_BY_SCREEN: Record<SignerScreen, number | null> = {
 
 /**
  * Página pública do signatário (ROUTES §2.18; DESIGN §6.12) — casca inicial
- * com cabeçalho do documento e cards por estado. Wave B implementa OTP,
+ * com cabeçalho do documento e cards por estado. A etapa seguinte implementa OTP,
  * visualizador com campos, captura de assinatura, aceite e recusa.
  */
 export default function SignShow({
@@ -190,7 +190,7 @@ export default function SignShow({
                         <p className="text-muted-foreground text-[13px]">
                             {screen === 'identify'
                                 ? 'O documento é exibido após a confirmação de identidade.'
-                                : 'Visualizador do documento com campos de assinatura chega na Wave B.'}
+                                : 'O visualizador do documento com os campos de assinatura estará disponível em breve.'}
                         </p>
                     </div>
                 </div>
@@ -210,7 +210,7 @@ export default function SignShow({
                                 </p>
                             </div>
                             <Badge variant="phase">
-                                Fluxo de código · Wave B
+                                Envio do código em breve
                             </Badge>
                         </PhaseCard>
                     )}
@@ -225,7 +225,7 @@ export default function SignShow({
                                 Identidade confirmada
                             </Badge>
                             <Badge variant="phase">
-                                Captura de assinatura · Wave B
+                                Captura de assinatura em breve
                             </Badge>
                         </PhaseCard>
                     )}

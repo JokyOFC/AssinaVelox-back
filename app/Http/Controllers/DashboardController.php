@@ -62,7 +62,9 @@ class DashboardController extends Controller
         return Inertia::render('dashboard', [
             'greeting' => [
                 'first_name' => explode(' ', trim($user->name))[0],
-                'date_label' => ucfirst($now->setTimezone($user->timezone ?: $timezone)->translatedFormat('l, d \d\e F')),
+                // DESIGN_SYSTEM §6.2: "Quarta-feira, 3 de setembro de 2026" — dia sem zero
+                // à esquerda (`j`) e com o ano.
+                'date_label' => ucfirst($now->setTimezone($user->timezone ?: $timezone)->translatedFormat('l, j \d\e F \d\e Y')),
                 'pending_count' => $pendingCount,
             ],
             'range' => $range,
@@ -156,12 +158,14 @@ class DashboardController extends Controller
     protected function period(string $range, Carbon $now): array
     {
         return match ($range) {
-            '90d' => [$now->copy()->subDays(90)->startOfDay(), $now->copy()->subDays(180)->startOfDay(), 'vs. 90 dias anteriores'],
-            '12m' => [$now->copy()->subMonths(12)->startOfDay(), $now->copy()->subMonths(24)->startOfDay(), 'vs. 12 meses anteriores'],
+            // O rótulo entra na legenda como "vs. {valor} {rótulo}" (dashboard.tsx),
+            // então ele NÃO leva "vs." — o mock diz "vs. 132 em agosto".
+            '90d' => [$now->copy()->subDays(90)->startOfDay(), $now->copy()->subDays(180)->startOfDay(), 'nos 90 dias anteriores'],
+            '12m' => [$now->copy()->subMonths(12)->startOfDay(), $now->copy()->subMonths(24)->startOfDay(), 'nos 12 meses anteriores'],
             default => [
                 $now->copy()->subDays(30)->startOfDay(),
                 $now->copy()->subDays(60)->startOfDay(),
-                'vs. '.$now->copy()->subMonth()->translatedFormat('F'),
+                'em '.$now->copy()->subMonth()->translatedFormat('F'),
             ],
         };
     }

@@ -28,7 +28,7 @@ class InvitationController extends Controller
 
         if (! SeatUsage::hasAvailable($organization, count($emails))) {
             throw ValidationException::withMessages([
-                'seats' => 'Sem assentos disponíveis — adicione assentos ao plano.',
+                'seats' => SeatUsage::unavailableMessage($organization),
             ]);
         }
 
@@ -49,6 +49,18 @@ class InvitationController extends Controller
 
         if ($invitation->accepted_at !== null) {
             return back()->with('error', 'Este convite já foi aceito.');
+        }
+
+        // Convite revogado não ressuscita: emita um novo convite para o mesmo e-mail.
+        if ($invitation->revoked_at !== null) {
+            return back()->with('error', 'Este convite foi cancelado e não pode ser reenviado. Envie um novo convite para '.$invitation->email.'.');
+        }
+
+        $organization = CurrentOrganization::instance()->get();
+
+        // Reenviar um convite expirado volta a ocupar um assento — precisa haver assento livre.
+        if (! SeatUsage::hasAvailableForResend($organization, $invitation)) {
+            return back()->with('error', SeatUsage::unavailableMessage($organization));
         }
 
         $this->invitations->resend($invitation);

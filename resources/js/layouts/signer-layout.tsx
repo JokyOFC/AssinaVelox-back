@@ -26,7 +26,7 @@ export const SIGNER_STEPS: StepperStep[] = [
  * Casca da página pública do signatário (DESIGN §6.12; ROUTES §1.6):
  * header branco 60px com organização remetente, stepper em pills e
  * "via AssinaVelox"; corpo `bg-accent`, largura máxima 1200px.
- * Wave B preenche o conteúdo.
+ * Etapa seguinte preenche o conteúdo.
  */
 export default function SignerLayout({
     children,

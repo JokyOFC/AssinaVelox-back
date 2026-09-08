@@ -4,12 +4,15 @@ namespace App\Http\Middleware;
 
 use App\Enums\EnvelopeStatus;
 use App\Enums\MembershipStatus;
+use App\Enums\SubscriptionStatus;
 use App\Models\Membership;
 use App\Models\Organization;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Support\CurrentOrganization;
 use App\Support\Permissions;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
@@ -23,6 +26,10 @@ class HandleInertiaRequests extends Middleware
 {
     /** @var string */
     protected $rootView = 'app';
+
+    protected ?Membership $shellMembership = null;
+
+    protected bool $shellMembershipResolved = false;
 
     public function version(Request $request): ?string
     {
@@ -40,9 +47,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => fn () => $this->authUser($request->user()),
             ],
-            'organization' => fn () => $this->currentOrganization(),
+            'organization' => fn () => $this->currentOrganization($request),
             'organizations' => fn () => $this->organizations($request->user()),
-            'counts' => fn () => $this->counts($request->user()),
+            'counts' => fn () => $this->counts($request, $request->user()),
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
@@ -101,9 +108,80 @@ class HandleInertiaRequests extends Middleware
     /**
      * @return array<string, mixed>|null
      */
-    protected function currentOrganization(): ?array
+    protected function currentOrganization(Request $request): ?array
     {
-        return self::currentOrganizationProps();
+        $props = self::currentOrganizationProps();
+
+        if ($props !== null) {
+            return $props;
+        }
+
+        $membership = $this->shellMembership($request);
+
+        if ($membership === null) {
+            return null;
+        }
+
+        return CurrentOrganization::instance()->runAs(
+            $membership->organization,
+            fn (): ?array => self::currentOrganizationProps(),
+            $membership,
+        );
+    }
+
+    /**
+     * Membership usada APENAS para montar a casca (switcher, rail de Configurações,
+     * badges) nas rotas de conta — `/perfil` e `/perfil/seguranca` não passam pelo
+     * middleware `org` de propósito (o usuário sem organização precisa alcançá-las),
+     * mas ROUTES_AND_PAGES §0.3 diz que `organization` só é null em rotas
+     * platform-admin e guest. Sem isto a sidebar perdia a organização ao abrir o perfil.
+     *
+     * Resolve só para exibição: NÃO define CurrentOrganization fora do `runAs` de quem
+     * chama, portanto não liga o escopo global nem afeta autorização.
+     */
+    protected function shellMembership(Request $request): ?Membership
+    {
+        if ($this->shellMembershipResolved) {
+            return $this->shellMembership;
+        }
+
+        $this->shellMembershipResolved = true;
+
+        $user = $request->user();
+
+        // O painel interno é deliberadamente sem organização (ROUTES §0.3).
+        if (! $user instanceof User || $request->is('admin', 'admin/*')) {
+            return null;
+        }
+
+        $candidates = array_values(array_unique(array_filter([
+            $request->hasSession() ? $request->session()->get(EnsureCurrentOrganization::SESSION_KEY) : null,
+            $user->current_organization_id,
+        ])));
+
+        foreach ($candidates as $organizationId) {
+            $membership = $this->activeMemberships($user)
+                ->where('organization_id', (int) $organizationId)
+                ->first();
+
+            if ($membership !== null) {
+                return $this->shellMembership = $membership;
+            }
+        }
+
+        return $this->shellMembership = $this->activeMemberships($user)->orderBy('id')->first();
+    }
+
+    /**
+     * @return Builder<Membership>
+     */
+    protected function activeMemberships(User $user): Builder
+    {
+        return Membership::query()
+            ->with('organization')
+            ->where('user_id', $user->getKey())
+            ->where('status', MembershipStatus::Active->value)
+            ->whereHas('organization');
     }
 
     /**
@@ -156,18 +234,24 @@ class HandleInertiaRequests extends Middleware
 
         $currentId = CurrentOrganization::instance()->id();
 
-        return Membership::query()
-            ->with(['organization.currentSubscription.plan'])
+        $memberships = Membership::query()
+            ->with('organization')
             ->where('user_id', $user->getKey())
             ->where('status', MembershipStatus::Active->value)
             ->whereHas('organization')
             ->orderBy('id')
-            ->get()
+            ->get();
+
+        $planNames = $this->planNamesFor(
+            array_values(array_map(intval(...), $memberships->pluck('organization_id')->all()))
+        );
+
+        return $memberships
             ->map(fn (Membership $membership): array => [
                 'id' => $membership->organization->ulid,
                 'name' => $membership->organization->name,
                 'initials' => $membership->organization->initials,
-                'plan_name' => $membership->organization->currentSubscription?->plan->name ?? 'Grátis',
+                'plan_name' => $planNames[$membership->organization_id] ?? 'Grátis',
                 'role' => $membership->role->value,
                 'is_current' => $membership->organization_id === $currentId,
             ])
@@ -176,17 +260,65 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
+     * Nome do plano vigente de cada organização, em UMA consulta e SEM o escopo global de
+     * organização (`Subscription` usa BelongsToOrganization: com a organização corrente
+     * definida, o escopo esconderia as assinaturas das outras organizações do switcher).
+     *
+     * @param  list<int>  $organizationIds
+     * @return array<int, string>
+     */
+    protected function planNamesFor(array $organizationIds): array
+    {
+        if ($organizationIds === []) {
+            return [];
+        }
+
+        return Subscription::withoutOrganizationScope()
+            ->with('plan:id,name')
+            ->whereIn('organization_id', $organizationIds)
+            ->whereIn('status', [
+                SubscriptionStatus::Active->value,
+                SubscriptionStatus::Trialing->value,
+                SubscriptionStatus::PastDue->value,
+            ])
+            ->orderBy('id')
+            ->get(['id', 'organization_id', 'plan_id'])
+            // A mais recente por organização vence (mesma regra de Organization::currentSubscription).
+            ->reduce(function (array $carry, Subscription $subscription): array {
+                $carry[$subscription->organization_id] = $subscription->plan->name;
+
+                return $carry;
+            }, []);
+    }
+
+    /**
      * Contadores da sidebar/topbar, cacheados por org+usuário (config `assinavelox.counts_cache`).
      *
      * @return array{pending_envelopes: int, unread_notifications: int}
      */
-    protected function counts(?User $user): array
+    protected function counts(Request $request, ?User $user): array
     {
         $current = CurrentOrganization::instance();
         $membership = $current->membership();
 
-        if ($user === null || $membership === null) {
+        if ($user === null) {
             return ['pending_envelopes' => 0, 'unread_notifications' => 0];
+        }
+
+        // Rotas de conta: sem o middleware `org` a contagem precisa da membership da casca
+        // e do escopo global ligado (EnvelopeVisibility depende dele para filtrar a org).
+        if ($membership === null) {
+            $membership = $this->shellMembership($request);
+
+            if ($membership === null) {
+                return ['pending_envelopes' => 0, 'unread_notifications' => 0];
+            }
+
+            return $current->runAs(
+                $membership->organization,
+                fn (): array => $this->counts($request, $user),
+                $membership,
+            );
         }
 
         $store = config('assinavelox.counts_cache.store');

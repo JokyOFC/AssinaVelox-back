@@ -36,6 +36,8 @@ class CreateNewUser implements CreatesNewUsers
             $invitation = null;
         }
 
+        // Um convite pendente dispensa informar a empresa (ela vem do convite), mas só
+        // vincula quem se cadastra com EXATAMENTE o e-mail convidado (comparação normalizada).
         $viaInvitation = $invitation !== null;
 
         Validator::make($input, [
@@ -55,10 +57,19 @@ class CreateNewUser implements CreatesNewUsers
             'terms' => 'termos de uso',
         ])->validate();
 
-        return DB::transaction(function () use ($input, $invitation): User {
+        $email = Str::lower(trim((string) $input['email']));
+
+        // Isolamento: um token de convite alheio NÃO pode vincular quem se cadastra com
+        // outro e-mail. Nesse caso o convite continua pendente e nada da organização
+        // convidante (id, nome, membership) toca o novo usuário.
+        if ($invitation !== null && Str::lower(trim($invitation->email)) !== $email) {
+            $invitation = null;
+        }
+
+        return DB::transaction(function () use ($input, $invitation, $email): User {
             $user = User::create([
                 'name' => trim((string) $input['name']),
-                'email' => Str::lower(trim((string) $input['email'])),
+                'email' => $email,
                 'password' => $input['password'],
                 'timezone' => $input['timezone'] ?? null,
                 'locale' => Organization::DEFAULT_LOCALE,
@@ -78,8 +89,21 @@ class CreateNewUser implements CreatesNewUsers
                 return $user;
             }
 
+            // Sem convite aplicável: o token de outra pessoa não pode ficar na sessão.
+            if (app()->bound('session') && app('session')->isStarted()) {
+                session()->forget(Invitations::PENDING_SESSION_KEY);
+            }
+
+            $organizationName = trim((string) ($input['organization_name'] ?? ''));
+
+            if ($organizationName === '') {
+                // Cadastro com token que não lhe pertence e sem empresa informada:
+                // o usuário fica sem organização e é levado a criar a própria.
+                return $user;
+            }
+
             $this->createOrganization->handle($user, [
-                'name' => (string) $input['organization_name'],
+                'name' => $organizationName,
                 'tax_id' => $input['organization_tax_id'] ?? null,
                 'timezone' => $input['timezone'] ?? null,
             ]);

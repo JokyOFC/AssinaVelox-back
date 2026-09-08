@@ -67,7 +67,7 @@ class EnvelopeBulkController extends Controller
         $message = match ($action) {
             'move' => "{$done} documento(s) movido(s).",
             'cancel' => "{$done} documento(s) cancelado(s).",
-            default => 'Reenvio em lote estará disponível em breve (Wave B).',
+            default => 'Reenvio em lote estará disponível em breve.',
         };
 
         if ($skipped > 0) {

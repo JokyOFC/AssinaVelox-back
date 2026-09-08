@@ -17,6 +17,15 @@ export default defineConfig({
                     weights: [400, 500, 600, 700, 800],
                     styles: ['normal', 'italic'],
                 }),
+                // DESIGN_SYSTEM §1.2: família manuscrita (--font-hand), usada só
+                // para renderizar assinaturas — mesma face do mock (peso 600).
+                // Sem preload: aparece em poucas telas e `font-display: swap`
+                // evita bloquear o restante da interface.
+                bunny('Caveat', {
+                    weights: [600],
+                    styles: ['normal'],
+                    preload: false,
+                }),
             ],
         }),
         inertia(),

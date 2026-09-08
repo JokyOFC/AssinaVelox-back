@@ -112,6 +112,15 @@ class MembershipController extends Controller
             return back()->with('error', 'Não é possível suspender o único proprietário da organização.');
         }
 
+        // Reativar ocupa um assento: só é permitido se o plano ainda tiver assento livre.
+        if ($status === MembershipStatus::Active && $membership->status !== MembershipStatus::Active) {
+            $organization = CurrentOrganization::instance()->get();
+
+            if (! SeatUsage::hasAvailable($organization, 1)) {
+                return back()->with('error', SeatUsage::unavailableMessage($organization));
+            }
+        }
+
         $membership->forceFill(['status' => $status])->save();
 
         if ($status === MembershipStatus::Suspended && $membership->user->current_organization_id === $membership->organization_id) {

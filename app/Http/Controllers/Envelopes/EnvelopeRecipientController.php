@@ -58,7 +58,7 @@ class EnvelopeRecipientController extends Controller
         Gate::authorize('update', $envelope);
 
         // TODO(Wave B): novo recipient_access_link, revogar anterior, throttle 10 min, auditoria invitation.resent.
-        return back()->with('info', 'Reenvio de convites estará disponível em breve (Wave B).');
+        return back()->with('info', 'Reenvio de convites estará disponível em breve.');
     }
 
     public function resendAll(Request $request, Envelope $envelope): RedirectResponse
@@ -66,6 +66,6 @@ class EnvelopeRecipientController extends Controller
         Gate::authorize('update', $envelope);
 
         // TODO(Wave B): reenviar para todos os pendentes respeitando o throttle.
-        return back()->with('info', 'Reenvio de convites estará disponível em breve (Wave B).');
+        return back()->with('info', 'Reenvio de convites estará disponível em breve.');
     }
 }

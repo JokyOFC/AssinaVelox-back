@@ -23,6 +23,6 @@ class EnvelopeSendController extends Controller
             return back()->with('error', 'Ação indisponível no status atual.');
         }
 
-        return back()->with('info', 'O envio para assinatura estará disponível em breve (Wave B).');
+        return back()->with('info', 'O envio para assinatura estará disponível em breve.');
     }
 }

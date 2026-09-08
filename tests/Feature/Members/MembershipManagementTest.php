@@ -4,6 +4,7 @@ use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Models\Envelope;
 use App\Models\Membership;
+use App\Models\Plan;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -73,6 +74,8 @@ test('não é possível remover ou suspender o último owner nem a si mesmo', fu
 
 test('suspender e reativar um membro, e remover mantém os envelopes criados', function () {
     ['organization' => $organization, 'owner' => $owner] = createOrganizationWithOwner();
+    // Reativar consome assento (SeatUsage): o plano precisa comportar owner + membro.
+    Plan::free()->update(['user_quota' => 10]);
     $member = attachMember($organization, MembershipRole::Member);
     $membership = $member->membershipFor($organization);
     $envelope = Envelope::factory()->forOrganization($organization, $member)->create();

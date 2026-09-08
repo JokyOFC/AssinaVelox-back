@@ -26,7 +26,13 @@ export default function PublicLayout({
     maxWidth = 820,
     fullBleed = false,
 }: PublicLayoutProps) {
-    const { auth } = usePage().props;
+    // Páginas de erro (errors/403|404|500) podem ser renderizadas por uma rota que nunca
+    // casou — o grupo `web` (e portanto HandleInertiaRequests) não roda e NENHUMA prop
+    // compartilhada chega. Sem o fallback, `auth.user` quebrava a página inteira em branco.
+    const { auth } = usePage().props as Partial<
+        ReturnType<typeof usePage>['props']
+    >;
+    const user = auth?.user ?? null;
 
     return (
         <div className="bg-background text-foreground flex min-h-svh flex-col text-[14px]">
@@ -41,7 +47,7 @@ export default function PublicLayout({
                     >
                         Verificar documento
                     </Link>
-                    {auth.user ? (
+                    {user ? (
                         <Button asChild size="sm">
                             <Link href={dashboard()}>Ir para o painel</Link>
                         </Button>

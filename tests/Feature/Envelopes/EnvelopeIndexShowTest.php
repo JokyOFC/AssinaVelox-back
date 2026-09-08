@@ -113,7 +113,9 @@ test('o detalhe traz envelope, signatários, campos, trilha, pastas e aba', func
         ->where('recipients.0.status', 'signed')
         ->where('recipients.0.color_index', 0)
         ->where('recipients.1.status', 'notified')
-        ->where('recipients.1.status_label', 'Enviado')
+        // ROUTES_AND_PAGES §6.2: o badge de `notified` é "Pendente" (âmbar); o
+        // detalhe "Enviado · não visualizou" fica na nota abaixo do badge.
+        ->where('recipients.1.status_label', 'Pendente')
         ->where('recipients.1.can_resend', true)
         ->has('recipients.1.viewed_at')
         ->where('recipients.1.channel', 'email')

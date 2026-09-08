@@ -69,7 +69,7 @@ class RecipientController extends Controller
     public function resendPending(Request $request): RedirectResponse
     {
         // TODO(Wave B): job em fila; throttle 1×/hora por organização.
-        return back()->with('info', 'Reenvio em lote estará disponível em breve (Wave B).');
+        return back()->with('info', 'Reenvio em lote estará disponível em breve.');
     }
 
     /**

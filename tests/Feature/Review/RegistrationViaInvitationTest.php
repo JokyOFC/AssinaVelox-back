@@ -51,7 +51,19 @@ test('[R5] cadastro com token de convite emitido para OUTRO e-mail não vincula 
 
     // Sem membership e sem acesso — isto já vale hoje.
     expect(Membership::query()->where('user_id', $intruder->id)->count())->toBe(0);
+
+    // ROUTES_AND_PAGES §0.2: o grupo `auth` inclui `verified`, então o recém-cadastrado
+    // primeiro esbarra na verificação de e-mail (ver EmailVerificationEnforcementTest).
     $this->actingAs($intruder)
+        ->withSession([EnsureCurrentOrganization::SESSION_KEY => $organization->id])
+        ->get(route('dashboard'))
+        ->assertRedirect(route('verification.notice'));
+
+    // E, mesmo com o e-mail verificado, não há acesso à organização do convite:
+    // o usuário é levado a criar a própria organização.
+    $intruder->forceFill(['email_verified_at' => now()])->save();
+
+    $this->actingAs($intruder->fresh())
         ->withSession([EnsureCurrentOrganization::SESSION_KEY => $organization->id])
         ->get(route('dashboard'))
         ->assertRedirect(route('organizations.create'));

@@ -42,12 +42,14 @@ enum RecipientStatus: string
         return in_array($this, [self::Pending, self::Notified, self::Viewed], true);
     }
 
+    /**
+     * Rótulo do BADGE (ROUTES_AND_PAGES §6.2 / DESIGN_SYSTEM §5.2): todo signatário
+     * ainda não assinado é "Pendente" (âmbar); o detalhe vai em note().
+     */
     public function label(): string
     {
         return match ($this) {
-            self::Pending => 'Pendente',
-            self::Notified => 'Enviado',
-            self::Viewed => 'Visualizou',
+            self::Pending, self::Notified, self::Viewed => 'Pendente',
             self::Signed => 'Assinado',
             self::Refused => 'Recusado',
             self::Expired => 'Expirado',
@@ -56,15 +58,19 @@ enum RecipientStatus: string
     }
 
     /**
-     * Nota curta exibida junto ao status (ROUTES_AND_PAGES §6.2).
+     * Nota curta exibida abaixo do badge (ROUTES_AND_PAGES §6.2). Espelha
+     * `recipientStatusNotes` em resources/js/lib/labels.ts.
      */
-    public function note(): ?string
+    public function note(): string
     {
         return match ($this) {
             self::Pending => 'Aguarda a vez',
             self::Notified => 'Enviado · não visualizou',
+            self::Viewed => 'Visualizou',
+            self::Signed => 'Assinado',
+            self::Refused => 'Recusou',
+            self::Expired => 'Prazo encerrado',
             self::Canceled => 'Documento cancelado',
-            default => null,
         };
     }
 

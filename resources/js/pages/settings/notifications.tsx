@@ -1,7 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import type { FormEvent } from 'react';
 import Heading from '@/components/heading';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Spinner } from '@/components/ui/spinner';
@@ -81,7 +80,7 @@ export default function SettingsNotifications({
                             className="border-muted bg-background text-muted-foreground grid h-10 items-center border-y px-5 text-[12px] font-semibold"
                             style={{
                                 gridTemplateColumns:
-                                    'minmax(0,2.4fr) repeat(3, 90px)',
+                                    'minmax(0,2.4fr) repeat(2, 90px)',
                             }}
                         >
                             <span>Evento</span>
@@ -90,12 +89,6 @@ export default function SettingsNotifications({
                                     {notificationChannelLabels[channel]}
                                 </span>
                             ))}
-                            <span className="flex flex-col items-center gap-0.5 text-center leading-none">
-                                WhatsApp
-                                <Badge variant="phase" className="text-[10px]">
-                                    Fase 2
-                                </Badge>
-                            </span>
                         </div>
                         {events.map((event) => (
                             <div
@@ -103,7 +96,7 @@ export default function SettingsNotifications({
                                 className="border-muted hover:bg-row-hover grid items-center border-b px-5 py-[11px] last:border-b-0"
                                 style={{
                                     gridTemplateColumns:
-                                        'minmax(0,2.4fr) repeat(3, 90px)',
+                                        'minmax(0,2.4fr) repeat(2, 90px)',
                                 }}
                             >
                                 <span className="min-w-0 pr-3">
@@ -142,12 +135,6 @@ export default function SettingsNotifications({
                                         </span>
                                     );
                                 })}
-                                <span className="flex justify-center">
-                                    <Checkbox
-                                        disabled
-                                        aria-label="WhatsApp (Fase 2)"
-                                    />
-                                </span>
                             </div>
                         ))}
                     </div>

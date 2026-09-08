@@ -94,14 +94,13 @@ class RecipientResource extends JsonResource
         return null;
     }
 
+    /**
+     * ROUTES_AND_PAGES §6.2: o BADGE de todo signatário ainda não assinado é "Pendente"
+     * (âmbar); "Aguarda a vez" é a *nota* — renderizada pela própria página
+     * (resources/js/pages/envelopes/show.tsx). Por isso aqui não há override.
+     */
     protected function statusLabel(): string
     {
-        $envelope = $this->envelope;
-
-        if ($this->status === RecipientStatus::Pending && $envelope?->status === EnvelopeStatus::InProgress) {
-            return 'Aguarda a vez';
-        }
-
         return $this->status->label();
     }
 

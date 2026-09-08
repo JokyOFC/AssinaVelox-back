@@ -22,9 +22,10 @@ export type RecipientStatus =
     | 'refused'
     | 'expired'
     | 'canceled';
-//   pending  = criado; ainda não notificado (envelope não enviado OU aguarda a vez no sequencial) → rótulo "Aguarda a vez" quando envelope in_progress
-//   notified = convite despachado (não implica entrega) → rótulo "Enviado · não visualizou"
-//   viewed   = link aberto (abertura detectada, não prova leitura) → "Visualizou em {dt}"
+// ROUTES §6.2: o badge dos três primeiros é sempre "Pendente" (âmbar); o texto abaixo é a NOTA.
+//   pending  = criado; ainda não notificado (envelope não enviado OU aguarda a vez no sequencial) → nota "Aguarda a vez" quando envelope in_progress
+//   notified = convite despachado (não implica entrega) → nota "Enviado · não visualizou"
+//   viewed   = link aberto (abertura detectada, não prova leitura) → nota "Visualizou em {dt}"
 
 export type SigningOrder = 'sequential' | 'parallel';
 

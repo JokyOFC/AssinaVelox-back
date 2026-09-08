@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnforceSessionIdleTimeout;
 use App\Http\Middleware\EnforceTwoFactorForOrganization;
 use App\Http\Middleware\EnsureCurrentOrganization;
 use App\Http\Middleware\EnsureMembershipRole;
@@ -29,6 +30,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // a partir de config('assinavelox.trusted_proxies') — aqui a configuração ainda não foi carregada
         // e env() devolve null com `config:cache`.
 
+        // Hosts confiáveis: só APP_URL (e seus subdomínios). Requisições com um Host forjado são
+        // recusadas antes de chegar à aplicação, o que fecha a injeção de Host nos links enviados
+        // por e-mail. O TrustHosts do Laravel não roda em `local` nem nos testes; a raiz das URLs
+        // absolutas é fixada de qualquer forma em AppServiceProvider::configureAbsoluteUrls().
+        $middleware->trustHosts(at: fn (): array => array_filter([
+            parse_url((string) config('app.url'), PHP_URL_HOST),
+        ]));
+
         // Nenhuma organização corrente vaza entre requisições; só o middleware `org` a define.
         $middleware->prepend(ResetCurrentOrganization::class);
 
@@ -43,6 +52,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['sidebar_state']);
 
         $middleware->web(append: [
+            // Política "Encerrar sessões após N horas inativas" (ROUTES §7 Q27): vale para
+            // toda tela autenticada, inclusive as que ficam fora do grupo `app`.
+            EnforceSessionIdleTimeout::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
@@ -64,8 +76,39 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->is('webhooks/*') || $request->expectsJson(),
         );
 
+        /**
+         * As páginas de erro só exibem mensagens escritas pela aplicação (`abort(404, '…')`,
+         * sempre em PT-BR). Mensagens geradas pelo framework são em inglês e podem revelar
+         * detalhes internos ("No query results for model [App\Models\Envelope] 01K…"), então
+         * são descartadas e a página usa a própria cópia padrão.
+         */
+        $userFacingMessage = function (string $message): ?string {
+            $message = trim($message);
+
+            $frameworkPrefixes = [
+                'The route ',
+                'No query results for model',
+                'The GET method is not supported',
+                'The POST method is not supported',
+                'This action is unauthorized',
+                'Unauthenticated',
+                'Server Error',
+                'Not Found',
+                'Forbidden',
+                'Service Unavailable',
+            ];
+
+            foreach ($frameworkPrefixes as $prefix) {
+                if (str_starts_with($message, $prefix)) {
+                    return null;
+                }
+            }
+
+            return $message === '' ? null : $message;
+        };
+
         // Páginas de erro Inertia (resources/js/pages/errors/{403,404,500}.tsx) fora de debug.
-        $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request) use ($userFacingMessage) {
             $status = $response->getStatusCode();
 
             if (! in_array($status, [403, 404, 500, 503], true) || $request->expectsJson() || $request->is('api/*', 'webhooks/*')) {
@@ -87,7 +130,7 @@ return Application::configure(basePath: dirname(__DIR__))
             return Inertia::render($component, [
                 'status' => $status,
                 'message' => $exception instanceof HttpExceptionInterface
-                    ? $exception->getMessage()
+                    ? $userFacingMessage($exception->getMessage())
                     : null,
             ])->toResponse($request)->setStatusCode($status);
         });

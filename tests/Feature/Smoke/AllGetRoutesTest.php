@@ -70,9 +70,6 @@ const SMOKE_OVERRIDES = [
     'two-factor.login' => ['*' => 302],
     // Fortify: chave secreta de usuário SEM TOTP ativado → 404 (qr-code/recovery-codes devolvem 200 vazio).
     'two-factor.secret-key' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
-    // Redirects fixos (routes/settings.php).
-    'redirect:perfil' => ['*' => 302],
-    'redirect:settings' => ['*' => 302],
 ];
 
 /**
@@ -341,7 +338,9 @@ test('todas as rotas GET respondem com o status esperado para o papel', function
         }
     }
 
-    expect($visited)->toBeGreaterThan(60);
+    // ROUTES §1.2: as URIs da conta passaram a ser PT-BR (`/perfil`, `/perfil/seguranca`,
+    // `/perfil/senha`) e os dois redirects do kit (`/settings`, `/perfil`) deixaram de existir.
+    expect($visited)->toBeGreaterThanOrEqual(59);
     expect($failures)->toBe([], "Rotas fora do esperado para {$role}:\n - ".implode("\n - ", $failures));
 })->with([
     'convidado' => ['guest', null],

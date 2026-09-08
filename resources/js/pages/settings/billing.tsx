@@ -48,7 +48,7 @@ export interface BillingProps {
  * Plano e cobrança (ROUTES §2.15; DESIGN §6.11 aba Plano e cobrança) — versão
  * inicial funcional: card navy do plano, uso no ciclo, método do último
  * pagamento (somente leitura), dados de faturamento e lista de pagamentos.
- * Wave B completa (edição de dados de faturamento, banners de retorno do checkout).
+ * A etapa seguinte completa (edição de dados de faturamento, banners de retorno do checkout).
  */
 export default function Billing({
     subscription,
@@ -314,7 +314,7 @@ export default function Billing({
                     <Heading
                         variant="small"
                         title="Dados de faturamento"
-                        action={<Badge variant="phase">Edição · Wave B</Badge>}
+                        action={<Badge variant="phase">Edição em breve</Badge>}
                     />
                     {billing_profile ? (
                         <p className="text-text-secondary text-[13px] leading-[1.7]">

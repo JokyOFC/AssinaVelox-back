@@ -3,6 +3,7 @@
 namespace App\Services\Organizations;
 
 use App\Enums\MembershipRole;
+use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Membership;
 use App\Models\Recipient;
@@ -41,14 +42,35 @@ class EnvelopeVisibility
      */
     public static function recipients(Membership $membership): Builder
     {
-        $query = Recipient::query();
+        $canViewAll = self::canViewAll($membership);
 
-        if (! self::canViewAll($membership)) {
-            $query->whereHas('envelope', fn (Builder $envelope) => $envelope
-                ->where('envelopes.created_by_user_id', $membership->user_id));
-        }
+        // `whereHas('envelope')` aplica o SoftDeletingScope do Envelope: signatários de
+        // documentos excluídos ficam fora para TODOS os papéis (owner/admin inclusive).
+        return Recipient::query()->whereHas(
+            'envelope',
+            function (Builder $envelope) use ($canViewAll, $membership): void {
+                if (! $canViewAll) {
+                    $envelope->where('envelopes.created_by_user_id', $membership->user_id);
+                }
+            },
+        );
+    }
 
-        return $query;
+    /**
+     * Bytes armazenados nas versões dos documentos VISÍVEIS ao usuário (RECONCILIACAO Q7:
+     * "contagens respeitam o escopo"). `whereHas` também exclui envelopes soft-deleted.
+     */
+    public static function storageUsedBytes(Membership $membership): int
+    {
+        $canViewAll = self::canViewAll($membership);
+
+        return (int) DocumentVersion::query()
+            ->whereHas('document.envelope', function (Builder $envelope) use ($canViewAll, $membership): void {
+                if (! $canViewAll) {
+                    $envelope->where('envelopes.created_by_user_id', $membership->user_id);
+                }
+            })
+            ->sum('size_bytes');
     }
 
     public static function canSee(Membership $membership, Envelope $envelope): bool

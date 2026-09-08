@@ -91,7 +91,7 @@ export interface EvidenceProps {
     verify_url: string;
 }
 
-/** Página de evidências (ROUTES §2.8) — somente leitura. Versão inicial; Wave B refina. */
+/** Página de evidências (ROUTES §2.8) — somente leitura. Versão inicial; refinada na etapa seguinte. */
 export default function EnvelopeEvidence({
     envelope,
     organization,

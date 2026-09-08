@@ -132,7 +132,10 @@ class DemoOrganizationSeeder extends Seeder
 
         $locacoes = Folder::factory()->create(['organization_id' => $org->id, 'name' => 'Locações', 'created_by_user_id' => $admin->id]);
         $vendas = Folder::factory()->create(['organization_id' => $org->id, 'name' => 'Vendas', 'created_by_user_id' => $admin->id]);
-        $comerciais = Folder::factory()->childOf($locacoes)->create(['name' => 'Comerciais', 'created_by_user_id' => $admin->id]);
+        // ROUTES_AND_PAGES.md (glossário): "Pasta | Folder | Sem hierarquia na Fase 1".
+        // Como subpasta, "Comerciais" aparecia na coluna Pasta da listagem mas não na
+        // árvore lateral (que só lista raízes), deixando 4 documentos sem filtro.
+        $comerciais = Folder::factory()->create(['organization_id' => $org->id, 'name' => 'Comerciais', 'created_by_user_id' => $admin->id]);
         Folder::factory()->create(['organization_id' => $org->id, 'name' => 'Recursos Humanos', 'created_by_user_id' => $owner->id]);
 
         // Rascunhos
@@ -248,7 +251,15 @@ class DemoOrganizationSeeder extends Seeder
         bool $signedByCompany = false,
     ): Envelope {
         $isSent = ! $status->isDraftLike() && $status !== EnvelopeStatus::Canceled;
-        $createdAt = Carbon::now()->subDays(fake()->numberBetween(2, 45))->subMinutes(fake()->numberBetween(0, 600));
+        $daysAgo = fake()->numberBetween(2, 45);
+
+        if ($status === EnvelopeStatus::Expired) {
+            // Só expira depois de `default_expiration_days` a contar do envio; sem esse piso
+            // a demo gerava "Expirado" com data no futuro.
+            $daysAgo = max($daysAgo, (int) $org->setting('default_expiration_days', 30) + 3);
+        }
+
+        $createdAt = Carbon::now()->subDays($daysAgo)->subMinutes(fake()->numberBetween(0, 600));
         $clock = $createdAt->copy();
         $tick = fn (int $minutes = 3): Carbon => $clock->addMinutes($minutes)->copy();
 

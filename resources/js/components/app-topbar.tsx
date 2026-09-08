@@ -77,11 +77,17 @@ export function AppTopbar({
 
                         return (
                             <Fragment key={`${toUrl(item.href)}-${index}`}>
+                                {/* Prioridade de espaço para o item atual (DESIGN §3.2:
+                                    "com ellipsis quando longo"): só ele encolhe (`flex-1
+                                    min-w-0`). Os ancestrais não disputam largura — ficam
+                                    `shrink-0` com largura máxima própria e desaparecem
+                                    abaixo de `lg`, onde antes todos encolhiam juntos até
+                                    3–13 px por item (DESIGN §3.4: "breadcrumb truncado"). */}
                                 <BreadcrumbItem
                                     className={
                                         isLast
-                                            ? 'min-w-0'
-                                            : 'hidden min-w-0 sm:inline-flex'
+                                            ? 'min-w-0 flex-1'
+                                            : 'hidden max-w-[180px] shrink-0 lg:inline-flex'
                                     }
                                 >
                                     {isLast ? (
@@ -102,7 +108,7 @@ export function AppTopbar({
                                 {!isLast && (
                                     <li
                                         aria-hidden
-                                        className="text-border-dashed hidden shrink-0 sm:block"
+                                        className="text-border-dashed hidden shrink-0 lg:block"
                                     >
                                         <ChevronRight className="size-3.5" />
                                     </li>

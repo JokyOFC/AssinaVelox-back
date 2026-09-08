@@ -99,7 +99,7 @@ const PROCESSING_LABEL: Record<DocumentProcessingStatus, string> = {
 /**
  * Wizard "Nova solicitação" (ROUTES §2.6; DESIGN §6.5) — casca inicial:
  * stepper clicável, header com autosave e resumo do estado do rascunho.
- * Wave B implementa upload, signatários, editor de campos e revisão.
+ * A etapa seguinte implementa upload, signatários, editor de campos e revisão.
  */
 export default function EnvelopeWizard({
     envelope,
@@ -151,13 +151,13 @@ export default function EnvelopeWizard({
                         description={
                             <>
                                 <Badge variant="phase" className="mb-3">
-                                    Em construção · Wave B
+                                    Em construção
                                 </Badge>
                                 <br />
                                 Upload do documento, cadastro de signatários,
-                                editor de campos sobre o PDF e revisão serão
-                                entregues na próxima onda. O rascunho já está
-                                persistido e pode ser retomado.
+                                editor de campos sobre o PDF e revisão estarão
+                                disponíveis em breve. O rascunho já está salvo e
+                                pode ser retomado.
                             </>
                         }
                         action={

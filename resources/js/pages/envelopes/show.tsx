@@ -36,6 +36,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import {
     formatBytes,
+    formatDateMedium,
     formatDateTime,
     formatProgress,
     formatVerificationCode,
@@ -77,7 +78,7 @@ export interface EnvelopeShowProps {
 
 /**
  * Detalhe do documento (ROUTES §2.7; DESIGN §6.4): cabeçalho com status,
- * banner por estado, visualizador (placeholder até a Wave B integrar PDF.js)
+ * banner por estado, visualizador (placeholder até a integração com PDF.js)
  * e abas Signatários / Trilha / Detalhes.
  */
 export default function EnvelopeShow({
@@ -186,6 +187,12 @@ export default function EnvelopeShow({
                     <span className="tabular inline-flex flex-wrap items-center gap-1.5">
                         {envelope.display_code}
                         {envelope.folder && <> · {envelope.folder.name}</>}
+                        {/* DESIGN §6.4: "… · Criado por Ana Ribeiro em 1 set 2026 · …" */}
+                        <>
+                            {' · '}
+                            Criado por {envelope.creator.name} em{' '}
+                            {formatDateMedium(envelope.created_at)}
+                        </>
                         {envelope.expires_label && (
                             <>
                                 {' · '}
@@ -202,25 +209,14 @@ export default function EnvelopeShow({
                     </span>
                 }
                 actions={
+                    // DESIGN §6.4: [↓ Baixar ▾] [↻ Lembrar pendentes] [⋯] — "Baixar" é
+                    // secundário e a ação primária (azul) é "Lembrar pendentes"
+                    // (ou "Continuar edição" enquanto o documento é rascunho).
                     <>
-                        {envelope.can.resend && pendingCount > 0 && (
-                            <Button variant="outline" onClick={resendAll}>
-                                <Mail className="size-[15px]" />
-                                Lembrar pendentes
-                            </Button>
-                        )}
-                        {isDraft && envelope.can.update && (
-                            <Button asChild>
-                                <Link href={envelopeEdit(envelope.id)}>
-                                    <Pencil className="size-[15px]" />
-                                    Continuar edição
-                                </Link>
-                            </Button>
-                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
-                                    variant={isDraft ? 'outline' : 'default'}
+                                    variant="outline"
                                     disabled={
                                         !envelope.downloads.original &&
                                         !envelope.downloads.signed
@@ -266,6 +262,20 @@ export default function EnvelopeShow({
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        {envelope.can.resend && pendingCount > 0 && (
+                            <Button onClick={resendAll}>
+                                <Mail className="size-[15px]" />
+                                Lembrar pendentes
+                            </Button>
+                        )}
+                        {isDraft && envelope.can.update && (
+                            <Button asChild>
+                                <Link href={envelopeEdit(envelope.id)}>
+                                    <Pencil className="size-[15px]" />
+                                    Continuar edição
+                                </Link>
+                            </Button>
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -438,8 +448,8 @@ export default function EnvelopeShow({
                             <div className="shadow-pdf flex aspect-[1/1.3] w-full max-w-[560px] flex-col items-center justify-center gap-3 rounded bg-white p-[9%] text-center">
                                 <FileText className="text-primary-soft-border size-10" />
                                 <p className="text-muted-foreground text-[13px]">
-                                    Pré-visualização do PDF com campos
-                                    sobrepostos chega na Wave B (PDF.js).
+                                    A pré-visualização do PDF com os campos
+                                    sobrepostos estará disponível em breve.
                                 </p>
                                 {envelope.downloads.original && (
                                     <Button asChild variant="outline" size="xs">
@@ -484,6 +494,15 @@ export default function EnvelopeShow({
 
                     {currentTab === 'signers' && (
                         <div className="flex flex-col gap-3 p-4">
+                            {/* DESIGN §6.4: linha "Ordem de assinatura: **sequencial**" no topo da aba. */}
+                            <p className="text-text-secondary text-[12.5px]">
+                                Ordem de assinatura:{' '}
+                                <span className="font-semibold">
+                                    {signingOrderLabels[
+                                        envelope.signing_order
+                                    ].toLowerCase()}
+                                </span>
+                            </p>
                             {recipients.length === 0 && (
                                 <p className="text-muted-foreground py-6 text-center text-[13px]">
                                     Nenhum signatário adicionado.
@@ -607,7 +626,7 @@ export default function EnvelopeShow({
                                                     variant="outline-sm"
                                                     size="xxs"
                                                     disabled
-                                                    title="Edição de signatário chega na Wave B"
+                                                    title="Edição de signatário disponível em breve"
                                                 >
                                                     <Pencil className="size-3" />
                                                     Editar

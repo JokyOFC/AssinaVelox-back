@@ -30,7 +30,7 @@ export interface PlansProps {
     })[];
 }
 
-/** Escolha de plano (ROUTES §2.16) — versão inicial; Wave B refina. */
+/** Escolha de plano (ROUTES §2.16) — versão inicial; refinada na etapa seguinte. */
 export default function Plans({
     current_plan,
     interval: initialInterval,

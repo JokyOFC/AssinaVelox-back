@@ -13,7 +13,6 @@ use App\Http\Resources\FolderResource;
 use App\Http\Resources\RecipientResource;
 use App\Http\Resources\UserRefResource;
 use App\Models\AuditEvent;
-use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Folder;
 use App\Models\Membership;
@@ -104,7 +103,7 @@ class EnvelopeController extends Controller
             'summary' => [
                 'total' => (clone $all)->count(),
                 'awaiting' => (clone $all)->where('status', EnvelopeStatus::InProgress->value)->count(),
-                'storage_used_bytes' => (int) DocumentVersion::query()->sum('size_bytes'),
+                'storage_used_bytes' => EnvelopeVisibility::storageUsedBytes($membership),
             ],
             'tabs' => $tabs,
             'folders' => [['id' => null, 'name' => 'Todos', 'count' => $tabs['all']], ...$folderRows->all()],

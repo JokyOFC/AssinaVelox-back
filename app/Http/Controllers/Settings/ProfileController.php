@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Services\Accounts\AccountDeletion;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,11 +34,18 @@ class ProfileController extends Controller
     {
         $request->user()->fill($request->validated());
 
-        if ($request->user()->isDirty('email')) {
+        $emailChanged = $request->user()->isDirty('email');
+
+        if ($emailChanged) {
             $request->user()->email_verified_at = null;
         }
 
         $request->user()->save();
+
+        // Trocar o e-mail invalida a verificação: reenvia o link para o novo endereço.
+        if ($emailChanged) {
+            $request->user()->sendEmailVerificationNotification();
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
 
@@ -44,15 +53,25 @@ class ProfileController extends Controller
     }
 
     /**
-     * Delete the user's profile.
+     * Exclui a conta do usuário.
+     *
+     * As invariantes (último proprietário / autoria de documentos) são checadas ANTES do
+     * logout: nada de deslogar e só então falhar por violação de chave estrangeira.
+     * Ver App\Services\Accounts\AccountDeletion para a justificativa de cada bloqueio.
      */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, AccountDeletion $accountDeletion): RedirectResponse
     {
         $user = $request->user();
 
+        $blockers = $accountDeletion->blockers($user);
+
+        if ($blockers !== []) {
+            throw ValidationException::withMessages(['account' => $blockers]);
+        }
+
         Auth::logout();
 
-        $user->delete();
+        $accountDeletion->delete($user);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

@@ -122,7 +122,9 @@ O front importa os helpers abaixo de `@/routes/**`. Nomes com `-` viram camelCas
 
 ## Convenções
 
-- **Identificadores em inglês, textos em pt-BR.** Rótulos de enum vêm de `lib/labels.ts`; nunca hardcode um rótulo de status numa página.
+- **Identificadores em inglês, textos em pt-BR.** Rótulos de enum vêm de `lib/labels.ts`; nunca hardcode um rótulo de status numa página. Isso vale também para os componentes de `components/ui` (shadcn): traduza os textos de leitor de tela ("Fechar", "Mais", "Alternar menu lateral", "Carregando") ao adicionar um novo primitivo.
+- **Badge × nota do signatário** (ROUTES §6.2 / DESIGN §5.2): o badge de `pending`, `notified` e `viewed` é sempre "Pendente" (âmbar) — vem de `recipientStatusLabels` e do espelho em PHP `RecipientStatus::label()`. O detalhe ("Enviado · não visualizou", "Visualizou em {dt}", "Aguarda a vez") é uma linha separada abaixo do badge (`recipientStatusNotes` / `RecipientStatus::note()`), nunca o texto do badge.
+- **Sem jargão de iteração na interface.** Nomes internos de onda/incremento ("Wave B") não podem aparecer em texto visível, flash ou tooltip: use "Disponível em breve" para o que ainda vem na Fase 1 e o padrão "Fase 2" só para o que está fora do escopo.
 - **Datas**: o backend envia ISO-8601 UTC; formate com `lib/format.ts` (`formatRelativeDateTime` → "Hoje, 09:12", `formatDateMedium` → "03 set 2026"). O `AppLayout` chama `setTimeZone(organization.timezone ?? user.timezone)`.
 - **Dinheiro**: sempre centavos inteiros → `formatCurrency(cents)`; `formatCurrencyCompact` ("R$ 49"), `formatCurrencyShort` ("R$ 96,4 mil").
 - **Rotas**: importe helpers do Wayfinder (`import { index } from '@/routes/envelopes'`, `show(id).url`, `store.form()`); nunca monte URLs à mão.
@@ -158,7 +160,7 @@ Page.layout = (props: Props) => ({ breadcrumbs: [...], topbarExtra: <span>…</s
 
 Paleta em `resources/css/app.css` (`:root` + `@theme inline`): `--primary #1257c9` (hover `#0f4bb0`), `--foreground/--navy #0b1f42`, `--text-secondary #47536b`, `--muted-foreground #8a96ad`, `--background #fbfcfe`, `--sidebar #f7f9fc`, `--accent #eef2f9` (hover de nav/ghost), `--accent-subtle #f4f8fe` (hover de outline, linha selecionada), `--row-hover #f7f9fd`, `--border #e6eaf2`, `--input #d5dce9`, `--border-dashed #c9d4e6`, semânticas `success|warning|danger|info|neutral` com `-bg`, `-border` e `-solid`, texto sobre navy `on-navy-muted|secondary|subtle`, sombras `shadow-card|primary|segment|card-hover|pdf|popover|dialog`, raios `--radius 0.5rem` (`rounded-md` 6px badges, `rounded-lg` 8px controles, `rounded-[10px]` popovers, `rounded-xl` 12px cards, `rounded-2xl` 14px modais). Classes utilitárias extras: `tabular`, `focus-ring`, `animate-sign-wipe`, `animate-dialog-in`.
 
-Tipografia: Exo 2 (400–800, normal e itálico) via `bunny()` em `vite.config.ts` — servida localmente no build (sem chamadas ao Google Fonts). Base 14px. Caveat (assinatura manuscrita) usa fallback `cursive` até a captura de assinatura entrar (incrementos 2–4, referidos no código como "Wave B").
+Tipografia: Exo 2 (400–800, normal e itálico) e Caveat (600) via `bunny()` em `vite.config.ts` — ambas servidas localmente no build (sem chamadas ao Google Fonts). Base 14px. Caveat responde por `--font-hand` / `font-hand` (assinatura manuscrita: hero do login, pad "Digitar", campo assinado no PDF) e é carregada sem `preload`, com `font-display: swap`, por aparecer em poucas telas. DESIGN_SYSTEM §1.2 usa só o peso 600 — é o mesmo recorte do mock, então o elemento não precisa declarar `font-weight`.
 
 ## Responsividade
 

@@ -1,0 +1,5 @@
+pypdf==6.18.0
+reportlab==5.0.1
+pyHanko==0.37.0
+Pillow
+pytest

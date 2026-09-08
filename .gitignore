@@ -27,3 +27,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# pdftool (Python)
+/tools/pdftool/.venv
+__pycache__/
+.pytest_cache/

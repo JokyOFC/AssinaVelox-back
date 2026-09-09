@@ -17,8 +17,13 @@ const FEATURES = [
     },
     {
         icon: ShieldCheck,
-        title: 'Assinatura criptográfica da operadora',
-        text: 'O documento concluído é assinado com o certificado A1 da AssinaVelox e pode ser verificado publicamente.',
+        // Mesma regra da faixa de selos abaixo (e de arquitetura.md §2): o card não pode
+        // afirmar que todo documento concluído sai assinado com certificado. O que a Fase 1
+        // entrega sempre é a página de evidências e o código de verificação pública; a
+        // assinatura criptográfica da operadora depende de haver certificado ativo na
+        // finalização — quando não há, a tela do documento diz exatamente isso.
+        title: 'Evidências e verificação pública',
+        text: 'O documento concluído recebe página de evidências e código de verificação pública. Quando há certificado A1 da operadora ativo, o arquivo final também recebe a assinatura criptográfica.',
     },
 ];
 

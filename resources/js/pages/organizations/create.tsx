@@ -40,7 +40,7 @@ export default function OrganizationsCreate() {
                             Dados da organização
                         </div>
                         <div className="text-muted-foreground text-[13px]">
-                            Aparecem nos convites e no certificado de conclusão.
+                            Aparecem nos convites e no relatório de evidências.
                         </div>
                     </div>
                 </div>

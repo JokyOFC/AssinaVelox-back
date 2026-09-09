@@ -30,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $user_agent
  * @property Carbon $expires_at
  * @property Carbon|null $authenticated_at
+ * @property Carbon|null $document_presented_at
  * @property Carbon|null $consumed_at
  * @property Carbon|null $last_seen_at
  * @property Carbon|null $created_at
@@ -57,6 +58,7 @@ class SigningSession extends Model
         'user_agent',
         'expires_at',
         'authenticated_at',
+        'document_presented_at',
         'consumed_at',
         'last_seen_at',
     ];
@@ -76,6 +78,7 @@ class SigningSession extends Model
             'authorization_expires_at' => 'datetime',
             'expires_at' => 'datetime',
             'authenticated_at' => 'datetime',
+            'document_presented_at' => 'datetime',
             'consumed_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'created_at' => 'datetime',

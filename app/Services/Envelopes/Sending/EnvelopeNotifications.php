@@ -2,10 +2,12 @@
 
 namespace App\Services\Envelopes\Sending;
 
+use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Envelopes\EnvelopeCanceledNotification;
 use App\Notifications\Envelopes\EnvelopeRefusedNotification;
+use App\Notifications\Envelopes\RecipientSignedNotification;
 use App\Services\Organizations\NotificationPreferences;
 use App\Services\Signing\Contracts\SignerNotifications;
 use Illuminate\Support\Facades\Notification;
@@ -43,6 +45,29 @@ class EnvelopeNotifications implements SignerNotifications
         foreach ($recipients as $recipient) {
             $this->invitations->dispatch($recipient, $envelope, isReminder: false);
         }
+    }
+
+    /**
+     * "Fulano assinou" — o aviso que o remetente mais espera do fluxo (ROUTES §2.14,
+     * `recipient_signed`, ligado por padrão nos dois canais). O interruptor existia na tela
+     * de Notificações desde o começo e nada o produzia.
+     */
+    public function notifySenderSigned(Envelope $envelope, Recipient $signedBy): void
+    {
+        $creator = $envelope->creator;
+        $channels = $this->channelsFor($envelope, 'recipient_signed');
+
+        if ($creator === null || $channels === []) {
+            return;
+        }
+
+        $total = $envelope->recipients()->count();
+        $signed = $envelope->recipients()->where('status', RecipientStatus::Signed->value)->count();
+
+        $creator->notify(
+            (new RecipientSignedNotification($envelope, $signedBy, (string) Str::ulid(), $signed, $total))
+                ->restrictChannels($channels),
+        );
     }
 
     public function notifySenderRefused(Envelope $envelope, Recipient $refusedBy): void

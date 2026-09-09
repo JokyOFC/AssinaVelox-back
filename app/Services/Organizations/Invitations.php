@@ -9,6 +9,7 @@ use App\Models\MembershipInvitation;
 use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\MembershipInvitationNotification;
+use App\Notifications\Organizations\InvitationAcceptedNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -102,7 +103,9 @@ class Invitations
      */
     public function accept(MembershipInvitation $invitation, User $user): Membership
     {
-        return DB::transaction(function () use ($invitation, $user): Membership {
+        $firstAcceptance = false;
+
+        $membership = DB::transaction(function () use ($invitation, $user, &$firstAcceptance): Membership {
             $invitation = MembershipInvitation::query()->lockForUpdate()->whereKey($invitation->getKey())->firstOrFail();
 
             $membership = Membership::query()
@@ -123,12 +126,59 @@ class Invitations
 
             if ($invitation->accepted_at === null) {
                 $invitation->forceFill(['accepted_at' => now()])->save();
+                $firstAcceptance = true;
             }
 
             $user->forceFill(['current_organization_id' => $invitation->organization_id])->save();
 
             return $membership;
         });
+
+        // Evento `invitation_accepted` da tela de Notificações (ROUTES §2.14). Fora da
+        // transação: um e-mail que não sai não desfaz a entrada de um membro.
+        if ($firstAcceptance) {
+            $this->announceAcceptance($membership);
+        }
+
+        return $membership;
+    }
+
+    /**
+     * Avisa quem responde pela organização que o convite foi usado.
+     *
+     * Vai para proprietários e administradores ativos — quem pode remover o acesso é quem
+     * precisa saber que ele existe —, cada um pelos canais que manteve ligados. O próprio
+     * membro que acabou de entrar não recebe aviso de si mesmo.
+     */
+    protected function announceAcceptance(Membership $membership): void
+    {
+        $membership->loadMissing('organization', 'user');
+
+        $preferences = app(NotificationPreferences::class);
+        $correlationId = (string) Str::ulid();
+
+        $audience = Membership::query()
+            ->where('organization_id', $membership->organization_id)
+            ->where('status', MembershipStatus::Active->value)
+            ->whereIn('role', [MembershipRole::Owner->value, MembershipRole::Admin->value])
+            ->whereKeyNot($membership->getKey())
+            ->with('user')
+            ->get();
+
+        foreach ($audience as $target) {
+            $channels = array_values(array_filter([
+                $preferences->wants($target, 'invitation_accepted', 'mail') ? 'mail' : null,
+                $preferences->wants($target, 'invitation_accepted', 'database') ? 'database' : null,
+            ]));
+
+            if ($channels === []) {
+                continue;
+            }
+
+            $target->user->notify(
+                (new InvitationAcceptedNotification($membership, $correlationId))->restrictChannels($channels),
+            );
+        }
     }
 
     protected function send(MembershipInvitation $invitation, string $token): void

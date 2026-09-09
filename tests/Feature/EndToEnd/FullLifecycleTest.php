@@ -252,6 +252,12 @@ function lifecycleAuthenticate(object $test, string $token): array
     $props = $test->get(route('sign.show', ['token' => $token]))->viewData('page')['props'];
     expect($props['screen'])->toBe('sign');
 
+    // O navegador do signatário busca o PDF assim que a tela carrega. É esse GET que marca
+    // `signing_sessions.document_presented_at` e grava `document.presented` na trilha —
+    // exigido por `RecordAcceptance` antes de gravar o aceite, porque a declaração afirma
+    // que o conteúdo foi apresentado nesta tela.
+    $test->get(route('sign.document', ['token' => $token]));
+
     return $props;
 }
 
@@ -312,6 +318,11 @@ function lifecycleEnableTestCertificate(object $test): array
 
     TestCertificate::configure($certificate);
     TestCertificate::register($certificate);
+
+    // A assinatura da operadora depende do certificado E do plano
+    // (`plans.features.company_signature`, lido por `EnvelopeFinalizer::signsFor()`): o
+    // Grátis, com que a organização nasce, não inclui o item.
+    finalizationEnableCompanySignature($test->organization);
 
     return $certificate;
 }

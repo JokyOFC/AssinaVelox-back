@@ -1,5 +1,10 @@
 # Incrementos 2 e 3 — relatório de integração
 
+> **Documento histórico.** Registra o fechamento dos incrementos 2 e 3 e os números daquela
+> rodada. O estado consolidado da Fase 1 está em **`docs/entrega-fase-1.md`**; as pendências
+> desta lista que já foram resolvidas nos incrementos 4 e 5 estão marcadas lá. O contorno
+> `-d extension=intl` dos comandos **não é mais necessário** (a extensão foi habilitada).
+
 > Fecha os incrementos **2 (preparação documental)** e **3 (coleta de aceites)**, entregues em
 > paralelo por cinco agentes (B-DOC, B-FIELDS, F-EDITOR, B-SEND, B-SIGN, F-SIGN) e integrados
 > em seguida. Este documento registra o que existe hoje, o que foi verificado com comando e

@@ -3,6 +3,7 @@
 use App\Enums\MembershipRole;
 use App\Notifications\MembershipInvitationNotification;
 use App\Services\Organizations\Invitations;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
@@ -34,23 +35,32 @@ test('reenvio de convite não tem throttle: um admin pode bombardear a caixa de 
     Notification::assertSentOnDemandTimes(MembershipInvitationNotification::class, 26);
 });
 
-test('o token bruto do convite é gravado em claro na tabela jobs quando a fila é database', function () {
+/*
+| ATUALIZADO na revisão final.
+|
+| Este caso documentava o defeito: `MembershipInvitationNotification` é `ShouldQueue` e
+| carrega `public readonly string $token`, então o token bruto do convite — o segredo aceito
+| em /convites/{token} — ia em CLARO para o armazenamento da fila (`jobs` no banco, Redis em
+| produção), para `failed_jobs` numa falha definitiva de entrega e para a tela do Horizon.
+|
+| A correção foi marcar as três notificações que carregam segredo
+| (`MembershipInvitationNotification`, `RecipientInvitationNotification` e
+| `SignerOtpNotification`) como `ShouldBeEncrypted` e agendar `queue:prune-failed`. O caso
+| passa a afirmar o contrário: o payload não pode conter o token.
+*/
+test('o token bruto do convite não fica em claro na tabela jobs quando a fila é database', function () {
     config()->set('queue.default', 'database');
 
     ['organization' => $organization, 'owner' => $owner] = createOrganizationWithOwner();
     $invitation = app(Invitations::class)->invite($organization, $owner, 'novo@example.com', MembershipRole::Member);
 
-    $payload = DB::table('jobs')->value('payload');
-    expect($payload)->not->toBeNull();
+    $payload = (string) DB::table('jobs')->value('payload');
+    expect($payload)->not->toBe('');
 
-    $command = json_decode((string) $payload, true)['data']['command'] ?? '';
+    // Nada de `s:5:"token";s:NN:"…"` no payload: ele vai cifrado com a APP_KEY.
+    expect(preg_match('/s:5:"token";s:\d+:"([A-Za-z0-9_-]+)"/', $payload, $matches))->toBe(0);
 
-    // A notificação (ShouldQueue) carrega `public readonly string $token` — serializado no job.
-    expect(preg_match('/s:5:"token";s:\d+:"([A-Za-z0-9_-]+)"/', $command, $matches))->toBe(1);
-
-    $rawToken = $matches[1];
-
-    // Prova de que é exatamente o segredo aceito em /convites/{token}: o digest bate com o banco.
-    expect(hash('sha256', $rawToken))->toBe($invitation->token_digest);
-    expect(Invitations::findByToken($rawToken)?->is($invitation))->toBeTrue();
+    // E a notificação declara a cifragem, que é o que o Laravel lê para cifrar o job.
+    expect(new MembershipInvitationNotification($invitation, 'token-de-teste'))
+        ->toBeInstanceOf(ShouldBeEncrypted::class);
 });

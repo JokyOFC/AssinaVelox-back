@@ -41,6 +41,35 @@ use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use Tests\Feature\Pdf\Support\PdfFixtures;
 
+if (! function_exists('finalizationEnableCompanySignature')) {
+    /**
+     * Liga `features.company_signature` no plano vigente da organização.
+     *
+     * A assinatura criptográfica da operadora depende de DUAS coisas: certificado
+     * configurado e plano que inclua o item (`EnvelopeFinalizer::signsFor()`). Os cenários
+     * de finalização assinada medem o certificado — o plano só não pode atrapalhar. Mexe no
+     * plano que a organização já tem (o banco é recriado a cada teste), sem trocar a
+     * assinatura de plano e sem alterar cotas.
+     */
+    function finalizationEnableCompanySignature(Organization $organization): void
+    {
+        $plan = $organization->currentSubscription()->with('plan')->first()?->plan;
+
+        if ($plan === null) {
+            return;
+        }
+
+        $features = (array) ($plan->features ?? []);
+
+        if (($features['company_signature'] ?? false) === true) {
+            return;
+        }
+
+        $features['company_signature'] = true;
+        $plan->forceFill(['features' => $features])->save();
+    }
+}
+
 if (! function_exists('finalizationDisk')) {
     /**
      * Disco `documents` com raiz exclusiva do teste (raiz compartilhada com Storage::fake
@@ -201,6 +230,14 @@ if (! function_exists('finalizationEnvelope')) {
         if ($organization === null || $owner === null) {
             ['organization' => $organization, 'owner' => $owner] = createOrganizationWithOwner(['name' => 'Horizonte Consultoria']);
         }
+
+        // A assinatura criptográfica da operadora é item de PLANO
+        // (`plans.features.company_signature`, consultado por `EnvelopeFinalizer::signsFor()`)
+        // além de depender do certificado configurado. O plano Grátis, com que toda
+        // organização nasce, não inclui o item — um cenário de finalização assinada precisa
+        // de uma organização em plano que o inclua, senão o teste mediria a política de
+        // plano em vez do certificado.
+        finalizationEnableCompanySignature($organization);
 
         $recipients = $recipients === [] ? [finalizationDefaultRecipient()] : $recipients;
 

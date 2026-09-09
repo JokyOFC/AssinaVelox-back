@@ -201,6 +201,8 @@ it('avisa o remetente e os cancelados pelo contrato de notificações', function
 
         public function inviteRecipients(Envelope $envelope, array $recipients): void {}
 
+        public function notifySenderSigned(Envelope $envelope, Recipient $signedBy): void {}
+
         public function notifySenderRefused(Envelope $envelope, Recipient $refusedBy): void
         {
             $this->refusedBy = $refusedBy->email;

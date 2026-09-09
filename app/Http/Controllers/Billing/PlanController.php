@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Billing;
 use App\Enums\PlanBillingPeriod;
 use App\Http\Controllers\Controller;
 use App\Models\Plan;
+use App\Services\Plans\PlanFeatures;
 use App\Support\CurrentOrganization;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -34,7 +35,6 @@ class PlanController extends Controller
     private const FEATURE_LABELS = [
         'email_otp' => 'Código por e-mail',
         'evidence_page' => 'Página de evidências',
-        'company_a1' => 'Assinatura criptográfica da operadora',
         'company_signature' => 'Assinatura criptográfica da operadora',
         'folders' => 'Pastas',
         'priority_support' => 'Suporte prioritário',
@@ -120,7 +120,20 @@ class PlanController extends Controller
     {
         $labels = [];
 
+        // A assinatura criptográfica da operadora só é anunciada quando a instalação tem um
+        // certificado ativo. Sem ele, nenhum plano entrega o item — e listá-lo venderia, ao
+        // cliente do plano pago, algo que o próprio produto lhe nega na tela do documento
+        // ("Nenhum certificado da operadora estava ativo na finalização"). É a mesma regra
+        // que arquitetura.md §2 impõe ao restante da interface, aplicada ao discurso
+        // comercial. Havendo certificado, a flag do plano volta a valer — e ela governa de
+        // verdade: `EnvelopeFinalizer` consulta `PlanFeatures::allows()` antes de assinar.
+        $offersCompanySignature = app(PlanFeatures::class)->isOffered();
+
         foreach ((array) ($plan->features ?? []) as $key => $enabled) {
+            if ($key === PlanFeatures::COMPANY_SIGNATURE && ! $offersCompanySignature) {
+                continue;
+            }
+
             if ($enabled === true && isset(self::FEATURE_LABELS[$key]) && ! in_array(self::FEATURE_LABELS[$key], $labels, true)) {
                 $labels[] = self::FEATURE_LABELS[$key];
             }

@@ -61,7 +61,18 @@ class CancelEnvelope
                 ])
                 ->get();
 
-            $signed = $locked->recipients()->where('status', RecipientStatus::Signed->value)->count();
+            // Quem já assinou é contado (para decidir sobre a cota) e identificado (para
+            // manter o link): o acesso dele à própria prova não pode depender de o
+            // remetente cancelar ou não.
+            $signedIds = array_values(array_map(
+                static fn ($id): int => (int) $id,
+                $locked->recipients()
+                    ->where('status', RecipientStatus::Signed->value)
+                    ->pluck('id')
+                    ->all(),
+            ));
+
+            $signed = count($signedIds);
 
             // Quem AINDA aguardava a vez no sequencial nunca recebeu convite: avisá-lo do
             // cancelamento seria contar de um documento que ele nunca soube que existia.
@@ -81,7 +92,12 @@ class CancelEnvelope
                 $recipient->save();
             }
 
-            $this->links->revokeForEnvelope($locked);
+            // Quem já assinou mantém o link: é por ele que a pessoa chega ao próprio
+            // comprovante de aceite e ao documento que assinou. Cancelar encerra o pedido;
+            // não apaga, para quem já se manifestou, a prova do que fez. Mesma regra da
+            // expiração (ExpireEnvelopes) — e manter o link não reabre nada, porque o
+            // resolver recusa assinar fora de `in_progress`.
+            $this->links->revokeForEnvelope($locked, exceptRecipientIds: $signedIds);
 
             EnvelopeAudit::record($locked, AuditEventType::EnvelopeCanceled, [
                 'has_reason' => filled($reason),

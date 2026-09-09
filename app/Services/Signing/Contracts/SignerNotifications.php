@@ -33,6 +33,11 @@ interface SignerNotifications
     public function inviteRecipients(Envelope $envelope, array $recipients): void;
 
     /**
+     * Um signatário concluiu o aceite: avisar o remetente (evento `recipient_signed`).
+     */
+    public function notifySenderSigned(Envelope $envelope, Recipient $signedBy): void;
+
+    /**
      * Um signatário recusou: avisar o remetente com o motivo.
      */
     public function notifySenderRefused(Envelope $envelope, Recipient $refusedBy): void;

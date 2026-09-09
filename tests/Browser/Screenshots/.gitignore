@@ -1,0 +1,8 @@
+# Capturas geradas pelo pest-plugin-browser quando uma asserção falha.
+# São artefato de diagnóstico local: nunca vão para o repositório.
+#
+# O `Pest\Browser\Support\Screenshot::cleanup()` limpa este diretório a cada
+# execução com `glob($dir.'/*')`, que não casa arquivos começados por ponto —
+# por isso este arquivo sobrevive e o diretório continua versionado.
+*
+!.gitignore

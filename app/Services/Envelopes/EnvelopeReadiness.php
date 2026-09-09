@@ -4,6 +4,7 @@ namespace App\Services\Envelopes;
 
 use App\Enums\DocumentProcessingStatus;
 use App\Enums\FieldType;
+use App\Enums\SigningOrder;
 use App\Models\Document;
 use App\Models\Envelope;
 use App\Models\Recipient;
@@ -95,9 +96,22 @@ final class EnvelopeReadiness
      */
     public static function recipientIssues(Envelope $envelope): array
     {
-        return self::recipients($envelope)->isEmpty()
-            ? ['Adicione pelo menos um signatário.']
-            : [];
+        if (self::recipients($envelope)->isEmpty()) {
+            return ['Adicione pelo menos um signatário.'];
+        }
+
+        // Mesma invariante que grava o status (DocumentReadiness::signingOrderIsCoherent):
+        // a ordem escolhida no passo 1 precisa estar refletida nas vezes dos signatários.
+        // Sem isso a plataforma anunciaria "Assinatura em ordem" numa lista que ela
+        // convidaria de uma vez só — ou o contrário, deixando todos menos o primeiro sem
+        // convite nenhum.
+        if (! app(DocumentReadiness::class)->signingOrderIsCoherent($envelope)) {
+            return [$envelope->signing_order === SigningOrder::Sequential
+                ? 'A ordem de assinatura é sequencial, mas os signatários não estão em vezes distintas. Reabra o passo 2 e confirme a lista.'
+                : 'A ordem de assinatura é em paralelo, mas os signatários estão em vezes diferentes. Reabra o passo 2 e confirme a lista.'];
+        }
+
+        return [];
     }
 
     /**

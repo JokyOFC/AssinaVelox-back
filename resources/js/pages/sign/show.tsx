@@ -1,6 +1,7 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import { Check, FileLock2, PenLine, ShieldCheck } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import type { PdfDocumentStatus } from '@/components/pdf/use-pdf-document';
 import { ConsentBox, defaultConsentLabel } from '@/components/sign/consent-box';
 import { FieldChecklist } from '@/components/sign/field-checklist';
 import { OtpCard } from '@/components/sign/otp-card';
@@ -251,6 +252,20 @@ export default function SignShow(props: SignShowProps) {
     const [refuseOpen, setRefuseOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
+    /**
+     * Estado do visualizador. A declaração que a pessoa assina diz "Li integralmente o
+     * documento […], cujo conteúdo apresentado nesta tela corresponde ao resumo SHA-256 …",
+     * e o servidor recusa o aceite sem a marca de apresentação na sessão
+     * (`RecordAcceptance` exige `document_presented_at`). O botão espera a ENTREGA dos
+     * bytes, não o desenho: um PDF que o visualizador não consegue renderizar ainda assim
+     * saiu do servidor e continua acessível pelo botão "Baixar PDF" da barra — bloquear
+     * nesse caso deixaria a pessoa sem saída a não ser recusar. O que bloqueia de verdade é
+     * o documento NÃO ter chegado (403, 404, rede), que é exatamente o caso em que ela não
+     * teve como ler nada.
+     */
+    const [documentStatus, setDocumentStatus] =
+        useState<PdfDocumentStatus>('idle');
+    const [documentDelivered, setDocumentDelivered] = useState(false);
 
     const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
     const signatureRef = useRef<HTMLDivElement | null>(null);
@@ -402,8 +417,11 @@ export default function SignShow(props: SignShowProps) {
         focusField(nextPending);
     };
 
+    const documentPresented = documentDelivered || documentStatus === 'ready';
+
     const canSubmit =
         accepted &&
+        documentPresented &&
         pending.length === 0 &&
         (!needsSignature || signature !== null) &&
         (!needsInitials || initials !== null) &&
@@ -677,6 +695,10 @@ export default function SignShow(props: SignShowProps) {
                             onPageChange={setPage}
                             nextPending={nextPending}
                             onGoToNextPending={goToNextPending}
+                            onStatusChange={(status, delivered) => {
+                                setDocumentStatus(status);
+                                setDocumentDelivered(delivered);
+                            }}
                         />
                     ) : (
                         <LockedDocument
@@ -774,7 +796,14 @@ export default function SignShow(props: SignShowProps) {
                             privacyUrl={legal.privacy_url}
                         />
 
-                        {pending.length > 0 && (
+                        {!documentPresented && (
+                            <p className="text-warning text-[12.5px]">
+                                {documentStatus === 'error'
+                                    ? 'O documento não chegou. Use “Tentar de novo” ou “Baixar PDF” na barra do documento — só é possível assinar depois de conferir o que está sendo assinado.'
+                                    : 'Aguarde o documento terminar de carregar para assinar.'}
+                            </p>
+                        )}
+                        {documentPresented && pending.length > 0 && (
                             <p className="text-warning text-[12.5px]">
                                 Faltam{' '}
                                 {plural(

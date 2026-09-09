@@ -2,6 +2,7 @@
 
 use App\Enums\EnvelopeStatus;
 use App\Models\CertificateReference;
+use App\Models\Envelope;
 use App\Services\Verification\NameMask;
 
 require_once __DIR__.'/../Support/OrganizationHelpers.php';
@@ -118,5 +119,55 @@ test('a página pública não entrega nenhuma URL de documento, miniatura ou dow
 
     foreach (['pdf_url', 'downloads', 'signature_image', '/paginas/', 'preview', 'storage'] as $forbidden) {
         expect($payload)->not->toContain($forbidden);
+    }
+});
+
+/*
+|--------------------------------------------------------------------------
+| O alfabeto do código não pode divergir entre back-end e front-end
+|--------------------------------------------------------------------------
+| O back-end SORTEIA o código e o imprime no rodapé do PDF; o front-end filtra
+| o que a pessoa digita. Se o filtro descartar uma letra que o sorteio emite, o
+| campo nunca chega aos 12 caracteres e o botão fica desabilitado para sempre —
+| a falha aparece só numa fração dos códigos, então passa despercebida. Já
+| aconteceu uma vez com o `L`: o filtro tinha 31 caracteres e o sorteio 32,
+| tornando indigitável 1 em cada 3 códigos emitidos.
+*/
+
+test('o filtro do campo de código aceita exatamente o alfabeto que o back-end sorteia', function () {
+    $tsx = file_get_contents(
+        base_path('resources/js/components/verification/verification-code.tsx')
+    );
+
+    expect($tsx)->not->toBeFalse();
+
+    preg_match('/const CODE_ALPHABET = \/\[\^([A-Z0-9]+)\]\/g;/', (string) $tsx, $matches);
+
+    expect($matches[1] ?? null)->not->toBeNull('Não encontrei a constante CODE_ALPHABET em verification-code.tsx.');
+
+    $frontend = str_split($matches[1]);
+    $backend = str_split(Envelope::VERIFICATION_CODE_ALPHABET);
+
+    sort($frontend);
+    sort($backend);
+
+    expect($frontend)->toBe($backend);
+});
+
+test('todo código sorteado passa inteiro pelo filtro do front-end', function () {
+    $tsx = (string) file_get_contents(
+        base_path('resources/js/components/verification/verification-code.tsx')
+    );
+
+    preg_match('/const CODE_ALPHABET = \/(\[\^[A-Z0-9]+\])\/g;/', $tsx, $matches);
+
+    $keep = '/'.$matches[1].'/';
+
+    // 200 sorteios reais: qualquer caractere ausente do filtro aparece aqui.
+    for ($i = 0; $i < 200; $i++) {
+        $code = Envelope::generateVerificationCode();
+
+        expect(preg_replace($keep, '', $code))
+            ->toHaveLength(Envelope::VERIFICATION_CODE_LENGTH, "O filtro descartou caracteres de {$code}.");
     }
 });

@@ -80,6 +80,19 @@
             "@types:check",
             "@php artisan test"
         ],
+        "test:browser": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php artisan test --testsuite=Browser"
+        ],
+        "test:pdftool": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php -r \"exit(pclose(popen(PHP_OS_FAMILY === 'Windows' ? 'powershell -NoProfile -ExecutionPolicy Bypass -File tools/pdftool/run_tests.ps1 1>&2' : 'bash tools/pdftool/run_tests.sh 1>&2', 'r')) === 0 ? 0 : 1);\""
+        ],
+        "test:all": [
+            "Composer\\Config::disableProcessTimeout",
+            "@test",
+            "@test:pdftool"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
@@ -122,5 +135,12 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "scripts-descriptions": {
+        "test": "Pint + PHPStan + as três suítes Pest (Unit, Feature e Browser).",
+        "test:browser": "Só a suíte de navegador (Playwright/Chromium).",
+        "test:pdftool": "Só os testes Python do pdftool (cria o venv se faltar).",
+        "test:all": "Tudo: @test mais os testes do pdftool.",
+        "ci:check": "O que a CI roda: lint do front, tipos do front e @test."
+    }
 }

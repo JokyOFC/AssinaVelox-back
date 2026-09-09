@@ -1,8 +1,11 @@
 import { ChevronRight, Download, FileText, Maximize2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PdfViewer, type RenderedPageSize } from '@/components/pdf/pdf-viewer';
 import { DEFAULT_ZOOM } from '@/components/pdf/pdf-zoom-controls';
-import { usePdfDocument } from '@/components/pdf/use-pdf-document';
+import {
+    type PdfDocumentStatus,
+    usePdfDocument,
+} from '@/components/pdf/use-pdf-document';
 import {
     type OtherField,
     type SignerField,
@@ -38,6 +41,13 @@ export interface SignerDocumentProps {
     onGoToNextPending?: () => void;
     /** Somente leitura: comprovante, sem campos clicáveis. */
     readOnly?: boolean;
+    /**
+     * Estado do visualizador, para quem precisa saber se o documento chegou a ser
+     * apresentado — a declaração de aceite afirma que o conteúdo foi apresentado nesta
+     * tela. `delivered` diz que os BYTES chegaram (403/404 nunca são entrega); `status`
+     * diz se o visualizador conseguiu desenhá-los.
+     */
+    onStatusChange?: (status: PdfDocumentStatus, delivered: boolean) => void;
 }
 
 /**
@@ -65,9 +75,15 @@ export function SignerDocument({
     nextPending,
     onGoToNextPending,
     readOnly = false,
+    onStatusChange,
 }: SignerDocumentProps) {
     const pdf = usePdfDocument(pdfUrl);
     const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+
+    useEffect(() => {
+        onStatusChange?.(pdf.status, pdf.delivered);
+    }, [pdf.status, pdf.delivered, onStatusChange]);
+
     const [expanded, setExpanded] = useState(false);
     const [expandedPage, setExpandedPage] = useState(1);
 

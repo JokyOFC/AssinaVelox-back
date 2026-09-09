@@ -5,7 +5,9 @@ namespace App\Http\Resources;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Recipient;
+use App\Models\SignatureAcceptance;
 use App\Support\CurrentOrganization;
+use App\Support\IpDisplay;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -81,7 +83,7 @@ class RecipientListItemResource extends JsonResource
 
         return match ($this->status) {
             RecipientStatus::Signed => $acceptance !== null
-                ? 'IP '.($acceptance->ip_address ?? '—').' · '.RecipientResource::userAgentLabel($acceptance->user_agent)
+                ? $this->acceptanceNote($acceptance)
                 : 'Aceite eletrônico registrado',
             RecipientStatus::Refused => $this->refusal_reason !== null
                 ? 'Motivo: “'.Str::limit($this->refusal_reason, 80).'”'
@@ -94,6 +96,23 @@ class RecipientListItemResource extends JsonResource
                 : 'Enviado · não visualizou',
             RecipientStatus::Pending => 'Aguarda a vez · '.$this->order_index.'.º na ordem',
         };
+    }
+
+    /**
+     * Nota da linha assinada: IP conforme a política da organização + dispositivo.
+     *
+     * O IP passa por {@see IpDisplay}, como no detalhe do documento, na trilha e na página
+     * de evidências — esta tela ficava de fora e era a única a entregar o endereço inteiro,
+     * inclusive quando a organização escolhia `masked` (o padrão) ou `none`. No modo `none`
+     * o trecho "IP …" some por inteiro: esconder o dado e ainda anunciar o rótulo seria
+     * dizer que ele existe ali.
+     */
+    protected function acceptanceNote(SignatureAcceptance $acceptance): string
+    {
+        $device = RecipientResource::userAgentLabel($acceptance->user_agent);
+        $ip = IpDisplay::for($acceptance->ip_address, CurrentOrganization::instance()->get());
+
+        return $ip === null ? $device : 'IP '.$ip.' · '.$device;
     }
 
     protected function canResend(): bool

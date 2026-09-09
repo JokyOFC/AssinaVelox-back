@@ -69,7 +69,16 @@ class EnvelopeDocumentController extends Controller
             return back()->with('error', 'Ação indisponível no status atual.');
         }
 
-        if (! $this->intake->remove($envelope, $request->user(), $request)) {
+        try {
+            $removed = $this->intake->remove($envelope, $request->user(), $request);
+        } catch (UploadRejectedException $exception) {
+            // A checagem acima decidiu pelo model do route binding; o serviço decide de
+            // novo sob lock. Se outra requisição concluiu o envio no meio do caminho, a
+            // recusa chega aqui — e é resposta de tela, não erro de servidor.
+            return back()->with('error', $exception->getMessage());
+        }
+
+        if (! $removed) {
             return back()->with('info', 'Nenhum arquivo para remover.');
         }
 

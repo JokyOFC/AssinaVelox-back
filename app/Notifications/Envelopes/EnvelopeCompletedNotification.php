@@ -10,6 +10,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\RestrictsChannels;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -75,7 +76,7 @@ class EnvelopeCompletedNotification extends Notification implements ShouldQueue,
         $message = (new MailMessage)
             ->subject('Documento concluído: '.$this->envelope->title)
             ->greeting('Boa notícia!')
-            ->line('Todos os signatários concluíram **'.$this->envelope->title.'** ('.$this->envelope->display_code.').')
+            ->line('Todos os signatários concluíram **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.').')
             ->line($this->closingStatement());
 
         $url = $this->downloadUrl ?? ($this->recipient === null ? route('envelopes.show', $this->envelope) : null);

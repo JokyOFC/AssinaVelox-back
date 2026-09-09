@@ -55,9 +55,16 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
         'subscription.past_due', 'subscription.expired', 'subscription.renewed',
     ];
 
+    // `document.presented` entrou na revisão final da Fase 1. A declaração de aceite afirma
+    // que o conteúdo foi APRESENTADO nesta tela, e a trilha não tinha como sustentá-lo: ia
+    // de `invitation.opened` — que a página de evidências rotula "não comprova leitura" —
+    // direto para `acceptance.recorded`. O evento registra a ENTREGA dos bytes àquela
+    // sessão de assinatura, não a leitura (docs/entrega-fase-1.md §10.3).
+    $review = ['document.presented'];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing])
-        ->toHaveCount(44);
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review])
+        ->toHaveCount(45);
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

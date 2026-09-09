@@ -32,3 +32,6 @@ yarn-error.log
 /tools/pdftool/.venv
 __pycache__/
 .pytest_cache/
+
+# Lixo de expansão de variável do Windows (nunca versionar)
+/tools/pdftool/%SystemDrive%/

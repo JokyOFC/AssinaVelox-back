@@ -228,6 +228,19 @@ class PlanLedger
                 return;
             }
 
+            // `envelopes_used` mede o CICLO CORRENTE: a renovação o zera
+            // (ActivateSubscription::applyCycle, SubscriptionLifecycle::renewFreeCycles)
+            // enquanto `plan_consumptions` guarda as linhas de todos os ciclos sob a mesma
+            // `subscription_id`. Um envelope enviado perto da virada continua `in_progress`
+            // por até 90 dias; cancelá-lo já no ciclo novo devolvia ao contador do ciclo
+            // novo uma unidade que ele nunca gastou — cota de graça, repetível a cada
+            // virada. A reserva não tem esse problema: `envelopes_reserved` é recontado a
+            // partir do ledger na renovação, então o que está em trânsito continua no
+            // contador vigente qualquer que seja o ciclo em que nasceu.
+            if ($column === 'envelopes_used' && ! $this->belongsToCurrentCycle($consumption, $subscription)) {
+                return;
+            }
+
             $subscription->forceFill([
                 $column => max(0, (int) $subscription->getAttribute($column) - $quantity),
             ])->save();
@@ -244,6 +257,27 @@ class PlanLedger
         }
 
         return $consumption;
+    }
+
+    /**
+     * O consumo pertence ao ciclo que o contador desnormalizado está medindo?
+     *
+     * A data de referência é a da confirmação (`committed_at`) e, na falta dela, a da
+     * reserva. Sem período gravado — assinatura recém-criada, ainda sem ciclo — vale a
+     * resposta conservadora "sim": é o comportamento anterior e não há ciclo anterior de
+     * onde a unidade pudesse ter vindo.
+     */
+    private function belongsToCurrentCycle(PlanConsumption $consumption, Subscription $subscription): bool
+    {
+        $periodStart = $subscription->current_period_start;
+
+        if ($periodStart === null) {
+            return true;
+        }
+
+        $spentAt = $consumption->committed_at ?? $consumption->reserved_at;
+
+        return $spentAt === null || $spentAt->greaterThanOrEqualTo($periodStart);
     }
 
     /**

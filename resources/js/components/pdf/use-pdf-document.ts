@@ -8,6 +8,12 @@ export interface PdfDocumentState {
     document: PDFDocumentProxy | null;
     pageCount: number;
     status: PdfDocumentStatus;
+    /**
+     * Os bytes chegaram do servidor? É diferente de `status === 'ready'`: um PDF que o
+     * visualizador não consegue desenhar ainda assim FOI entregue, e a pessoa tem o botão
+     * "Baixar PDF" para lê-lo. Um 403/404 nunca é entrega.
+     */
+    delivered: boolean;
     /** Mensagem PT-BR pronta para exibição (null enquanto não há erro). */
     error: string | null;
     reload: () => void;
@@ -24,6 +30,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
         url ? 'loading' : 'idle',
     );
     const [error, setError] = useState<string | null>(null);
+    const [delivered, setDelivered] = useState(false);
     const [attempt, setAttempt] = useState(0);
 
     const reload = useCallback(() => setAttempt((value) => value + 1), []);
@@ -33,6 +40,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
             setDocument(null);
             setStatus('idle');
             setError(null);
+            setDelivered(false);
 
             return;
         }
@@ -43,8 +51,13 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
 
         setStatus('loading');
         setError(null);
+        setDelivered(false);
 
-        openPdfDocument(url, controller.signal)
+        openPdfDocument(url, controller.signal, () => {
+            if (!cancelled) {
+                setDelivered(true);
+            }
+        })
             .then((pdf) => {
                 opened = pdf;
 
@@ -86,6 +99,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
         document,
         pageCount: document?.numPages ?? 0,
         status,
+        delivered,
         error,
         reload,
     };

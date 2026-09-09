@@ -160,7 +160,7 @@ export default function SettingsGeneral({
                 <Heading
                     variant="small"
                     title="Empresa"
-                    description="Aparece nos convites, no certificado de conclusão e nos recibos."
+                    description="Aparece nos convites, no relatório de evidências e nos recibos."
                 />
                 <div
                     className="grid gap-3"

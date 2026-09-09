@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Vite;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 /**
  * Cabeçalhos de segurança e Content-Security-Policy com nonce (config `assinavelox.security_headers`).
@@ -14,7 +15,14 @@ use Symfony\Component\HttpFoundation\Response;
  *   (no-referrer + X-Robots-Tag noindex em /assinar/* e /verificar/*).
  * - CSP: script-src 'self' + nonce (Vite::useCspNonce()); 'unsafe-inline' apenas em style-src
  *   (Tailwind/Radix injetam estilos inline); frame-ancestors 'none'; object-src 'none'.
+ * - Permissions-Policy de negação explícita, Cross-Origin-Opener-Policy e
+ *   Cross-Origin-Resource-Policy (config `assinavelox.security_headers`).
  * - Em desenvolvimento com Vite "hot", a origem do dev server e o WebSocket do HMR são liberados.
+ *
+ * O middleware é registrado com `append` em bootstrap/app.php, FORA de qualquer grupo: ele
+ * cobre toda resposta que sai da aplicação — páginas Inertia, streams de PDF, PNG de página,
+ * JSON do webhook, downloads e as páginas de erro (403/404/500/503), inclusive quando a
+ * exceção é lançada dentro de outro middleware.
  */
 class SecurityHeaders
 {
@@ -29,7 +37,21 @@ class SecurityHeaders
 
         $headers->set('X-Content-Type-Options', 'nosniff');
         $headers->set('X-Frame-Options', 'DENY');
-        $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+
+        // Recurso não pode ser embutido por outro site (a proibição de enquadrar a PÁGINA
+        // é `frame-ancestors 'none'` + X-Frame-Options; esta é a proibição de embutir o
+        // RECURSO — PDF, PNG de página, JSON — via <img>/<script>/<object>).
+        $this->setIfConfigured($headers, 'Cross-Origin-Resource-Policy', 'corp');
+
+        // Isolamento do grupo de navegação: uma janela aberta a partir da nossa página
+        // não alcança a nossa `window` (nem o contrário, com `same-origin`).
+        $this->setIfConfigured($headers, 'Cross-Origin-Opener-Policy', 'coop');
+
+        // Negação explícita de APIs sensíveis do navegador.
+        $this->setIfConfigured($headers, 'Permissions-Policy', 'permissions_policy');
+
+        // Flash/Acrobat legados: nenhum crossdomain.xml nosso é válido.
+        $headers->set('X-Permitted-Cross-Domain-Policies', 'none');
 
         if ($this->isPublicSensitivePath($request)) {
             $headers->set('Referrer-Policy', 'no-referrer');
@@ -51,6 +73,19 @@ class SecurityHeaders
         }
 
         return $response;
+    }
+
+    /**
+     * Emite o cabeçalho quando a chave de configuração tem valor; string vazia desliga
+     * o cabeçalho sem precisar mexer no código (ex.: um proxy que já o injeta).
+     */
+    protected function setIfConfigured(ResponseHeaderBag $headers, string $header, string $configKey): void
+    {
+        $value = trim((string) config("assinavelox.security_headers.{$configKey}", ''));
+
+        if ($value !== '') {
+            $headers->set($header, $value);
+        }
     }
 
     protected function isPublicSensitivePath(Request $request): bool

@@ -8,6 +8,7 @@ use App\Models\Envelope;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\RestrictsChannels;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -60,7 +61,7 @@ class SenderEnvelopeExpiringNotification extends Notification implements ShouldQ
         return (new MailMessage)
             ->subject('Prazo acabando: '.$this->envelope->title)
             ->greeting('Olá!')
-            ->line('O documento **'.$this->envelope->title.'** ('.$this->envelope->display_code.') ainda tem '.$this->pendingCount.' signatário(s) sem assinar.')
+            ->line('O documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') ainda tem '.$this->pendingCount.' signatário(s) sem assinar.')
             ->line($deadline !== null
                 ? 'O prazo termina em '.$deadline.'. Depois disso o documento passa a "Expirado" e os links deixam de funcionar.'
                 : 'O prazo está próximo do fim.')

@@ -8,7 +8,9 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\MailText;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -34,8 +36,16 @@ use Illuminate\Notifications\Notification;
  *
  * O assunto não contém o código: assuntos aparecem em notificações de tela bloqueada e em
  * pré-visualizações de clientes de e-mail.
+ *
+ * ## Em repouso, na fila
+ *
+ * A notificação implementa `ShouldBeEncrypted`: o payload do job vai cifrado com a APP_KEY
+ * para o armazenamento da fila (`jobs` no banco, Redis em produção), para `failed_jobs` e
+ * para o painel do Horizon. Sem isso o segredo ficaria legível — e uma falha definitiva de
+ * entrega copia o payload inteiro para `failed_jobs`, que é podado por agendamento
+ * (`queue:prune-failed`, routes/console.php) mas não é imediato.
  */
-class SignerOtpNotification extends Notification implements ShouldQueue, TracksDelivery
+class SignerOtpNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
     use Queueable;
 
@@ -74,8 +84,8 @@ class SignerOtpNotification extends Notification implements ShouldQueue, TracksD
             ->subject('Seu código para assinar '.$this->envelope->title)
             ->greeting('Olá, '.$this->firstName().'!')
             ->line('Use o código abaixo para confirmar sua identidade e assinar o documento **'
-                .$this->envelope->title.'** ('.$this->envelope->display_code.'), enviado por **'
-                .$this->envelope->organization->name.'**.')
+                .MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.'), enviado por **'
+                .MailText::escape($this->envelope->organization->name).'**.')
             ->line('**'.$this->spaced().'**')
             ->line('O código vale por '.$this->ttlMinutes.' minutos e só pode ser usado uma vez.')
             ->line('Se você não pediu este código, ignore esta mensagem: sem ele, nada é assinado.')
@@ -95,6 +105,6 @@ class SignerOtpNotification extends Notification implements ShouldQueue, TracksD
     {
         $parts = preg_split('/\s+/', trim($this->recipient->name)) ?: [];
 
-        return $parts[0] ?? $this->recipient->name;
+        return MailText::escape($parts[0] ?? $this->recipient->name);
     }
 }

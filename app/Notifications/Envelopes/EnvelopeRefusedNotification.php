@@ -9,6 +9,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\RestrictsChannels;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -59,10 +60,10 @@ class EnvelopeRefusedNotification extends Notification implements ShouldQueue, T
         $message = (new MailMessage)
             ->subject('Assinatura recusada: '.$this->envelope->title)
             ->greeting('Olá!')
-            ->line('**'.$this->recipient->name.'** recusou assinar o documento **'.$this->envelope->title.'** ('.$this->envelope->display_code.').');
+            ->line('**'.MailText::escape($this->recipient->name).'** recusou assinar o documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.').');
 
         if (filled($this->reason)) {
-            $message->line('Motivo informado: "'.$this->reason.'"');
+            $message->line('Motivo informado: "'.MailText::escape($this->reason).'"');
         }
 
         return $message

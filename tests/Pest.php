@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\BrowserTestCase;
 use Tests\TestCase;
 
 /*
@@ -16,7 +17,17 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
-    ->in('Feature', 'Browser');
+    ->in('Feature');
+
+/*
+ * A suíte `Browser` usa um caso base próprio: o servidor HTTP do plugin roda no
+ * mesmo processo (logo o banco `:memory:` já é compartilhado), mas a sessão do
+ * `phpunit.xml` é `array` e não sobrevive de uma requisição para a outra.
+ * `Tests\BrowserTestCase` troca a sessão para `database`. Ver docs/testes.md.
+ */
+pest()->extend(BrowserTestCase::class)
+    ->use(RefreshDatabase::class)
+    ->in('Browser');
 
 /*
 |--------------------------------------------------------------------------

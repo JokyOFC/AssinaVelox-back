@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\EnforceSessionIdleTimeout;
 use App\Http\Middleware\EnforceTwoFactorForOrganization;
 use App\Http\Middleware\EnsureCurrentOrganization;
@@ -10,6 +11,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResetCurrentOrganization;
 use App\Http\Middleware\ResolveSignerToken;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ThrottleSensitiveRoutes;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -43,6 +45,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Nenhuma organização corrente vaza entre requisições; só o middleware `org` a define.
         $middleware->prepend(ResetCurrentOrganization::class);
 
+        // Identificador de correlação: PRIMEIRO middleware da pilha (o último `prepend`
+        // fica na frente), para que tudo o que acontecer depois — inclusive uma exceção
+        // lançada dentro de outro middleware — seja registrado sob o mesmo identificador.
+        $middleware->prepend(AssignCorrelationId::class);
+
         // Cabeçalhos de segurança e CSP com nonce em todas as respostas (inclusive webhooks).
         $middleware->append(SecurityHeaders::class);
 
@@ -54,6 +61,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['sidebar_state']);
 
         $middleware->web(append: [
+            // Limites por NOME de rota (config `assinavelox.rate_limit_routes`): cobre o
+            // cadastro, a recuperação e a redefinição de senha — rotas do pacote Fortify,
+            // que não traz limitador nenhum nelas — e os downloads/exportações.
+            ThrottleSensitiveRoutes::class,
             // Política "Encerrar sessões após N horas inativas" (ROUTES §7 Q27): vale para
             // toda tela autenticada, inclusive as que ficam fora do grupo `app`.
             EnforceSessionIdleTimeout::class,

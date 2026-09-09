@@ -1,5 +1,11 @@
 # Incremento 1 — Base e isolamento: relatório de integração (I1)
 
+> **Documento histórico.** Registra o fechamento do incremento 1 e os números daquela rodada.
+> Para o estado consolidado da Fase 1 — o que existe hoje, os números atuais das suítes, o que
+> continua pendente e o que depende de credencial externa — leia **`docs/entrega-fase-1.md`**.
+> Alguns comandos abaixo trazem o contorno `-d extension=intl`, que **não é mais necessário**:
+> as extensões `intl` e `sockets` foram habilitadas no `php.ini`.
+
 > Estado do repositório após a integração dos trabalhos B1 (dados), B2 (organizações/rotas), F1 (front) e A3 (pdftool PHP), seguida da rodada de revisão adversarial (FIX-1 domínio/segurança, FIX-2 cópia/design) e da verificação final com QA visual (V1). Nenhum commit foi feito pelos agentes; o worktree contém todas as alterações.
 
 ## 1. O que foi integrado

@@ -40,7 +40,15 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            /*
+            | Precisa ser MAIOR que o `$timeout` do job mais longo
+            | (FinalizeEnvelope: 600 s). Abaixo disso a fila devolve o job para
+            | processamento enquanto a primeira execução ainda roda: o
+            | finalizador é idempotente e serializa por lock, então o efeito é
+            | trabalho desperdiçado, não documento corrompido — mas é trabalho
+            | desperdiçado no ponto mais caro do sistema.
+            */
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 900),
             'after_commit' => false,
         ],
 
@@ -68,7 +76,15 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            /*
+            | Precisa ser MAIOR que o `$timeout` do job mais longo
+            | (FinalizeEnvelope: 600 s). Abaixo disso a fila devolve o job para
+            | processamento enquanto a primeira execução ainda roda: o
+            | finalizador é idempotente e serializa por lock, então o efeito é
+            | trabalho desperdiçado, não documento corrompido — mas é trabalho
+            | desperdiçado no ponto mais caro do sistema.
+            */
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 900),
             'block_for' => null,
             'after_commit' => false,
         ],

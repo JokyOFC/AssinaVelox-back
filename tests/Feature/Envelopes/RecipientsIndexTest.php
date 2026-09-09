@@ -106,7 +106,10 @@ test('a nota da linha reflete o status (ROUTES §2.9)', function () {
     $notes = collect($this->get(route('recipients.index'))->viewData('page')['props']['recipients']['data'])
         ->keyBy('id');
 
-    expect($notes[$signed->ulid]['note'])->toContain('IP 187.12.44.9');
+    // O IP passa por `IpDisplay`, como nas demais telas do remetente: `evidence_show_ip`
+    // nasce `masked` (arquitetura §3.1), então a lista mostra os dois primeiros octetos.
+    expect($notes[$signed->ulid]['note'])->toContain('IP 187.12.***.***');
+    expect($notes[$signed->ulid]['note'])->not->toContain('187.12.44.9');
     expect($notes[$signed->ulid]['note'])->toContain('iPhone (Safari)');
     expect($notes[$pending->ulid]['note'])->toBe('Aguarda a vez · 3.º na ordem');
     expect(collect($notes)->pluck('note')->join(' | '))->toContain('Motivo: “Valores divergentes.”');

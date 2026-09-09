@@ -14,6 +14,7 @@ use App\Models\Envelope;
 use App\Models\SigningField;
 use App\Models\User;
 use App\Services\Documents\Exceptions\UploadRejectedException;
+use App\Services\Envelopes\PreparationGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -115,11 +116,18 @@ class DocumentIntake
 
         try {
             $document = DB::transaction(function () use ($envelope, $previous, $inspected, $versionUlid, $storagePath, $sha256, $actor): Document {
+                // TOCTOU: `acceptsUpload()` acima decidiu pelo model que a requisição
+                // trouxe. Entre aquela leitura e este commit outra requisição pode ter
+                // concluído o envio — e a substituição apaga a versão congelada, os campos
+                // e, em cascata, os aceites. Decide de novo pelo que está no banco, sob
+                // lock, como `PreparationGuard` faz nos demais serviços de preparo.
+                $locked = $this->lockForPreparation($envelope);
+
                 // Dentro da MESMA transação do novo documento: ou os dois passos valem,
                 // ou nenhum vale. A Fase 1 admite um documento por envelope, e é este
                 // commit que restabelece a regra.
                 if ($previous !== null) {
-                    $this->purgeDocumentRecords($envelope, $previous);
+                    $this->purgeDocumentRecords($locked, $previous);
                 }
 
                 /** @var Document $document */
@@ -161,10 +169,12 @@ class DocumentIntake
 
                 $document->setRelation('originalVersion', $version);
 
-                if ($envelope->status !== EnvelopeStatus::Preparing) {
-                    $envelope->status = EnvelopeStatus::Preparing;
-                    $envelope->save();
+                if ($locked->status !== EnvelopeStatus::Preparing) {
+                    $locked->status = EnvelopeStatus::Preparing;
+                    $locked->save();
                 }
+
+                $envelope->setRawAttributes($locked->getAttributes(), true);
 
                 return $document;
             });
@@ -221,9 +231,24 @@ class DocumentIntake
 
     /**
      * Remove o documento do envelope (ação "remover" do wizard).
+     *
+     * @throws UploadRejectedException quando o envelope já saiu da preparação
      */
     public function remove(Envelope $envelope, ?User $actor = null, ?Request $request = null): bool
     {
+        // A remoção destrói mais do que a substituição: campos posicionados, o registro do
+        // documento e — por cascata do esquema — as versões, os `signing_field_values` e os
+        // `signature_acceptances` gravados sobre elas, além dos bytes no disco. Fora de
+        // `draft|preparing|ready` isso apagaria a versão congelada apresentada aos
+        // signatários, o PDF final e o aceite eletrônico já registrado. Recusa aqui, antes
+        // de qualquer trabalho, e recusa de novo sob lock dentro da transação.
+        if (! $this->acceptsUpload($envelope)) {
+            throw UploadRejectedException::make(
+                'envelope_not_editable',
+                'Este documento não está mais em rascunho e não pode ser removido.',
+            );
+        }
+
         $document = $envelope->document()->first();
 
         if ($document === null) {
@@ -264,11 +289,44 @@ class DocumentIntake
 
         $versions = $document->versions()->get();
 
-        DB::transaction(fn () => $this->purgeDocumentRecords($envelope, $document));
+        DB::transaction(function () use ($envelope, $document): void {
+            $locked = $this->lockForPreparation($envelope);
+
+            $this->purgeDocumentRecords($locked, $document);
+
+            $envelope->setRawAttributes($locked->getAttributes(), true);
+        });
 
         $this->purgeVersionFiles($versions, $correlationId);
 
         $this->audit->record($envelope, AuditEventType::DocumentRemoved, $payload, $actor, $request, $correlationId);
+    }
+
+    /**
+     * Recarrega o envelope sob `lockForUpdate()` e recusa se ele já saiu da preparação.
+     *
+     * Mesma invariante de {@see PreparationGuard}, com a exceção
+     * que este serviço precisa: a recusa sai como {@see UploadRejectedException}, que é o
+     * vocabulário de erro do passo 1 do wizard.
+     *
+     * @throws UploadRejectedException
+     */
+    private function lockForPreparation(Envelope $envelope): Envelope
+    {
+        /** @var Envelope|null $locked */
+        $locked = Envelope::withoutOrganizationScope()
+            ->whereKey($envelope->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if ($locked === null || ! $locked->status->isDraftLike()) {
+            throw UploadRejectedException::make(
+                'envelope_not_editable',
+                'Este documento já saiu da preparação e não pode mais ser alterado.',
+            );
+        }
+
+        return $locked;
     }
 
     /**

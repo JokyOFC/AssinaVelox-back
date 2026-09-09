@@ -9,6 +9,7 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
 use App\Services\Envelopes\Contracts\RotatesInvitations;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -141,6 +142,58 @@ final class RecipientSync
         EnvelopeReadiness::refresh($envelope);
 
         return $result;
+    }
+
+    /**
+     * Reaplica `recipients.order_index` a partir do `signing_order` gravado no envelope.
+     *
+     * Existe porque a ordem de assinatura tem DOIS donos no wizard: o passo 2 (este
+     * serviço, `handle()`) e o autosave do passo 1, que grava só `envelopes.signing_order`
+     * — e que, sozinho, deixava um envelope `sequential` com todos os signatários na mesma
+     * vez (ou um `parallel` com as vezes de um sequencial, em que ninguém além do primeiro
+     * receberia convite). Quem muda a ordem por fora do sync chama isto e a invariante
+     * volta a valer, com a MESMA regra de `handle()`: sequencial → 1..N na ordem da lista;
+     * paralelo → todos em 1.
+     *
+     * A ordem da lista é `order_index` e, para desempatar, o `id` — a ordem em que os
+     * signatários foram criados, que é a ordem que o wizard mostra.
+     *
+     * @return int quantidade de destinatários cuja vez mudou
+     */
+    public static function reindex(Envelope $envelope): int
+    {
+        $changed = DB::transaction(function () use ($envelope): int {
+            $locked = PreparationGuard::lockForPreparation($envelope, 'signing_order');
+
+            /** @var Collection<int, Recipient> $recipients */
+            $recipients = Recipient::withoutOrganizationScope()
+                ->where('envelope_id', $locked->getKey())
+                ->orderBy('order_index')
+                ->orderBy('id')
+                ->get();
+
+            $changed = 0;
+
+            foreach ($recipients->values() as $position => $recipient) {
+                $orderIndex = $locked->signing_order === SigningOrder::Sequential ? $position + 1 : 1;
+
+                if ((int) $recipient->order_index !== $orderIndex) {
+                    $recipient->forceFill(['order_index' => $orderIndex])->save();
+                    $changed++;
+                }
+            }
+
+            // O envelope ainda está em preparo: a vez corrente é sempre a primeira.
+            if ((int) $locked->current_order !== 1) {
+                $locked->forceFill(['current_order' => 1])->save();
+            }
+
+            return $changed;
+        });
+
+        $envelope->unsetRelation('recipients');
+
+        return $changed;
     }
 
     /**

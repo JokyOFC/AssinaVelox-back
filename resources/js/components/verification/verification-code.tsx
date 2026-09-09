@@ -12,8 +12,13 @@ import { formatVerificationCode } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { QrCode } from './qr-code';
 
-/** Caracteres do alfabeto base32 sem ambíguos (RECONCILIACAO §1). */
-const CODE_ALPHABET = /[^ABCDEFGHJKMNPQRSTUVWXYZ23456789]/g;
+/**
+ * Caracteres do alfabeto base32 sem ambíguos (RECONCILIACAO §1) — precisa ser
+ * idêntico a `Envelope::VERIFICATION_CODE_ALPHABET`, que gera os códigos. Só
+ * `0`, `1`, `O` e `I` ficam de fora; o `L` faz parte do alfabeto e descartá-lo
+ * aqui tornaria indigitável 1 em cada 3 códigos emitidos.
+ */
+const CODE_ALPHABET = /[^ABCDEFGHJKLMNPQRSTUVWXYZ23456789]/g;
 const BLOCKS = 3;
 const BLOCK_SIZE = 4;
 

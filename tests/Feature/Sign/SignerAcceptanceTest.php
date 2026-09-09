@@ -320,6 +320,8 @@ it('avisa o módulo de envio, pelo contrato, que chegou a vez do próximo', func
             }
         }
 
+        public function notifySenderSigned(Envelope $envelope, Recipient $signedBy): void {}
+
         public function notifySenderRefused(Envelope $envelope, Recipient $refusedBy): void {}
 
         public function notifyEnvelopeClosed(Envelope $envelope, array $canceled, string $reason): void {}

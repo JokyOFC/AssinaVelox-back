@@ -9,7 +9,7 @@ use App\Models\Organization;
  *
  * `organizations.settings.evidence_show_ip` (arquitetura §3.1) vale `masked` (padrão),
  * `full` ou `none` e governa **todas** as telas do remetente — o detalhe do documento, a
- * trilha de auditoria e a página de evidências. Antes desta classe cada resource decidia
+ * trilha de auditoria, a página de evidências e a lista de Assinaturas (ROUTES §2.9). Antes desta classe cada resource decidia
  * por conta própria: a trilha mascarava dois octetos lendo a chave de `config/`, o card do
  * signatário entregava o IP inteiro sem olhar para nada, e a página de evidências fazia o
  * mesmo. Na mesma página o operador via `127.0.***.***` num lugar e `127.0.0.1` no outro.

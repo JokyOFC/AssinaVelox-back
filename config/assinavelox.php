@@ -290,6 +290,251 @@ return [
         'csp_report_only' => (bool) env('ASSINAVELOX_CSP_REPORT_ONLY', false),
         // Origens adicionais permitidas (separadas por vírgula), ex.: CDN de assets.
         'csp_extra_sources' => env('ASSINAVELOX_CSP_EXTRA_SOURCES'),
+
+        /*
+        | Permissions-Policy: lista de negação explícita. Nenhuma tela da Fase 1 usa
+        | câmera, microfone, geolocalização, sensores ou a Payment Request API — o
+        | Checkout Pro acontece no site do Mercado Pago, não aqui. `fullscreen=(self)`
+        | fica liberado para o visualizador de PDF; `publickey-credentials-get=(self)`
+        | fica liberado porque o Fortify pode oferecer passkeys em fase futura.
+        */
+        'permissions_policy' => env('ASSINAVELOX_PERMISSIONS_POLICY', implode(', ', [
+            'accelerometer=()',
+            'ambient-light-sensor=()',
+            'autoplay=()',
+            'battery=()',
+            'bluetooth=()',
+            'camera=()',
+            'display-capture=()',
+            'encrypted-media=()',
+            'fullscreen=(self)',
+            'geolocation=()',
+            'gyroscope=()',
+            'hid=()',
+            'idle-detection=()',
+            'local-fonts=()',
+            'magnetometer=()',
+            'microphone=()',
+            'midi=()',
+            'payment=()',
+            'picture-in-picture=()',
+            'publickey-credentials-get=(self)',
+            'screen-wake-lock=()',
+            'serial=()',
+            'usb=()',
+            'xr-spatial-tracking=()',
+        ])),
+
+        /*
+        | Cross-Origin-Opener-Policy. `same-origin-allow-popups` isola o grupo de
+        | navegação (uma janela aberta pela nossa página não consegue tocar na nossa
+        | `window`), mas preserva `window.opener` para popups que NÓS abrimos — o
+        | retorno do Checkout Pro depende disso quando o cliente abre o pagamento em
+        | outra aba. `same-origin` é mais estrito e pode ser usado quando o checkout
+        | for sempre por redirecionamento na mesma aba.
+        */
+        'coop' => env('ASSINAVELOX_COOP', 'same-origin-allow-popups'),
+
+        /*
+        | Cross-Origin-Resource-Policy: nenhuma resposta nossa (PDF, PNG de página,
+        | JSON do Inertia) deve poder ser embutida por outro site.
+        |
+        | NÃO emitimos Cross-Origin-Embedder-Policy: `require-corp` exigiria CORP/CORS
+        | em todo recurso de terceiro e não compra nada aqui (não usamos
+        | SharedArrayBuffer nem medição de memória isolada).
+        */
+        'corp' => env('ASSINAVELOX_CORP', 'same-origin'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Limites de requisição por nome de rota (docs/seguranca-operacional.md §2)
+    |--------------------------------------------------------------------------
+    |
+    | Mapa `nome da rota => limitador nomeado` aplicado pelo middleware
+    | App\Http\Middleware\ThrottleSensitiveRoutes (grupo `web`). Ele existe porque
+    | várias rotas sensíveis são registradas pelo pacote Fortify — cadastro,
+    | recuperação de senha, redefinição — e lá não há como pendurar `throttle:` sem
+    | editar o pacote. As rotas declaradas em routes/web.php já trazem o seu
+    | `throttle:` no próprio arquivo; as que aparecem aqui e lá recebem os dois
+    | limites (baldes independentes).
+    |
+    | Todos os limitadores estão definidos em App\Providers\AppServiceProvider e
+    | usam CHAVE COMPOSTA (identidade + origem): um atacante que martela o endereço
+    | de outra pessoa a partir do seu próprio IP não tranca a vítima.
+    |
+    */
+    'rate_limit_routes' => [
+        /*
+        | Fortify — sem limitador próprio no pacote. Só os POSTs entram: pendurar limite
+        | no GET do formulário limitaria VER a página, o que não é o ataque.
+        */
+        'register.store' => 'register',
+        'password.email' => 'password-email',
+        'password.update' => 'password-reset',
+        'password.confirm.store' => 'password-confirm',
+
+        // Convite de membro: o token não pode ser a única chave.
+        'invitations.accept' => 'invitation',
+        'invitations.accept.store' => 'invitation',
+
+        // Downloads autorizados e exportações (arquivo inteiro por requisição).
+        'envelopes.download' => 'download',
+        'envelopes.evidence' => 'download',
+        // Transmite o PDF completo da versão exibível pelo mesmo DocumentStorage::stream()
+        // dos demais: é leitura de arquivo inteiro e entra na mesma regra.
+        'envelopes.document.preview' => 'download',
+        'sign.download' => 'download',
+        'billing.payments.receipt' => 'download',
+        'dashboard.export' => 'export',
+        'recipients.export' => 'export',
+        'admin.organizations.export' => 'export',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trilha de auditoria: checkpoint encadeado (docs/seguranca-operacional.md §3)
+    |--------------------------------------------------------------------------
+    |
+    | `audit:checkpoint` exporta os eventos de um período para um arquivo JSON no
+    | disco privado e grava um resumo encadeado (o hash do lote inclui o hash do
+    | lote anterior). Isso torna DETECTÁVEL uma alteração posterior nas linhas já
+    | exportadas — não a impede. Ver as limitações honestas na documentação.
+    |
+    */
+    'audit' => [
+        'checkpoint' => [
+            // Disco do Flysystem onde o lote é gravado (privado, nunca público).
+            'disk' => env('ASSINAVELOX_AUDIT_CHECKPOINT_DISK', 'documents'),
+            // Prefixo dos caminhos dentro do disco.
+            'path' => env('ASSINAVELOX_AUDIT_CHECKPOINT_PATH', 'audit-checkpoints'),
+            // Eventos lidos por página ao montar o lote (memória previsível).
+            'chunk' => (int) env('ASSINAVELOX_AUDIT_CHECKPOINT_CHUNK', 1000),
+        ],
+
+        /*
+        | Tabelas de evidência e o que a APLICAÇÃO precisa poder fazer nelas. O mapa é o
+        | contrato do GRANT recomendado em docs/seguranca-operacional.md §3 e é conferido
+        | por tests/Feature/Hardening/AppendOnlyEvidenceTest.php, que espiona o SQL
+        | realmente emitido durante um aceite.
+        |
+        |  - `no_update_no_delete`: a aplicação só INSERE e LÊ.
+        |  - `no_delete`: a aplicação também ATUALIZA, num caminho específico e
+        |    documentado. `verification_records` é o único caso: a retentativa da
+        |    finalização reescreve o registro quando o arquivo final foi reconstruído
+        |    (EnvelopeFinalizer, "verification_record: rewritten"). Publicar o registro de
+        |    uma execução descartada sobre um PDF diferente seria pior do que reescrever,
+        |    então a tabela recebe UPDATE — e nunca DELETE.
+        |
+        | Atenção ao aplicar o REVOKE: `document_versions` some por ON DELETE CASCADE
+        | quando um documento em rascunho é substituído. A aplicação não emite o DELETE
+        | (quem apaga é o InnoDB, ao remover a linha de `documents`), mas confirme o
+        | comportamento na sua versão do MySQL antes de restringir — o procedimento de
+        | conferência está na documentação.
+        */
+        'evidence_tables' => [
+            'audit_events' => 'no_update_no_delete',
+            'signature_acceptances' => 'no_update_no_delete',
+            'document_versions' => 'no_update_no_delete',
+            'verification_records' => 'no_delete',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Observabilidade (docs/seguranca-operacional.md §6)
+    |--------------------------------------------------------------------------
+    */
+    'observability' => [
+        /*
+        | Identificador de correlação: gerado por requisição (middleware
+        | AssignCorrelationId) e propagado a jobs pelo Context do Laravel.
+        | `echo_header` devolve o identificador no cabeçalho X-Correlation-Id — é um
+        | ULID opaco, não um segredo, e encurta muito o suporte.
+        */
+        'correlation' => [
+            'echo_header' => (bool) env('ASSINAVELOX_CORRELATION_HEADER', true),
+            'header' => 'X-Correlation-Id',
+        ],
+
+        /*
+        | Mascaramento nos registros (App\Logging\RedactSensitiveData). Ligado por
+        | padrão: o processador redige ANTES de o registro chegar ao handler.
+        */
+        'redaction' => [
+            'enabled' => (bool) env('ASSINAVELOX_LOG_REDACTION', true),
+            'placeholder' => '[REDIGIDO]',
+            // Chaves de contexto redigidas inteiras (comparação sem diferenciar caixa).
+            'keys' => [
+                'password', 'password_confirmation', 'senha', 'current_password',
+                'token', 'access_token', 'refresh_token', 'api_key', 'apikey',
+                'secret', 'webhook_secret', 'client_secret', 'signature', 'x-signature',
+                'authorization', 'cookie', 'set-cookie', 'bearer',
+                'code', 'otp', 'code_hash', 'token_digest', 'authorization_token',
+                'two_factor_secret', 'two_factor_recovery_codes', 'recovery_code',
+                'pfx', 'pfx_password', 'passphrase', 'private_key',
+                'tax_id', 'cpf', 'cnpj', 'document',
+            ],
+            /*
+            | Exceções à lista acima, conferidas ANTES dela e por nome exato.
+            |
+            | A regra de chaves casa por sufixo (`_code` casa `exit_code`), o que
+            | é o comportamento certo para `otp_code` e errado para um código de
+            | diagnóstico. Sem estas exceções o log estruturado sai com
+            | `"exit_code":"[REDIGIDO]"` justamente quando alguém está tentando
+            | descobrir por que a conversão falhou — o campo mais útil vira o
+            | único ilegível. Todos os nomes abaixo carregam número ou rótulo de
+            | erro, nunca segredo nem dado pessoal.
+            */
+            'allow_keys' => [
+                'exit_code', 'status_code', 'http_code', 'response_code',
+                'failure_code', 'error_code', 'reason_code',
+            ],
+        ],
+
+        /*
+        | Limiares dos indicadores de saúde (`assinavelox:health`). São avisos
+        | operacionais, não SLA contratual.
+        */
+        'health' => [
+            // Jobs esperando na fila (driver database) acima disto = degradado.
+            'queue_backlog_warning' => (int) env('ASSINAVELOX_HEALTH_QUEUE_BACKLOG', 100),
+            // Jobs que falharam nas últimas N horas.
+            'failed_jobs_window_hours' => (int) env('ASSINAVELOX_HEALTH_FAILED_WINDOW_HOURS', 24),
+            // Documento parado em `converting` por mais que isto = conversão travada.
+            'conversion_stuck_minutes' => (int) env('ASSINAVELOX_HEALTH_CONVERSION_STUCK_MINUTES', 30),
+            // Envelope parado em `finalizing` por mais que isto = finalização travada.
+            'finalization_stuck_minutes' => (int) env('ASSINAVELOX_HEALTH_FINALIZATION_STUCK_MINUTES', 30),
+            // Entregas de e-mail em `queued`/`unknown` por mais que isto.
+            'delivery_stuck_minutes' => (int) env('ASSINAVELOX_HEALTH_DELIVERY_STUCK_MINUTES', 60),
+            // Recibos de webhook em `received` por mais que isto = conciliação parada.
+            'webhook_stuck_minutes' => (int) env('ASSINAVELOX_HEALTH_WEBHOOK_STUCK_MINUTES', 30),
+            // Aviso de vencimento do certificado A1.
+            'certificate_warning_days' => (int) env('ASSINAVELOX_HEALTH_CERT_WARNING_DAYS', 30),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Criptografia em repouso do armazenamento (docs/seguranca-operacional.md §5)
+    |--------------------------------------------------------------------------
+    |
+    | O Flysystem NÃO cifra nada sozinho. Em S3 a cifra é do lado do servidor e é
+    | CONSULTADA ao backend por `storage:verify` (GetBucketEncryption + o cabeçalho
+    | de um objeto de prova). Em disco local não existe consulta possível a partir
+    | do PHP: a cifra é do volume (LUKS/BitLocker) e só pode ser ATESTADA pelo
+    | operador — a atestação abaixo é registrada como tal, nunca como verificação.
+    |
+    */
+    'storage_encryption' => [
+        // Atestação do operador para disco local: "o volume está cifrado".
+        'local_attested' => (bool) env('ASSINAVELOX_STORAGE_ENCRYPTION_ATTESTED', false),
+        // Referência humana da atestação (ex.: "LUKS2 /dev/vg0/documents, ticket OPS-431").
+        'local_attestation_note' => env('ASSINAVELOX_STORAGE_ENCRYPTION_NOTE'),
+        // SSE esperada no S3: AES256 (SSE-S3) ou aws:kms (SSE-KMS).
+        's3_expected_algorithm' => env('ASSINAVELOX_STORAGE_S3_SSE', 'AES256'),
+        // Recibo da última execução de `storage:verify` (disco `local`, fora do disco de documentos).
+        'receipt_path' => 'hardening/storage-verify.json',
     ],
 
     // Filas usadas pelos jobs (Horizon em produção; driver database em dev).

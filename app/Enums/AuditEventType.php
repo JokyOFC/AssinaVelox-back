@@ -25,6 +25,7 @@ enum AuditEventType: string
     case ChallengeVerified = 'challenge.verified';
     case ChallengeFailed = 'challenge.failed';
     case SessionStarted = 'session.started';
+    case DocumentPresented = 'document.presented';
     case AcceptanceRecorded = 'acceptance.recorded';
     case RecipientRefused = 'recipient.refused';
     case EnvelopeRefused = 'envelope.refused';
@@ -78,6 +79,7 @@ enum AuditEventType: string
             self::ChallengeVerified => 'Identidade confirmada',
             self::ChallengeFailed => 'Código de verificação incorreto',
             self::SessionStarted => 'Sessão de assinatura iniciada',
+            self::DocumentPresented => 'Documento apresentado ao signatário',
             self::AcceptanceRecorded => 'Aceite registrado',
             self::RecipientRefused => 'Signatário recusou',
             self::EnvelopeRefused => 'Documento recusado',

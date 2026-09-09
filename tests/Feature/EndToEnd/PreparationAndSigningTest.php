@@ -222,6 +222,12 @@ function e2eAuthenticate(object $test, string $token): array
 
     expect($props['screen'])->toBe('sign');
 
+    // O navegador do signatário busca o PDF assim que a tela carrega. É esse GET que marca
+    // `signing_sessions.document_presented_at` e grava `document.presented` na trilha —
+    // exigido por `RecordAcceptance` antes de gravar o aceite, porque a declaração afirma
+    // que o conteúdo foi apresentado nesta tela.
+    $test->get(route('sign.document', ['token' => $token]));
+
     return $props;
 }
 

@@ -8,6 +8,7 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -59,18 +60,18 @@ class EnvelopeCanceledNotification extends Notification implements ShouldQueue, 
             ->greeting('Olá!');
 
         if ($this->refusedByAnother) {
-            $message->line('A solicitação de assinatura do documento **'.$this->envelope->title.'** ('.$this->envelope->display_code.') foi encerrada porque um dos signatários recusou assinar.');
+            $message->line('A solicitação de assinatura do documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') foi encerrada porque um dos signatários recusou assinar.');
         } else {
-            $message->line('**'.$organization->name.'** cancelou a solicitação de assinatura do documento **'.$this->envelope->title.'** ('.$this->envelope->display_code.').');
+            $message->line('**'.MailText::escape($organization->name).'** cancelou a solicitação de assinatura do documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.').');
         }
 
         if (filled($this->reason)) {
-            $message->line('Motivo informado: "'.$this->reason.'"');
+            $message->line('Motivo informado: "'.MailText::escape($this->reason).'"');
         }
 
         return $message
             ->line('O link que você recebeu não é mais válido e nenhuma ação é necessária da sua parte.')
-            ->line('Em caso de dúvida, fale com '.$organization->name.'.')
+            ->line('Em caso de dúvida, fale com '.MailText::escape($organization->name).'.')
             ->salutation('Atenciosamente, AssinaVelox');
     }
 }

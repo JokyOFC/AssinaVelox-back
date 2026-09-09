@@ -141,6 +141,7 @@ export type AuditEventType =
     | 'challenge.verified'
     | 'challenge.failed'
     | 'session.started'
+    | 'document.presented'
     | 'acceptance.recorded'
     | 'recipient.refused'
     | 'envelope.refused'

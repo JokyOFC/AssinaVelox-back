@@ -8,7 +8,9 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\MailText;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -18,12 +20,14 @@ use Illuminate\Notifications\Notification;
  *
  * O link em claro existe apenas nesta mensagem. Ele viaja no payload da fila (como já
  * ocorre em MembershipInvitationNotification) e é descartado quando o job termina; o banco
- * de domínio guarda somente o digest.
+ * de domínio guarda somente o digest. Como o payload carrega o token bruto, a notificação
+ * implementa `ShouldBeEncrypted`: o que fica em `jobs`, em `failed_jobs` e na tela do
+ * Horizon é cifrado com a APP_KEY.
  *
  * Vocabulário (arquitetura §2): o texto fala em **assinar eletronicamente** e em
  * confirmação de identidade por código — nunca em "assinatura digital ICP-Brasil".
  */
-class RecipientInvitationNotification extends Notification implements ShouldQueue, TracksDelivery
+class RecipientInvitationNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
     use Queueable;
 
@@ -67,13 +71,13 @@ class RecipientInvitationNotification extends Notification implements ShouldQueu
             ->greeting('Olá, '.$this->firstName().'!');
 
         if ($this->isReminder) {
-            $message->line('Este é um lembrete: o documento **'.$this->envelope->title.'** ('.$this->envelope->display_code.') ainda aguarda a sua assinatura.');
+            $message->line('Este é um lembrete: o documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') ainda aguarda a sua assinatura.');
         } else {
-            $message->line(($sender->name ?? 'Um usuário').', de **'.$organization->name.'**, enviou o documento **'.$this->envelope->title.'** ('.$this->envelope->display_code.') para você assinar eletronicamente.');
+            $message->line(MailText::escape($sender->name ?? 'Um usuário').', de **'.MailText::escape($organization->name).'**, enviou o documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') para você assinar eletronicamente.');
         }
 
         if (filled($this->envelope->message)) {
-            $message->line('Mensagem de quem enviou: "'.$this->envelope->message.'"');
+            $message->line('Mensagem de quem enviou: "'.MailText::escape($this->envelope->message).'"');
         }
 
         $message
@@ -93,7 +97,7 @@ class RecipientInvitationNotification extends Notification implements ShouldQueu
     {
         $parts = preg_split('/\s+/u', trim($this->recipient->name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-        return $parts[0] ?? 'tudo bem?';
+        return MailText::escape($parts[0] ?? 'tudo bem?');
     }
 
     private function deadline(): string

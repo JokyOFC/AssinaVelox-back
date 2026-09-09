@@ -74,6 +74,20 @@ final class RecordAcceptance
             throw SigningRejectedException::conflict('missing_sent_version', 'Este documento não está disponível para assinatura.');
         }
 
+        // A declaração gravada em `consent_statement` afirma "Li integralmente o documento
+        // […], cujo conteúdo apresentado nesta tela corresponde ao resumo SHA-256 …". Sem
+        // que os bytes tenham saído do servidor para ESTA sessão, essa frase não tem como
+        // ser sustentada pelo dossiê: a trilha ia de `invitation.opened` — que a própria
+        // página de evidências rotula "não comprova leitura" — direto para
+        // `acceptance.recorded`. `sign.document` marca a entrega na sessão e registra
+        // `document.presented`; aqui a marca é exigida.
+        if ($session->document_presented_at === null) {
+            throw SigningRejectedException::conflict(
+                'document_not_presented',
+                'O documento ainda não foi carregado nesta sessão. Recarregue a página, confira o documento e assine em seguida.',
+            );
+        }
+
         if ($session->document_version_id !== $version->getKey()) {
             throw SigningRejectedException::conflict(
                 'stale_session_version',
@@ -133,6 +147,11 @@ final class RecordAcceptance
         $this->sessions->consume($session, $context, $request);
 
         $this->advance($context->envelope->getKey(), $correlationId);
+
+        // "Fulano assinou" para quem enviou. Fora da transação e depois de `advance()`,
+        // como o convite do próximo: um e-mail que não sai não desfaz um aceite gravado —
+        // o SignerNotifier registra em log e segue.
+        $this->notifier->notifySenderSigned($context->envelope->refresh(), $context->recipient->refresh());
 
         return $acceptance;
     }

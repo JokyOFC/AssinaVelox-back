@@ -5,6 +5,7 @@ namespace App\Services\Documents;
 use App\Enums\DocumentProcessingStatus;
 use App\Enums\EnvelopeStatus;
 use App\Enums\FieldType;
+use App\Enums\SigningOrder;
 use App\Models\Envelope;
 use App\Models\SigningField;
 
@@ -81,12 +82,47 @@ class EnvelopeReadiness
         $recipientIds = array_map('intval', $envelope->recipients()->pluck('id')->all());
 
         return [
+            // A ordem de assinatura faz parte da completude do passo 2: um envelope
+            // `sequential` cujos signatários estão todos na mesma vez não cumpre a ordem
+            // que a interface promete.
             'document' => $documentReady,
-            'recipients' => $recipientIds !== [],
+            'recipients' => $recipientIds !== [] && $this->signingOrderIsCoherent($envelope),
             'fields' => $documentReady
                 && $recipientIds !== []
                 && $this->everyRecipientHasSignatureField($envelope, $recipientIds),
         ];
+    }
+
+    /**
+     * `envelopes.signing_order` e `recipients.order_index` têm de contar a mesma história.
+     *
+     * Quem grava `order_index` é `Envelopes\RecipientSync` (sequencial: 1..N na ordem da
+     * lista; paralelo: todos em 1). O autosave do passo 1 grava `signing_order` sozinho, e
+     * sem esta invariante um envelope podia ficar `sequential` com todo mundo em 1 — caso
+     * em que `InvitationDispatcher::pendingForCurrentTurn()` convida todos de uma vez e
+     * `RecordAcceptance` deixa qualquer um assinar, enquanto as telas continuam dizendo
+     * "Assinatura em ordem". O inverso também quebra: `parallel` com 1..N faz o dispatcher
+     * convidar só o primeiro e os demais nunca recebem nada.
+     *
+     * Verificação única, usada tanto para gravar o status quanto para montar a lista de
+     * pendências da tela (`Envelopes\EnvelopeReadiness::recipientIssues()`).
+     */
+    public function signingOrderIsCoherent(Envelope $envelope): bool
+    {
+        $indexes = array_map(
+            'intval',
+            $envelope->recipients()->orderBy('order_index')->orderBy('id')->pluck('order_index')->all(),
+        );
+
+        if ($indexes === []) {
+            return true;
+        }
+
+        if ($envelope->signing_order === SigningOrder::Sequential) {
+            return $indexes === range(1, count($indexes));
+        }
+
+        return array_values(array_unique($indexes)) === [1];
     }
 
     /**

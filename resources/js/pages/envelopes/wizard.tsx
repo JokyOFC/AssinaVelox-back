@@ -20,12 +20,14 @@ import { WizardStepFields } from '@/components/envelopes/wizard-step-fields';
 import { WizardStepRecipients } from '@/components/envelopes/wizard-step-recipients';
 import { WizardStepReview } from '@/components/envelopes/wizard-step-review';
 import { usePdfDocument } from '@/components/pdf/use-pdf-document';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
 import { Stepper } from '@/components/stepper';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_ZOOM } from '@/components/pdf/pdf-zoom-controls';
 import { formatTime } from '@/lib/format';
 import {
+    destroy as envelopeDestroy,
     edit as envelopeEdit,
     index as envelopesIndex,
     send as envelopeSend,
@@ -182,6 +184,8 @@ export default function EnvelopeWizard({
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    const [discarding, setDiscarding] = useState(false);
+    const [discardingInFlight, setDiscardingInFlight] = useState(false);
 
     const processing = document?.processing.status ?? null;
     // `ready` do resource já exige versão exibível — não basta o status.
@@ -561,10 +565,43 @@ export default function EnvelopeWizard({
                     title="Nova solicitação de assinatura"
                     subtitle="Envie o documento, defina quem assina, posicione os campos e revise antes de enviar."
                     actions={
-                        <Button asChild variant="outline">
-                            <Link href={envelopesIndex()}>Sair</Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            {/*
+                                "Sair" preserva o rascunho (o autosave já gravou tudo).
+                                "Descartar" existe porque o assistente cria o envelope no
+                                primeiro clique: sem esta saída, quem só foi olhar não teria
+                                como remover o que não pediu para criar.
+                            */}
+                            <Button
+                                variant="ghost"
+                                onClick={() => setDiscarding(true)}
+                                disabled={sending}
+                            >
+                                Descartar
+                            </Button>
+                            <Button asChild variant="outline">
+                                <Link href={envelopesIndex()}>Sair</Link>
+                            </Button>
+                        </div>
                     }
+                />
+
+                <ConfirmDialog
+                    open={discarding}
+                    onOpenChange={setDiscarding}
+                    title="Descartar este rascunho?"
+                    description="O documento enviado, os signatários e os campos deste rascunho serão removidos. Documentos já enviados para assinatura não são afetados."
+                    confirmLabel="Descartar rascunho"
+                    cancelLabel="Continuar editando"
+                    destructive
+                    processing={discardingInFlight}
+                    onConfirm={() => {
+                        setDiscardingInFlight(true);
+                        router.delete(envelopeDestroy(envelope.id).url, {
+                            preserveScroll: true,
+                            onFinish: () => setDiscardingInFlight(false),
+                        });
+                    }}
                 />
 
                 <Stepper

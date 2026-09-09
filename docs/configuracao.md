@@ -4,16 +4,16 @@
 
 ## 1. Requisitos
 
-| Item                    | Observação                                                                                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PHP 8.3+ com **`intl`** | Obrigatória (formatação de datas/moeda em pt-BR e `Number::currency`). No PHP local a extensão não está no `php.ini`: use `php -d extension=intl artisan ...` ou habilite `extension=intl`. |
-| MySQL 8+/9              | Banco alvo (`DB_CONNECTION=mysql`). Testes usam SQLite em memória (`phpunit.xml`).                                                                                                          |
-| Node 20+                | `npm run build` (Vite 8 via vite-plus), `npm run types:check`, `npm run check`.                                                                                                             |
-| Redis                   | **Só em produção** (filas + Horizon + cache). Em dev: filas `database`, cache `database`.                                                                                                   |
-| Python 3 + LibreOffice  | Opcionais; ver `docs/pdf-pipeline.md` (`config/pdftool.php`). Ausentes → adaptadores fake.                                                                                                  |
-| Docker                  | **Não** utilizado.                                                                                                                                                                          |
+| Item                                    | Observação                                                                                                                                                                                                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PHP 8.3+ com **`intl`** e **`sockets`** | `intl` é obrigatória (datas/moeda em pt-BR e `Number::currency`); `sockets` é usada pelos testes de navegador. Ambas **já estão habilitadas** nesta máquina — o contorno `php -d extension=intl artisan ...`, citado nos relatórios de incremento, não é mais necessário. |
+| MySQL 8+/9                              | Banco alvo (`DB_CONNECTION=mysql`). Testes usam SQLite em memória (`phpunit.xml`).                                                                                                                                                                                        |
+| Node 22 LTS                             | `npm run build` (Vite 8 via vite-plus), `npm run types:check`, `npm run check`. `vite-plus` exige `^20.19 \|\| ^22.18 \|\| >=24.11`.                                                                                                                                      |
+| Redis                                   | **Só em produção** (filas + Horizon + cache). Em dev: filas `database`, cache `database`.                                                                                                                                                                                 |
+| Python **3.13** + LibreOffice           | Opcionais; ver `docs/pdf-pipeline.md` (`config/pdftool.php`). Ausentes → adaptadores fake. O `requirements.lock.txt` do pdftool foi fixado e verificado em 3.13.14.                                                                                                       |
+| Docker                                  | **Não** utilizado.                                                                                                                                                                                                                                                        |
 
-Comandos úteis: `php -d extension=intl artisan wayfinder:generate` (helpers TS de rotas), `php -d extension=intl artisan route:list --except-vendor`, `vendor/bin/pint --dirty`, `php -d extension=intl artisan test`.
+Comandos úteis: `php artisan wayfinder:generate` (helpers TS de rotas), `php artisan route:list --except-vendor`, `vendor/bin/pint --dirty`, `php artisan test`, `php artisan assinavelox:doctor` (diagnóstico da instalação) e `php artisan storage:verify` (privacidade e cifra do disco de documentos).
 
 ## 2. Variáveis de ambiente
 

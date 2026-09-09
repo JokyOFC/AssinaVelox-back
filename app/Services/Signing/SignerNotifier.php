@@ -52,6 +52,22 @@ final class SignerNotifier
         $delegate->inviteRecipients($envelope, $recipients);
     }
 
+    public function notifySenderSigned(Envelope $envelope, Recipient $signedBy): void
+    {
+        $delegate = $this->delegate();
+
+        if ($delegate === null) {
+            Log::warning('Aceite registrado sem aviso ao remetente: SignerNotifications não registrado.', [
+                'envelope_id' => $envelope->getKey(),
+                'recipient_id' => $signedBy->getKey(),
+            ]);
+
+            return;
+        }
+
+        $delegate->notifySenderSigned($envelope, $signedBy);
+    }
+
     public function notifySenderRefused(Envelope $envelope, Recipient $refusedBy): void
     {
         $delegate = $this->delegate();

@@ -234,7 +234,10 @@ return [
             'maxProcesses' => 1,
             'memory' => 256,
             'tries' => 3,
-            'timeout' => 300,
+            // Igual ao `$timeout` de FinalizeEnvelope. Divergir aqui não muda o
+            // comportamento (a propriedade do job prevalece no worker), mas
+            // confunde quem opera — e quem opera está lendo isto às 3 da manhã.
+            'timeout' => 600,
             'nice' => 5,
         ],
     ],

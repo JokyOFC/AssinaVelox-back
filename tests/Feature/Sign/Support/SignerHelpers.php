@@ -292,6 +292,33 @@ if (! function_exists('authenticateSigner')) {
             'code' => $codes[count($codes) - 1],
         ])->assertRedirect();
 
+        $props = $test->get(route('sign.show', ['token' => $token]))->viewData('page')['props'];
+
+        // O navegador do signatário busca o PDF assim que a tela carrega — é isso que marca
+        // `signing_sessions.document_presented_at` e grava `document.presented` na trilha,
+        // exigido por `RecordAcceptance` antes de gravar o aceite. Quem precisa do caminho
+        // SEM apresentação (para provar que ele é recusado) usa `authenticateSignerOnly()`.
+        $test->get(route('sign.document', ['token' => $token]));
+
+        return $props;
+    }
+}
+
+if (! function_exists('authenticateSignerOnly')) {
+    /**
+     * Confirma o código por e-mail SEM buscar o documento: a sessão fica sem
+     * `document_presented_at`.
+     */
+    function authenticateSignerOnly(object $test, string $token): array
+    {
+        $test->post(route('sign.otp.send', ['token' => $token]))->assertRedirect();
+
+        $codes = $test->codes;
+
+        $test->post(route('sign.otp.verify', ['token' => $token]), [
+            'code' => $codes[count($codes) - 1],
+        ])->assertRedirect();
+
         return $test->get(route('sign.show', ['token' => $token]))->viewData('page')['props'];
     }
 }

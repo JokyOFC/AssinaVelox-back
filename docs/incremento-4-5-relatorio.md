@@ -1,5 +1,12 @@
 # Incrementos 4 e 5 — relatório de integração
 
+> **Documento histórico.** Registra o fechamento dos incrementos 4 e 5 e os números daquela
+> rodada: 752 testes / 5 269 asserções no fechamento dos incrementos, 783 depois da revisão
+> adversarial registrada no fim deste documento. Os números atuais e o estado consolidado da Fase 1
+> estão em **`docs/entrega-fase-1.md`**; a implantação em **`docs/implantacao.md`** e a
+> operação em **`docs/operacao.md`**. O contorno `-d extension=intl` dos comandos **não é mais
+> necessário** (a extensão foi habilitada).
+
 > Escopo: finalização do envelope, página de evidências, verificação pública, downloads
 > autorizados (incremento 4) e planos, cobrança e Mercado Pago (incremento 5).
 > Este documento fecha os dois incrementos costurando o que cinco agentes entregaram em

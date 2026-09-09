@@ -163,7 +163,22 @@ final class RecordRefusal
             $other->save();
         }
 
-        // Os convites dos OUTROS não sobrevivem ao encerramento: o link deixa de abrir já na
+        // Quem JÁ ASSINOU mantém o link, como na expiração e no cancelamento: é por ele que
+        // a pessoa chega ao próprio comprovante de aceite e ao documento que assinou. A
+        // recusa de outro participante encerra o pedido; não apaga, para quem já se
+        // manifestou, a prova do que fez. Manter o link não reabre nada — o resolver recusa
+        // assinar fora de `in_progress` e o envelope já está `refused`.
+        $keepLinkFor = Recipient::withoutOrganizationScope()
+            ->where('envelope_id', $envelope->getKey())
+            ->where('status', RecipientStatus::Signed->value)
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->push((int) $refusedBy->getKey())
+            ->unique()
+            ->values()
+            ->all();
+
+        // Os convites dos DEMAIS não sobrevivem ao encerramento: o link deixa de abrir já na
         // resolução do token, antes de qualquer tela ser montada.
         //
         // O link de quem recusou continua válido de propósito. Sem ele, o próprio redirect
@@ -177,7 +192,7 @@ final class RecordRefusal
         // vazamento; negá-la é um bug de interface.
         RecipientAccessLink::withoutOrganizationScope()
             ->where('envelope_id', $envelope->getKey())
-            ->where('recipient_id', '!=', $refusedBy->getKey())
+            ->whereNotIn('recipient_id', $keepLinkFor)
             ->whereNull('revoked_at')
             ->update(['revoked_at' => $now]);
 

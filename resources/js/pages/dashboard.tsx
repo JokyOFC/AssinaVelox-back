@@ -32,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
     formatBytes,
     formatDayMonth,
+    formatDuration,
     formatNumber,
     formatPercent,
     formatProgress,
@@ -389,24 +390,16 @@ export default function Dashboard({
                         />
                         <KpiCard
                             label="Tempo médio para assinar"
-                            value={
-                                kpis.avg_time_to_complete.minutes === null
-                                    ? '—'
-                                    : formatNumber(
-                                          Math.round(
-                                              kpis.avg_time_to_complete.minutes,
-                                          ),
-                                      )
-                            }
-                            unit={
-                                kpis.avg_time_to_complete.minutes === null
-                                    ? undefined
-                                    : 'min'
-                            }
+                            // Mesmo formatador da tela Assinaturas: contratos levam dias,
+                            // e o número cru em minutos ("1.698") é ilegível e ambíguo em
+                            // pt-BR, onde o ponto separa milhar mas é lido como decimal.
+                            value={formatDuration(
+                                kpis.avg_time_to_complete.minutes,
+                            )}
                             delta={
                                 kpis.avg_time_to_complete.delta_minutes !== null
                                     ? {
-                                          label: `${kpis.avg_time_to_complete.delta_minutes > 0 ? '+' : '−'}${Math.abs(kpis.avg_time_to_complete.delta_minutes)} min`,
+                                          label: `${kpis.avg_time_to_complete.delta_minutes > 0 ? '+' : '−'}${formatDuration(Math.abs(kpis.avg_time_to_complete.delta_minutes))}`,
                                           tone:
                                               kpis.avg_time_to_complete
                                                   .delta_minutes <= 0

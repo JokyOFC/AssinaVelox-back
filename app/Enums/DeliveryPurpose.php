@@ -12,6 +12,10 @@ enum DeliveryPurpose: string
     case Refused = 'refused';
     case Canceled = 'canceled';
     case MembershipInvitation = 'membership_invitation';
+    case Signed = 'signed';
+    case DailyDigest = 'daily_digest';
+    case InvitationAccepted = 'invitation_accepted';
+    case ProductNews = 'product_news';
 
     public function label(): string
     {
@@ -24,6 +28,10 @@ enum DeliveryPurpose: string
             self::Refused => 'Documento recusado',
             self::Canceled => 'Documento cancelado',
             self::MembershipInvitation => 'Convite para a organização',
+            self::Signed => 'Assinatura registrada',
+            self::DailyDigest => 'Resumo diário de pendências',
+            self::InvitationAccepted => 'Convite de usuário aceito',
+            self::ProductNews => 'Novidades do produto',
         };
     }
 }

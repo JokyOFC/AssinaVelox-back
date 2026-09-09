@@ -101,10 +101,24 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($request->session()->get('login.id'));
         });
 
+        /*
+         * Chave composta: e-mail informado + IP de origem. É o que impede que um atacante
+         * tranque a conta de outra pessoa só repetindo o formulário com o e-mail dela —
+         * ele gasta o próprio balde, e a vítima, vindo de outro IP, continua entrando.
+         *
+         * O `is_string` não é zelo excessivo: o limitador roda ANTES da validação do
+         * Fortify, com o input cru. `email[]=a@b.c` faria `Str::lower()` receber um array
+         * e a requisição terminaria em 500 — um erro de servidor ao alcance de qualquer
+         * visitante. Entrada que não é string vira balde vazio e segue para a validação,
+         * que a recusa como deve.
+         */
         RateLimiter::for('login', function (Request $request) {
-            $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
+            $username = $request->input(Fortify::username());
+            $username = is_string($username) ? $username : '';
 
-            return Limit::perMinute(5)->by($throttleKey);
+            return Limit::perMinute(5)->by(
+                Str::transliterate(Str::lower($username).'|'.$request->ip()),
+            );
         });
     }
 }

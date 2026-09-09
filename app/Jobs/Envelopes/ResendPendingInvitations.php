@@ -60,40 +60,43 @@ class ResendPendingInvitations implements ShouldBeUnique, ShouldQueue
         }
 
         // O job roda fora da requisição: define a organização corrente para que o escopo
-        // global continue valendo (arquitetura §7).
-        CurrentOrganization::instance()->set($organization);
+        // global continue valendo (arquitetura §7). `runAs` restaura o valor anterior num
+        // `finally` — sem isso a organização deste job ficaria carimbada no PROCESSO do
+        // worker (o worker só descarta instâncias `scoped()` entre jobs) e o job seguinte,
+        // de outro inquilino, rodaria com o escopo global apontando para cá.
+        CurrentOrganization::instance()->runAs($organization, function () use ($resends, $organization): void {
+            $query = Envelope::query()->where('status', EnvelopeStatus::InProgress->value);
 
-        $query = Envelope::query()->where('status', EnvelopeStatus::InProgress->value);
+            if ($this->userId !== null) {
+                $membership = $organization->memberships()->where('user_id', $this->userId)->first();
 
-        if ($this->userId !== null) {
-            $membership = $organization->memberships()->where('user_id', $this->userId)->first();
-
-            if ($membership === null) {
-                return;
-            }
-
-            $query = EnvelopeVisibility::envelopes($membership)->where('status', EnvelopeStatus::InProgress->value);
-        }
-
-        $sent = 0;
-        $skipped = 0;
-
-        $query->orderBy('id')->chunkById(100, function ($envelopes) use ($resends, &$sent, &$skipped): void {
-            foreach ($envelopes as $envelope) {
-                try {
-                    $result = $resends->all($envelope);
-                    $sent += $result['sent'];
-                    $skipped += $result['skipped'];
-                } catch (SendingException) {
-                    // Envelope sem pendentes elegíveis: nada a fazer.
+                if ($membership === null) {
+                    return;
                 }
-            }
-        });
 
-        Log::info('Reenvio em lote de convites concluído.', [
-            'organization' => $organization->ulid,
-            'sent' => $sent,
-            'skipped' => $skipped,
-        ]);
+                $query = EnvelopeVisibility::envelopes($membership)->where('status', EnvelopeStatus::InProgress->value);
+            }
+
+            $sent = 0;
+            $skipped = 0;
+
+            $query->orderBy('id')->chunkById(100, function ($envelopes) use ($resends, &$sent, &$skipped): void {
+                foreach ($envelopes as $envelope) {
+                    try {
+                        $result = $resends->all($envelope);
+                        $sent += $result['sent'];
+                        $skipped += $result['skipped'];
+                    } catch (SendingException) {
+                        // Envelope sem pendentes elegíveis: nada a fazer.
+                    }
+                }
+            });
+
+            Log::info('Reenvio em lote de convites concluído.', [
+                'organization' => $organization->ulid,
+                'sent' => $sent,
+                'skipped' => $skipped,
+            ]);
+        });
     }
 }

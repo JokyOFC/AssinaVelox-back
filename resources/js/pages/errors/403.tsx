@@ -1,10 +1,18 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { ShieldOff } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
-import { dashboard } from '@/routes';
+import { dashboard, home } from '@/routes';
+import { index as verifyIndex } from '@/routes/verify';
 
+/**
+ * 403 também alcança visitante sem conta (rotas públicas do signatário e da verificação).
+ * Pedir a um administrador da organização, ou mandar a pessoa de volta ao painel, só faz
+ * sentido para quem está autenticado; para os demais o texto e as ações mudam.
+ */
 export default function Forbidden({ message }: { message?: string | null }) {
+    const { auth } = usePage().props;
+
     return (
         <>
             <Head title="Acesso negado" />
@@ -14,12 +22,27 @@ export default function Forbidden({ message }: { message?: string | null }) {
                     title="Você não tem permissão para acessar esta página"
                     description={
                         message ??
-                        'Peça a um administrador da organização para liberar o acesso ou volte para o painel.'
+                        (auth.user
+                            ? 'Peça a um administrador da organização para liberar o acesso ou abra o painel.'
+                            : 'Este endereço exige uma permissão que esta sessão não tem. Se você recebeu um link para assinar, abra o link do e-mail mais recente.')
                     }
                     action={
-                        <Button asChild>
-                            <Link href={dashboard()}>Voltar ao painel</Link>
-                        </Button>
+                        auth.user ? (
+                            <Button asChild>
+                                <Link href={dashboard()}>Abrir o painel</Link>
+                            </Button>
+                        ) : (
+                            <>
+                                <Button asChild variant="outline">
+                                    <Link href={verifyIndex()}>
+                                        Verificar documento
+                                    </Link>
+                                </Button>
+                                <Button asChild>
+                                    <Link href={home()}>Página inicial</Link>
+                                </Button>
+                            </>
+                        )
                     }
                 />
             </div>

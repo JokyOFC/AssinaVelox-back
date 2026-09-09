@@ -1,5 +1,7 @@
 <?php
 
+use App\Logging\RedactionTap;
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -59,6 +61,7 @@ return [
         ],
 
         'single' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -66,6 +69,7 @@ return [
         ],
 
         'daily' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -74,6 +78,7 @@ return [
         ],
 
         'monthly' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'monthly',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -82,6 +87,7 @@ return [
         ],
 
         'slack' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
             'username' => env('LOG_SLACK_USERNAME', env('APP_NAME', 'Laravel')),
@@ -91,6 +97,7 @@ return [
         ],
 
         'papertrail' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => env('LOG_PAPERTRAIL_HANDLER', SyslogUdpHandler::class),
@@ -103,6 +110,7 @@ return [
         ],
 
         'stderr' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => StreamHandler::class,
@@ -114,6 +122,7 @@ return [
         ],
 
         'syslog' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'syslog',
             'level' => env('LOG_LEVEL', 'debug'),
             'facility' => env('LOG_SYSLOG_FACILITY', LOG_USER),
@@ -121,9 +130,42 @@ return [
         ],
 
         'errorlog' => [
+            'tap' => [RedactionTap::class],
             'driver' => 'errorlog',
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+        ],
+
+        /*
+        | Canal ESTRUTURADO (docs/seguranca-operacional.md §6).
+        |
+        | Uma linha = um objeto JSON, com `datetime`, `level_name`, `message`, `context` e
+        | `extra`. O `extra` já traz o `correlation_id` do Context do Laravel — o mesmo
+        | valor na requisição HTTP e nos jobs que ela despachou —, o que permite juntar a
+        | história inteira de um envelope em uma consulta só no coletor.
+        |
+        | Toda linha passa pelo RedactionTap: token, código, senha, e-mail e CPF/CNPJ são
+        | mascarados antes de a linha ser escrita.
+        |
+        | Em produção use `LOG_STACK=structured` (ou `single,structured`) e mande o
+        | arquivo para o coletor. Em contêiner/serviço systemd, aponte
+        | `LOG_STRUCTURED_STREAM=php://stderr`.
+        */
+        'structured' => [
+            'tap' => [RedactionTap::class],
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => StreamHandler::class,
+            'handler_with' => [
+                'stream' => env('LOG_STRUCTURED_STREAM', storage_path('logs/assinavelox.jsonl')),
+            ],
+            'formatter' => JsonFormatter::class,
+            'formatter_with' => [
+                'batchMode' => JsonFormatter::BATCH_MODE_NEWLINES,
+                'appendNewline' => true,
+                'includeStacktraces' => (bool) env('LOG_STRUCTURED_STACKTRACES', false),
+            ],
+            'processors' => [PsrLogMessageProcessor::class],
         ],
 
         'null' => [

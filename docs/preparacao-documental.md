@@ -213,7 +213,7 @@ A rota `envelopes.document.page` (miniatura PNG por página) **não foi implemen
 
 ## 10. Testes
 
-`php -d extension=intl artisan test tests/Feature/Documents` — **46 testes, 282 asserções**, pulados automaticamente se o venv do `pdftool` não existir (`--filter=Documents` casa só parte deles; prefira o caminho do diretório):
+`php artisan test tests/Feature/Documents` — **46 testes, 282 asserções**, pulados automaticamente se o venv do `pdftool` não existir (`--filter=Documents` casa só parte deles; prefira o caminho do diretório):
 
 - `DocumentUploadTest` — upload aceito (PDF, imagem, PNG, WEBP), caminho e hash, eventos, substituição, remoção; recusas (SVG puro e disfarçado de `.png`, `.pdf` com conteúdo de PNG, executável renomeado, DOCX zip bomb, ZIP sem `word/document.xml`, imagem de 64 MP, arquivo grande demais, arquivo vazio, envelope enviado, envelope de outra organização); despacho na fila `conversions`; sanitização do nome.
 - `DocumentProcessingTest` — PDF cifrado e PDF **já assinado** (fixture gerada com `gen-test-cert` + `sign`) ficam `blocked` com o original preservado byte a byte; PDF corrompido; DOCX sem LibreOffice → `failed` honesto; DOCX com o binário falso → `ready`; `pages_meta` idêntico ao `inspect`, inclusive na página girada 90°; idempotência do job; recomputação da prontidão do envelope.

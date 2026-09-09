@@ -59,6 +59,7 @@ export const AUDIT_EVENT_ICONS: Partial<Record<AuditEventType, LucideIcon>> = {
     'challenge.verified': ShieldCheck,
     'challenge.failed': CircleAlert,
     'session.started': LogIn,
+    'document.presented': FileText,
     'acceptance.recorded': FileSignature,
     'recipient.refused': XCircle,
     'envelope.refused': XCircle,
@@ -85,6 +86,8 @@ export const AUDIT_EVENT_ICONS: Partial<Record<AuditEventType, LucideIcon>> = {
 export const AUDIT_EVENT_NOTES: Partial<Record<AuditEventType, string>> = {
     'invitation.opened':
         'Abertura detectada — registra o acesso ao link, não comprova leitura.',
+    'document.presented':
+        'O arquivo foi entregue à sessão de assinatura — registra a apresentação, não comprova leitura.',
     'acceptance.recorded':
         'Aceite eletrônico com evidências (data, IP, navegador, código confirmado por e-mail).',
     'envelope.signed_company_a1':

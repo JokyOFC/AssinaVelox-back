@@ -20,6 +20,7 @@ use App\Services\Envelopes\Sending\CompletionNotifier;
 use App\Services\Pdf\Dto\ValidationResult;
 use App\Services\Pdf\PdfToolClient;
 use App\Services\Pdf\Support\TemporaryDirectory;
+use App\Services\Plans\PlanFeatures;
 use App\Services\Plans\PlanLedger;
 use App\Services\Signing\SignerAudit;
 use Illuminate\Support\Carbon;
@@ -84,6 +85,7 @@ class EnvelopeFinalizer
         private readonly EvidenceData $evidenceData,
         private readonly EvidenceRenderer $evidenceRenderer,
         private readonly OperatorSignature $signature,
+        private readonly PlanFeatures $planFeatures,
         private readonly PlanLedger $ledger,
         private readonly CompletionNotifier $notifier,
         private readonly LoggerInterface $logger,
@@ -179,11 +181,11 @@ class EnvelopeFinalizer
          * linha mais recente de `certificate_references`. Ele governa duas coisas: o que a
          * página de evidências imprime e se uma página de execução anterior ainda serve.
          */
-        $configuredCertificate = $this->signature->isConfigured()
+        $configuredCertificate = $this->signsFor($envelope)
             ? $this->signature->configuredCertificate($correlationId)
             : null;
 
-        $variant = $this->evidenceVariant($configuredCertificate);
+        $variant = $this->evidenceVariant($envelope, $configuredCertificate);
         $evidence = $this->artifacts->existing($document, DocumentVersionKind::Evidence);
 
         /*
@@ -217,7 +219,7 @@ class EnvelopeFinalizer
         }
 
         // -- c/d/e. Junção, assinatura e versão final -----------------------------------
-        $final = $this->reusableFinal($document, $workDir, $correlationId);
+        $final = $this->reusableFinal($envelope, $document, $workDir, $correlationId);
 
         if ($final !== null && $rebuilt) {
             // O `final` embute a página de evidências e o consolidado que foram refeitos.
@@ -233,7 +235,7 @@ class EnvelopeFinalizer
             $steps['final'] = 'created';
             $steps['signature'] = $signatureStatus === SignatureStatus::CompanyA1 ? 'created' : 'skipped';
         } else {
-            [$signatureStatus, $profile, $validation, $certificate] = $this->recoverSignatureState($final, $workDir, $correlationId);
+            [$signatureStatus, $profile, $validation, $certificate] = $this->recoverSignatureState($envelope, $final, $workDir, $correlationId);
             $steps['final'] = 'reused';
             $steps['signature'] = 'reused';
         }
@@ -263,6 +265,28 @@ class EnvelopeFinalizer
             $signatureStatus,
             $steps,
         );
+    }
+
+    /**
+     * Este envelope recebe a assinatura criptográfica da operadora?
+     *
+     * Duas condições, e as duas precisam valer:
+     *
+     * 1. **há certificado configurado** — `OperatorSignature::isConfigured()`. Sem ele nada
+     *    é assinado, em plano nenhum, e o envelope conclui como aceite eletrônico com
+     *    evidências (arquitetura §2);
+     * 2. **o plano da organização inclui o item** — `plans.features.company_signature`. A
+     *    flag existe desde o `PlanSeeder` (false no Grátis, true nos pagos) e é anunciada na
+     *    comparação de planos; antes desta correção nada a lia, então o Grátis receberia a
+     *    assinatura no instante em que a operadora configurasse o certificado, e a tabela de
+     *    preços dizia o contrário.
+     *
+     * A decisão é tomada uma vez por etapa e vale para todas: o que a página de evidências
+     * afirma, o que o arquivo final recebe e o que um `final` reaproveitado precisa conter.
+     */
+    private function signsFor(Envelope $envelope): bool
+    {
+        return $this->signature->isConfigured() && $this->planFeatures->allowsForEnvelope($envelope);
     }
 
     // -- Etapa a ---------------------------------------------------------------------
@@ -358,9 +382,9 @@ class EnvelopeFinalizer
      *
      * @return array{signature_status: string, certificate_fingerprint_sha256: string|null}
      */
-    private function evidenceVariant(?CertificateReference $certificate): array
+    private function evidenceVariant(Envelope $envelope, ?CertificateReference $certificate): array
     {
-        $willSign = $this->signature->isConfigured();
+        $willSign = $this->signsFor($envelope);
 
         return [
             'signature_status' => ($willSign ? SignatureStatus::CompanyA1 : SignatureStatus::None)->value,
@@ -424,7 +448,7 @@ class EnvelopeFinalizer
 
         $finalPath = $workDir->path('final.pdf');
 
-        if ($this->signature->isConfigured()) {
+        if ($this->signsFor($envelope)) {
             $signed = $this->signature->signAndValidate($preSignature, $finalPath, $correlationId);
 
             /** @var ValidationResult $validation */
@@ -485,7 +509,7 @@ class EnvelopeFinalizer
      * uma finalização que não é a que está acontecendo: como ele nunca foi publicado — o
      * envelope não concluiu e não há registro de verificação —, é descartado e refeito.
      */
-    private function reusableFinal(Document $document, TemporaryDirectory $workDir, string $correlationId): ?DocumentVersion
+    private function reusableFinal(Envelope $envelope, Document $document, TemporaryDirectory $workDir, string $correlationId): ?DocumentVersion
     {
         $final = $this->artifacts->existing($document, DocumentVersionKind::Final);
 
@@ -496,7 +520,7 @@ class EnvelopeFinalizer
         $local = $this->artifacts->copyToTemporary($final, $workDir, 'final-existente.pdf');
         $inspection = $this->client->inspect($local, $correlationId);
 
-        if ($inspection->hasSignatures !== $this->signature->isConfigured()) {
+        if ($inspection->hasSignatures !== $this->signsFor($envelope)) {
             $this->artifacts->discard($final, $inspection->hasSignatures
                 ? 'arquivo assinado, mas a assinatura da operadora não está mais configurada'
                 : 'arquivo sem assinatura, mas o certificado da operadora está configurado');
@@ -513,9 +537,9 @@ class EnvelopeFinalizer
      *
      * @return array{0: SignatureStatus, 1: string|null, 2: array<string, mixed>, 3: CertificateReference|null}
      */
-    private function recoverSignatureState(DocumentVersion $final, TemporaryDirectory $workDir, string $correlationId): array
+    private function recoverSignatureState(Envelope $envelope, DocumentVersion $final, TemporaryDirectory $workDir, string $correlationId): array
     {
-        if (! $final->has_signatures && ! $this->signature->isConfigured()) {
+        if (! $final->has_signatures && ! $this->signsFor($envelope)) {
             return [
                 SignatureStatus::None,
                 null,

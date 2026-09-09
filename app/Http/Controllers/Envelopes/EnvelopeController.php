@@ -30,6 +30,7 @@ use App\Services\Envelopes\EnvelopeReadiness;
 use App\Services\Envelopes\FieldGeometry;
 use App\Services\Envelopes\FieldSync;
 use App\Services\Envelopes\PageBox;
+use App\Services\Envelopes\RecipientSync;
 use App\Services\Envelopes\Sending\CancelEnvelope;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Support\CurrentOrganization;
@@ -53,6 +54,9 @@ use Inertia\Response;
 class EnvelopeController extends Controller
 {
     private const TABS = ['all', 'awaiting', 'in_progress', 'completed', 'drafts', 'refused_expired'];
+
+    /** Título de um rascunho que ainda não foi tocado; identifica o que pode ser reaproveitado. */
+    public const DEFAULT_DRAFT_TITLE = 'Novo documento';
 
     private const SORTS = ['updated_desc', 'updated_asc', 'created_desc', 'title_asc', 'expires_asc'];
 
@@ -205,9 +209,29 @@ class EnvelopeController extends Controller
         $organization = CurrentOrganization::instance()->get();
         $settings = OrganizationSettings::of($organization);
 
+        // "Nova solicitação" está em três lugares e é um GET: cada clique (ou pré-busca do
+        // navegador) criaria um rascunho vazio "Novo documento" e consumiria um número da
+        // sequência que o cliente usa para se referir aos contratos, abrindo buracos nela.
+        // Antes de criar, reaproveitamos o rascunho intocado que a própria pessoa deixou.
+        $untouched = Envelope::query()
+            ->where('created_by_user_id', $request->user()->getKey())
+            ->where('status', EnvelopeStatus::Draft)
+            ->where('title', self::DEFAULT_DRAFT_TITLE)
+            ->whereNull('message')
+            ->whereNull('folder_id')
+            ->whereDoesntHave('document')
+            ->whereDoesntHave('recipients')
+            ->whereDoesntHave('fields')
+            ->latest('id')
+            ->first();
+
+        if ($untouched !== null) {
+            return redirect()->route('envelopes.edit', ['envelope' => $untouched->ulid, 'step' => 1]);
+        }
+
         $envelope = Envelope::query()->create([
             'created_by_user_id' => $request->user()->getKey(),
-            'title' => 'Novo documento',
+            'title' => self::DEFAULT_DRAFT_TITLE,
             'status' => EnvelopeStatus::Draft,
             'signing_order' => $settings->defaultSigningOrder(),
             'terms_version' => (string) config('assinavelox.terms_version'),
@@ -322,6 +346,16 @@ class EnvelopeController extends Controller
         }
 
         $envelope->forceFill($attributes)->save();
+
+        // A ordem de assinatura vive em dois lugares: `envelopes.signing_order` (aqui) e
+        // `recipients.order_index` (RecipientSync, passo 2). Este autosave sai sozinho — o
+        // wizard salva metadados e signatários em requisições separadas, e a de
+        // signatários desiste quando algum ainda está incompleto. Sem reindexar, um
+        // envelope ficava `sequential` com todo mundo na mesma vez: os convites saíam
+        // todos de uma vez e a tela continuava anunciando "Assinatura em ordem".
+        if (array_key_exists('signing_order', $validated)) {
+            RecipientSync::reindex($envelope);
+        }
 
         EnvelopeAudit::record($envelope, AuditEventType::EnvelopeUpdated, [
             'changed' => array_keys($validated),

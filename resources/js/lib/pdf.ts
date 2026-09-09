@@ -88,10 +88,20 @@ function errorForStatus(status: number): PdfLoadError {
     );
 }
 
-/** Baixa os bytes do PDF pela rota autorizada (cookie de sessão). */
+/**
+ * Baixa os bytes do PDF pela rota autorizada (cookie de sessão).
+ *
+ * `onDelivered` é chamado no instante em que o servidor RESPONDE com sucesso — não quando o
+ * corpo termina de chegar, e muito menos quando o PDF.js consegue desenhá-lo. É o mesmo
+ * instante em que o servidor marca `signing_sessions.document_presented_at`, e é o que
+ * mantém cliente e servidor de acordo sobre "o documento foi apresentado": um 403/404 nunca
+ * é entrega; uma falha do visualizador depois da entrega não desfaz o que já saiu, e a
+ * pessoa ainda tem o botão "Baixar PDF" para ler o que vai assinar.
+ */
 export async function fetchPdfBytes(
     url: string,
     signal?: AbortSignal,
+    onDelivered?: () => void,
 ): Promise<Uint8Array> {
     let response: globalThis.Response;
 
@@ -116,6 +126,8 @@ export async function fetchPdfBytes(
         throw errorForStatus(response.status);
     }
 
+    onDelivered?.();
+
     return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -133,10 +145,23 @@ export interface OpenedPdf {
 export async function openPdfDocument(
     url: string,
     signal?: AbortSignal,
+    /**
+     * Chamado assim que os BYTES chegaram, antes de o PDF.js tentar abri-los.
+     *
+     * Entregar e renderizar são coisas diferentes: um 403/404 significa que o documento
+     * não saiu do servidor; um `InvalidPDFException` significa que ele saiu e o
+     * visualizador não deu conta. Quem depende de "o documento foi apresentado" — a página
+     * de assinatura — precisa distinguir os dois, porque no segundo caso a pessoa ainda tem
+     * o botão "Baixar PDF" para ler o que vai assinar.
+     */
+    onDelivered?: () => void,
 ): Promise<OpenedPdf> {
+    // A entrega é avisada pela própria resposta do servidor, sem depender do PDF.js: o
+    // módulo é importado dinamicamente e pode falhar por conta própria (asset do worker
+    // indisponível, rede), e isso não desfaz o fato de o documento ter sido entregue.
     const [pdfjs, bytes] = await Promise.all([
         loadPdfjs(),
-        fetchPdfBytes(url, signal),
+        fetchPdfBytes(url, signal, onDelivered),
     ]);
 
     const task = pdfjs.getDocument({ data: bytes.slice() });

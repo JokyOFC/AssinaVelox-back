@@ -5,8 +5,10 @@ use App\Http\Middleware\EnforceTwoFactorForOrganization;
 use App\Http\Middleware\EnsureCurrentOrganization;
 use App\Http\Middleware\EnsureMembershipRole;
 use App\Http\Middleware\EnsurePlatformAdmin;
+use App\Http\Middleware\EnsureSignerVerified;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResetCurrentOrganization;
+use App\Http\Middleware\ResolveSignerToken;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
@@ -69,6 +71,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'org.role' => EnsureMembershipRole::class,
             'org.2fa' => EnforceTwoFactorForOrganization::class,
             'platform-admin' => EnsurePlatformAdmin::class,
+            // Fluxo público do signatário (docs/fluxo-do-signatario.md).
+            'signer' => ResolveSignerToken::class,
+            'signer.verified' => EnsureSignerVerified::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

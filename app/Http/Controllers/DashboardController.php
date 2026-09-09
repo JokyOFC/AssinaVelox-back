@@ -11,6 +11,7 @@ use App\Models\Envelope;
 use App\Models\Membership;
 use App\Models\Recipient;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Support\Csv;
 use App\Support\CurrentOrganization;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -132,7 +133,7 @@ class DashboardController extends Controller
 
             $query->chunk(200, function ($envelopes) use ($out, $timezone): void {
                 foreach ($envelopes as $envelope) {
-                    fputcsv($out, [
+                    fputcsv($out, Csv::row([
                         $envelope->display_code,
                         $envelope->title,
                         $envelope->statusLabel(),
@@ -144,7 +145,7 @@ class DashboardController extends Controller
                         $envelope->sent_at?->setTimezone($timezone)->format('d/m/Y H:i') ?? '',
                         $envelope->completed_at?->setTimezone($timezone)->format('d/m/Y H:i') ?? '',
                         $envelope->expires_at?->setTimezone($timezone)->format('d/m/Y') ?? '',
-                    ], ';');
+                    ]), ';');
                 }
             });
 

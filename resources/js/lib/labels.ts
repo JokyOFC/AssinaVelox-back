@@ -180,7 +180,7 @@ export const signatureKindLabels: Record<SignatureKind, string> = {
 };
 
 export const authMethodLabels = {
-    email_otp: 'Token e-mail',
+    email_otp: 'Código por e-mail',
 } as const;
 
 export const deliveryChannelLabels = {

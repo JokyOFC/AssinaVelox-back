@@ -9,6 +9,7 @@ use App\Http\Resources\EnvelopeDetailResource;
 use App\Models\AuditEvent;
 use App\Models\Envelope;
 use App\Models\Recipient;
+use App\Support\IpDisplay;
 use App\Support\TaxId;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -47,7 +48,7 @@ class EnvelopeEvidenceController extends Controller
                 'legal_name' => $envelope->organization->legal_name,
                 'tax_id_masked' => TaxId::mask($envelope->organization->tax_id),
             ],
-            'recipients' => $envelope->recipients->map(function (Recipient $recipient): array {
+            'recipients' => $envelope->recipients->map(function (Recipient $recipient) use ($envelope): array {
                 $acceptance = $recipient->acceptance;
 
                 return [
@@ -65,7 +66,9 @@ class EnvelopeEvidenceController extends Controller
                     'signed_at' => $recipient->signed_at?->toIso8601String(),
                     'refused_at' => $recipient->refused_at?->toIso8601String(),
                     'refusal_reason' => $recipient->refusal_reason,
-                    'ip' => $acceptance?->ip_address,
+                    // `evidence_show_ip` da organização (arquitetura §3.1) vale aqui como
+                    // vale na trilha e no card do signatário — ver App\Support\IpDisplay.
+                    'ip' => IpDisplay::for($acceptance?->ip_address, $envelope->organization),
                     'user_agent' => $acceptance?->user_agent,
                     'geo_label' => null,
                     'consent_text' => $acceptance?->consent_statement,

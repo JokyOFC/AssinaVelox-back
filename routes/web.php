@@ -69,16 +69,20 @@ Route::middleware('throttle:public')->group(function (): void {
 // -- Signatário (público, sem conta) -------------------------------------------------------
 Route::prefix('assinar/{token}')
     ->where(['token' => '[A-Za-z0-9_-]{20,128}'])
-    ->middleware('throttle:signer')
+    // `signer` resolve o token do convite e injeta o contexto; `signer.verified` exige a
+    // sessão criada depois do código por e-mail (docs/fluxo-do-signatario.md).
+    ->middleware(['throttle:signer', 'signer'])
     ->name('sign.')
     ->group(function (): void {
         Route::get('/', [SignerPageController::class, 'show'])->name('show');
         Route::post('codigo', [OtpController::class, 'send'])->middleware('throttle:otp-send')->name('otp.send');
         Route::post('codigo/verificar', [OtpController::class, 'verify'])->middleware('throttle:otp-verify')->name('otp.verify');
-        Route::get('documento', [SignDocumentController::class, 'show'])->name('document');
-        Route::get('paginas/{page}.png', [SignDocumentController::class, 'page'])->whereNumber('page')->name('page');
-        Route::post('assinar', [SignatureController::class, 'store'])->middleware('throttle:10,1')->name('complete');
-        Route::post('recusar', [RefusalController::class, 'store'])->name('refuse');
+        Route::get('documento', [SignDocumentController::class, 'show'])->middleware('signer.verified')->name('document');
+        Route::get('paginas/{page}.png', [SignDocumentController::class, 'page'])->middleware('signer.verified')->whereNumber('page')->name('page');
+        Route::post('assinar', [SignatureController::class, 'store'])->middleware(['signer.verified', 'throttle:10,1'])->name('complete');
+        Route::post('recusar', [RefusalController::class, 'store'])->middleware('signer.verified')->name('refuse');
+        // Sem `signer.verified`: o aceite consome a sessão e o comprovante é pedido logo
+        // depois. A autorização é feita no controller (aceite registrado ou sessão viva).
         Route::get('download/{type}', [SignDownloadController::class, 'show'])->whereIn('type', ['signed', 'evidence'])->name('download');
     });
 
@@ -120,6 +124,9 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::post('{envelope}/documento', [EnvelopeDocumentController::class, 'store'])->name('document.store');
         Route::delete('{envelope}/documento', [EnvelopeDocumentController::class, 'destroy'])->name('document.destroy');
         Route::get('{envelope}/documento/status', [EnvelopeDocumentController::class, 'status'])->name('document.status');
+        // Stream do PDF da versão exibível (Content-Type: application/pdf, inline, sem cache):
+        // fonte do visualizador PDF.js do editor de campos. Ver docs/preparacao-documental.md.
+        Route::get('{envelope}/documento/preview', [EnvelopeDocumentController::class, 'preview'])->name('document.preview');
         Route::get('{envelope}/documento/paginas/{page}.png', [EnvelopeDocumentController::class, 'page'])->whereNumber('page')->name('document.page');
         Route::put('{envelope}/destinatarios', [EnvelopeRecipientController::class, 'sync'])->name('recipients.sync');
         Route::put('{envelope}/campos', [EnvelopeFieldController::class, 'sync'])->name('fields.sync');

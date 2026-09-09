@@ -46,7 +46,7 @@ it('transitionTo respeita a máquina de estados do destinatário', function () {
 it('mascara o e-mail e calcula iniciais', function () {
     $recipient = Recipient::factory()->make(['name' => 'Ana Beatriz Rocha', 'email' => 'ana.rocha@exemplo.com.br']);
 
-    expect($recipient->masked_email)->toBe('a********@exemplo.com.br')
+    expect($recipient->masked_email)->toBe('a••••••••@exemplo.com.br')
         ->and($recipient->initials)->toBe('AR')
-        ->and(Recipient::maskEmail('ab@x.io'))->toBe('a***@x.io');
+        ->and(Recipient::maskEmail('ab@x.io'))->toBe('a•••@x.io');
 });

@@ -32,6 +32,14 @@ resources/
     components/
       ui/                     primitivos shadcn restilizados para os tokens (sem variantes dark:)
       status/                 EnvelopeStatusBadge, RecipientStatusBadge, SubscriptionStatusBadge, PaymentStatusBadge
+      pdf/                    use-pdf-document (hook), pdf-viewer, pdf-page-rail, pdf-zoom-controls
+      envelopes/              field-layer, field-box, field-types, recipient-colors, document-dropzone,
+                              use-wizard-autosave, wizard-step-{document,recipients,fields,review}
+      sign/                   página pública do signatário: otp-card, signer-document, signer-field-layer,
+                              field-checklist, consent-box, privacy-notice, legal-text, refusal-dialog,
+                              receipt-card, terminal-card
+      signature/              captura da representação visual: signature-capture, initials-capture,
+                              signature-pad-canvas (signature_pad), signature-image (normalização PNG)
       app-sidebar.tsx         sidebar client|admin (modo derivado da URL /admin/*), 256px, grupos, badge âmbar, tags Fase 2
       app-topbar.tsx          header sticky translúcido: trigger, breadcrumb, ⌘K, ajuda, sino, slot extra, pill admin
       org-switcher.tsx        switcher de organização + dialog "Criar nova organização" (POST organizations.store)
@@ -58,6 +66,8 @@ resources/
       labels.ts               enum → rótulo PT-BR + tom de badge (ROUTES §6 / DESIGN §5)
       format.ts               datas pt-BR no fuso da organização (Intl), BRL a partir de centavos, bytes, máscaras CPF/CNPJ,
                               e-mail mascarado, código de verificação XXXX-XXXX-XXXX, display_code AV-00000
+      pdf.ts                  PDF.js sob demanda, worker do bundler, fetch autorizado, erros em PT-BR, render no canvas
+      geometry.ts             funções puras da geometria normalizada dos campos (ver "Visualizador de PDF e editor de campos")
     types/
       enums.ts                espelho exato de RECONCILIACAO §2 (+ AuditEventType §3, NotificationEvent/Channel)
       models.ts               Envelope, Recipient, Membership, Invitation, Plan, Subscription, Payment, AuditEvent…
@@ -87,38 +97,40 @@ Cada página exporta a `interface <Nome>Props` fiel ao contrato de `ROUTES_AND_P
 
 O front importa os helpers abaixo de `@/routes/**`. Nomes com `-` viram camelCase; nomes reservados ganham sufixo `Method` (`organizations.switch` → `switchMethod`, `dashboard.export`/`recipients.export`/`admin.organizations.export` → `exportMethod`); nomes com `_` ficam iguais; quando um nome é folha **e** namespace (`invitations.accept` + `invitations.accept.store`) o Wayfinder gera `accept` em `@/routes/invitations` e `store` em `@/routes/invitations/accept` (mesmo padrão de `password.confirm`).
 
-| Módulo                            | Helper → rota Laravel                                                                                                                                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@/routes`                        | `home`, `login`, `logout`, `register`, `dashboard` (já gerados)                                                                                                                                              |
-| `@/routes/login                   | register`                                                                                                                                                                                                    | `store` → `login.store`, `register.store` (Fortify, já gerados) |
-| `@/routes/password`               | `request`, `email`, `update` (Fortify); `@/routes/password/confirm` → `store` (já gerados)                                                                                                                   |
-| `@/routes/two-factor`             | `enable`, `confirm`, `disable`, `qrCode`, `secretKey`, `recoveryCodes`, `regenerateRecoveryCodes`; `@/routes/two-factor/login` → `store` (já gerados)                                                        |
-| `@/routes/verification`           | `send` (já gerado)                                                                                                                                                                                           |
-| `@/routes/profile`                | `edit` → `profile.edit`; `@/routes/security` → `edit` → `security.edit` (starter kit, já gerados)                                                                                                            |
-| `@/actions/.../Settings/*`        | `ProfileController.update/destroy`, `SecurityController.update` (já gerados)                                                                                                                                 |
-| `@/routes/dashboard`              | `exportMethod` → `dashboard.export`                                                                                                                                                                          |
-| `@/routes/search`                 | `index` → `search.index`                                                                                                                                                                                     |
-| `@/routes/notifications`          | `index` → `notifications.index`, `read` → `notifications.read`                                                                                                                                               |
-| `@/routes/envelopes`              | `index`, `create`, `edit(envelope)`, `show(envelope)`, `evidence(envelope)`, `download({envelope,type})`, `resend(envelope)`, `cancel(envelope)`, `destroy(envelope)`, `duplicate(envelope)`, `bulk(action)` |
-| `@/routes/envelopes/recipients`   | `resend({envelope,recipient})` → `envelopes.recipients.resend`                                                                                                                                               |
-| `@/routes/folders`                | `store` → `folders.store`                                                                                                                                                                                    |
-| `@/routes/recipients`             | `index`, `exportMethod` → `recipients.export`, `resend_pending` → `recipients.resend_pending`                                                                                                                |
-| `@/routes/templates`              | `index` → `templates.index`                                                                                                                                                                                  |
-| `@/routes/integrations`           | `index` → `integrations.index`                                                                                                                                                                               |
-| `@/routes/members`                | `index`, `update(membership)`, `status(membership)`, `destroy(membership)`, `transfer_ownership(membership)`                                                                                                 |
-| `@/routes/invitations`            | `store`, `resend(invitation)`, `destroy(invitation)`, `accept(token)`; `@/routes/invitations/accept` → `store(token)` → `invitations.accept.store`                                                           |
-| `@/routes/settings`               | `general`, `signing`, `notifications` → `settings.general                                                                                                                                                    | signing                                                         | notifications` |
-| `@/routes/settings/organization`  | `update` → `settings.organization.update`, `destroy` → `settings.organization.destroy` (POST solicita; DELETE cancela)                                                                                       |
-| `@/routes/settings/security`      | `update` → `settings.security.update`                                                                                                                                                                        |
-| `@/routes/settings/signing`       | `update` → `settings.signing.update`                                                                                                                                                                         |
-| `@/routes/settings/notifications` | `update` → `settings.notifications.update`                                                                                                                                                                   |
-| `@/routes/billing`                | `index`, `checkout`, `cancel`, `resume` → `billing.index                                                                                                                                                     | checkout                                                        | cancel         | resume`                                                                                                                 |
-| `@/routes/plans`                  | `index` → `plans.index`                                                                                                                                                                                      |
-| `@/routes/organizations`          | `store` → `organizations.store`, `switchMethod(organization)` → `organizations.switch`                                                                                                                       |
-| `@/routes/legal`                  | `terms`, `privacy` → `legal.terms                                                                                                                                                                            | privacy`                                                        |
-| `@/routes/verify`                 | `index`, `show(code)` → `verify.index                                                                                                                                                                        | show`                                                           |
-| `@/routes/admin/organizations`    | `index`, `show(organization)`, `exportMethod` → `admin.organizations.index                                                                                                                                   | show                                                            | export`        |
-| `@/routes/admin/billing           | users                                                                                                                                                                                                        | audit                                                           | settings`      | `index` → `admin.billing.index`, `admin.users.index`, `admin.audit.index`, `admin.settings.index` (placeholders Fase 2) |
+| Módulo                            | Helper → rota Laravel                                                                                                                                                                                                                                                |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@/routes`                        | `home`, `login`, `logout`, `register`, `dashboard` (já gerados)                                                                                                                                                                                                      |
+| `@/routes/login                   | register`                                                                                                                                                                                                                                                            | `store` → `login.store`, `register.store` (Fortify, já gerados) |
+| `@/routes/password`               | `request`, `email`, `update` (Fortify); `@/routes/password/confirm` → `store` (já gerados)                                                                                                                                                                           |
+| `@/routes/two-factor`             | `enable`, `confirm`, `disable`, `qrCode`, `secretKey`, `recoveryCodes`, `regenerateRecoveryCodes`; `@/routes/two-factor/login` → `store` (já gerados)                                                                                                                |
+| `@/routes/verification`           | `send` (já gerado)                                                                                                                                                                                                                                                   |
+| `@/routes/profile`                | `edit` → `profile.edit`; `@/routes/security` → `edit` → `security.edit` (starter kit, já gerados)                                                                                                                                                                    |
+| `@/actions/.../Settings/*`        | `ProfileController.update/destroy`, `SecurityController.update` (já gerados)                                                                                                                                                                                         |
+| `@/routes/dashboard`              | `exportMethod` → `dashboard.export`                                                                                                                                                                                                                                  |
+| `@/routes/search`                 | `index` → `search.index`                                                                                                                                                                                                                                             |
+| `@/routes/notifications`          | `index` → `notifications.index`, `read` → `notifications.read`                                                                                                                                                                                                       |
+| `@/routes/envelopes`              | `index`, `create`, `edit(envelope)`, `show(envelope)`, `update(envelope)`, `send(envelope)`, `evidence(envelope)`, `download({envelope,type})`, `resend(envelope)`, `cancel(envelope)`, `destroy(envelope)`, `duplicate(envelope)`, `move(envelope)`, `bulk(action)` |
+| `@/routes/envelopes/document`     | `store(envelope)`, `destroy(envelope)`, `status(envelope)`, `page({envelope,page})` → `envelopes.document.*`                                                                                                                                                         |
+| `@/routes/envelopes/fields`       | `sync(envelope)` → `envelopes.fields.sync`                                                                                                                                                                                                                           |
+| `@/routes/envelopes/recipients`   | `sync(envelope)` → `envelopes.recipients.sync`; `resend({envelope,recipient})`; `update({envelope,recipient})`                                                                                                                                                       |
+| `@/routes/folders`                | `store` → `folders.store`                                                                                                                                                                                                                                            |
+| `@/routes/recipients`             | `index`, `exportMethod` → `recipients.export`, `resend_pending` → `recipients.resend_pending`                                                                                                                                                                        |
+| `@/routes/templates`              | `index` → `templates.index`                                                                                                                                                                                                                                          |
+| `@/routes/integrations`           | `index` → `integrations.index`                                                                                                                                                                                                                                       |
+| `@/routes/members`                | `index`, `update(membership)`, `status(membership)`, `destroy(membership)`, `transfer_ownership(membership)`                                                                                                                                                         |
+| `@/routes/invitations`            | `store`, `resend(invitation)`, `destroy(invitation)`, `accept(token)`; `@/routes/invitations/accept` → `store(token)` → `invitations.accept.store`                                                                                                                   |
+| `@/routes/settings`               | `general`, `signing`, `notifications` → `settings.general                                                                                                                                                                                                            | signing                                                         | notifications` |
+| `@/routes/settings/organization`  | `update` → `settings.organization.update`, `destroy` → `settings.organization.destroy` (POST solicita; DELETE cancela)                                                                                                                                               |
+| `@/routes/settings/security`      | `update` → `settings.security.update`                                                                                                                                                                                                                                |
+| `@/routes/settings/signing`       | `update` → `settings.signing.update`                                                                                                                                                                                                                                 |
+| `@/routes/settings/notifications` | `update` → `settings.notifications.update`                                                                                                                                                                                                                           |
+| `@/routes/billing`                | `index`, `checkout`, `cancel`, `resume` → `billing.index                                                                                                                                                                                                             | checkout                                                        | cancel         | resume`                                                                                                                 |
+| `@/routes/plans`                  | `index` → `plans.index`                                                                                                                                                                                                                                              |
+| `@/routes/organizations`          | `store` → `organizations.store`, `switchMethod(organization)` → `organizations.switch`                                                                                                                                                                               |
+| `@/routes/legal`                  | `terms`, `privacy` → `legal.terms                                                                                                                                                                                                                                    | privacy`                                                        |
+| `@/routes/verify`                 | `index`, `show(code)` → `verify.index                                                                                                                                                                                                                                | show`                                                           |
+| `@/routes/admin/organizations`    | `index`, `show(organization)`, `exportMethod` → `admin.organizations.index                                                                                                                                                                                           | show                                                            | export`        |
+| `@/routes/admin/billing           | users                                                                                                                                                                                                                                                                | audit                                                           | settings`      | `index` → `admin.billing.index`, `admin.users.index`, `admin.audit.index`, `admin.settings.index` (placeholders Fase 2) |
 
 ## Convenções
 
@@ -162,12 +174,222 @@ Paleta em `resources/css/app.css` (`:root` + `@theme inline`): `--primary #1257c
 
 Tipografia: Exo 2 (400–800, normal e itálico) e Caveat (600) via `bunny()` em `vite.config.ts` — ambas servidas localmente no build (sem chamadas ao Google Fonts). Base 14px. Caveat responde por `--font-hand` / `font-hand` (assinatura manuscrita: hero do login, pad "Digitar", campo assinado no PDF) e é carregada sem `preload`, com `font-display: swap`, por aparecer em poucas telas. DESIGN_SYSTEM §1.2 usa só o peso 600 — é o mesmo recorte do mock, então o elemento não precisa declarar `font-weight`.
 
+## Visualizador de PDF e editor de campos
+
+Telas envolvidas: `pages/envelopes/wizard.tsx` (passo 3), `pages/envelopes/show.tsx` (pré-visualização somente leitura) e, adiante, a página pública do signatário.
+
+### Componentes
+
+| Arquivo                                       | Papel                                                                                                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/pdf.ts`                                  | Carrega o PDF.js sob demanda, configura o worker, baixa os bytes pela rota autorizada, traduz erros para PT-BR e renderiza uma página no `<canvas>`.                            |
+| `lib/geometry.ts`                             | Funções **puras** de geometria: normalizado ↔ pixels, `clampRect`, `moveRect`, `resizeRect`, `snapRect`, `rectAroundPoint`. Nenhum componente faz conta de coordenada por fora. |
+| `components/pdf/use-pdf-document.ts`          | Hook `usePdfDocument(url)` → `{ document, pageCount, status, error, reload }`. Uma instância por URL; destrói worker e cache ao trocar/desmontar.                               |
+| `components/pdf/pdf-viewer.tsx`               | Card com barra (páginas, zoom, slot à direita), página centralizada sobre `bg-accent`, slot `overlay(size)` e estados de carregamento/erro/processamento.                       |
+| `components/pdf/pdf-page-rail.tsx`            | Rail de miniaturas 72px renderizadas **no cliente**, com página atual e dot azul por página que tem campos.                                                                     |
+| `components/pdf/pdf-zoom-controls.tsx`        | `−` / `100%` / `+`; níveis 50–200 %, clique no valor volta para "ajustar à largura".                                                                                            |
+| `components/envelopes/field-layer.tsx`        | Camada sobre o canvas: arrastar, redimensionar, selecionar, excluir, duplicar, grade opcional e soltar tipos vindos da paleta.                                                  |
+| `components/envelopes/field-box.tsx`          | Uma caixa de campo (variantes `editor`, `pending`, `signed`) com tag flutuante e alças nos quatro cantos.                                                                       |
+| `components/envelopes/field-types.ts`         | Paleta de tipos, ícones, tamanhos padrão, placeholders, formatos de data e tamanhos de fonte.                                                                                   |
+| `components/envelopes/recipient-colors.ts`    | Cor por signatário (azul, âmbar, verde, cinza) — as mesmas do mock, aplicadas como estilo inline por depender do índice em tempo de execução.                                   |
+| `components/envelopes/document-dropzone.tsx`  | Dropzone com validação de tipo e tamanho **antes** do upload (`validateUploadFile`).                                                                                            |
+| `components/envelopes/use-wizard-autosave.ts` | Autosave com debounce por grupo (`metadata`, `recipients`, `fields`) + `flush()`.                                                                                               |
+| `components/envelopes/wizard-step-*.tsx`      | Os quatro passos do wizard.                                                                                                                                                     |
+
+### Convenção de coordenadas (contrato com o backend)
+
+`x`, `y`, `w`, `h` são frações em `[0, 1]` relativas ao **CropBox exibido** da página, origem no canto **superior esquerdo**, **já considerando a rotação** — ou seja, exatamente as coordenadas do canvas do PDF.js divididas pelas dimensões renderizadas em pixels CSS:
+
+```
+x = left_px / rendered_width_px      w = width_px  / rendered_width_px
+y = top_px  / rendered_height_px     h = height_px / rendered_height_px
+```
+
+Como o PDF.js já aplica a rotação ao montar o `viewport`, não há inversão de eixo Y nem correção de ângulo no front. O navegador **não** envia dimensões de página: o backend revalida `0 ≤ x`, `0 ≤ y`, `x + w ≤ 1`, `y + h ≤ 1` e os tamanhos mínimos contra a versão do documento que ele carregou (`arquitetura.md` §3.1, tabela `signing_fields`). Os valores são arredondados em 6 casas (`DECIMAL(9,6)`) e o mínimo é 2 % da largura por 1,2 % da altura. Consequência prática verificada: a posição de um campo é idêntica em 50 %, 100 % e 200 % de zoom.
+
+### Como o PDF.js é carregado
+
+- `pdfjs-dist` entra por `import()` dinâmico dentro de `loadPdfjs()` — fica num chunk próprio (~430 kB), fora do bundle das telas que não mostram documento.
+- O worker vem de `new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url)`. O Vite resolve o pacote e emite o arquivo em `public/build/assets/pdf.worker.min-*.mjs`; a CSP já libera `worker-src 'self' blob:`. Como o PDF.js sempre cria um _module worker_, o servidor precisa entregar `.mjs` com `Content-Type: text/javascript` (nginx: `types { text/javascript mjs; }`).
+- O PDF **não** é baixado pelo PDF.js: `fetchPdfBytes` faz `fetch(url, { credentials: 'same-origin' })` na rota autorizada, converte o status HTTP em mensagem PT-BR (403 → "Você não tem permissão…", 404 → "O arquivo não está mais disponível.", 409 → "ainda está sendo processado") e só então entrega os bytes. `PasswordException` e `InvalidPDFException` viram mensagens próprias.
+- O canvas usa a densidade da tela limitada a 2× (`devicePixelRatioCapped`); o tamanho **CSS** é o que a camada de campos enxerga.
+
+### Estados do upload e do processamento
+
+`document.processing.status` (`DocumentProcessingStatus`) governa a interface do passo 1 e do visualizador:
+
+| Estado                  | Passo 1                                                       | Visualizador                        |
+| ----------------------- | ------------------------------------------------------------- | ----------------------------------- |
+| (sem arquivo)           | dropzone                                                      | "Nenhum arquivo enviado ainda."     |
+| enviando                | barra de progresso (`onProgress` do Inertia, `forceFormData`) | —                                   |
+| `uploaded`/`converting` | linha do arquivo com spinner + "Convertendo…"; polling de 3 s | "Convertendo o arquivo para PDF"    |
+| `ready`                 | "Pronto" em verde, nome · tamanho · páginas                   | página renderizada                  |
+| `failed`                | linha vermelha + "Remova-o e envie um PDF válido."            | "Falha ao processar o arquivo"      |
+| `blocked`               | linha vermelha explicando senha/assinatura existente          | "Arquivo bloqueado para preparação" |
+
+O polling é um `router.reload({ only: ['document', 'completeness', 'envelope'] })` a cada 3 s enquanto o estado for `uploaded` ou `converting`.
+
+### Interação e acessibilidade
+
+`Tab` percorre os campos; setas movem 0,5 % (2 % com `Ctrl`/`⌘`); `Shift` + setas redimensionam pelo canto inferior direito; `Delete`/`Backspace` remove; `Ctrl`/`⌘` + `D` duplica; `Esc` limpa a seleção. Cada caixa tem `aria-label` com o signatário, o tipo e a posição em porcentagem. A dropzone é um `role="button"` que responde a `Enter`/espaço.
+
+### Autosave
+
+`useWizardAutosave` agenda por chave com 800 ms de debounce: `metadata` → `PATCH envelopes.update`, `recipients` → `PUT envelopes.recipients.sync`, `fields` → `PUT envelopes.fields.sync`. Todos usam `preserveState` para não descartar a edição em andamento; o `client_id` viaja nos dois sentidos para que o front adote os ULIDs recém-criados sem perder o que o usuário digitou. O indicador "Rascunho salvo às HH:mm" / "Salvando…" fica no topbar via `setLayoutProps`.
+
+## Página pública do signatário (`pages/sign/show.tsx`)
+
+Uma única página Inertia cobre as oito telas do contrato (`ROUTES §2.18` e `§3`;
+`DESIGN §6.12`), escolhidas pela prop `screen`. O layout é o `SignerLayout`
+(`sender`, `documentTitle`, `step`, `privacyUrl`, `termsUrl`), **mobile-first**:
+no celular o cabeçalho guarda só a organização e o título do documento, o
+stepper vai para uma faixa própria abaixo e as duas colunas viram uma só; o
+stepper sobe para o cabeçalho a partir de `lg`. Nenhum recurso de terceiro é
+carregado nesta página — as fontes vêm do próprio build.
+
+### Telas e props consumidas
+
+| `screen`                        | O que a tela mostra                                                                                      | Props usadas além de `sender` / `envelope` / `recipient`                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `identify`                      | `OtpCard` + documento bloqueado (`FileLock2`) — o PDF só existe depois do OTP                            | `otp`, `privacy`, `limits`, `legal`, `errors.code`/`errors.otp`                                                                  |
+| `sign`                          | documento com campos clicáveis, captura de assinatura/rubrica, campos a preencher, aviso, aceite, recusa | `document`, `my_fields`, `other_fields`, `others`, `signature_options`, `consent`, `privacy`, `authorization`, `limits`, `legal` |
+| `completed`                     | `ReceiptCard` (comprovante) + participantes                                                              | `receipt`, `others`                                                                                                              |
+| `already_signed_pending_others` | mesmo comprovante, com "Aguardando N signatário"                                                         | `receipt`, `others`                                                                                                              |
+| `finalizing`                    | mesmo comprovante, "Todos os participantes assinaram; o arquivo final está sendo preparado"              | `receipt`, `others`                                                                                                              |
+| `refused`                       | "Assinatura recusada" + data e motivo                                                                    | `refusal`                                                                                                                        |
+| `expired`                       | "Prazo encerrado" (texto exato de ROUTES §3.4)                                                           | `envelope.expires_at`, `sender.user_name`                                                                                        |
+| `canceled`                      | "Documento cancelado"                                                                                    | `sender.organization_name`                                                                                                       |
+| `invalid`                       | "Link inválido"                                                                                          | nenhuma (é o único caso em que `envelope` e `recipient` chegam `null`)                                                           |
+
+Props que a página consome além do contrato de `ROUTES §2.18` — todas já
+existem em `App\Services\Signing\SignerPageProps`:
+
+- **`consent`** `{ version, checkbox_label, statement, completion_notice }` —
+  textos de `declaracao-de-aceite.md` §2, §3 e §7 já resolvidos. `consent_text`
+  continua existindo e repete `statement`; a página usa `consent.statement` e
+  cai para `consent_text` se ele faltar.
+- **`privacy`** `{ version, summary, notice }` — aviso ao signatário com as
+  variáveis da Operadora substituídas. Sem ele a página exibe a linha-resumo
+  local e um link para a política.
+- **`authorization`** `{ token, expires_at }` — token de autorização final,
+  **obrigatório** em `sign.complete` (`authorization` no payload). Sem ele o
+  servidor responde "A tela expirou. Recarregue a página antes de assinar."
+- **`limits`** — `otp_length`, `otp_ttl_minutes`, `otp_max_attempts`,
+  `max_text_length`, `signature_image_max_kb`, `refusal_reason {min,max}`,
+  `typed_name {min,max}`. Os componentes recebem esses números por prop em vez
+  de repetir constantes.
+- **`receipt`** — `signed_at`, `verification_code`, `document_sha256`,
+  `signed_sha256`, `ip` (já ajustado por `evidence_show_ip`), `auth_label`,
+  `terms_version`, `download_url` (**relatório de evidências**),
+  `final_pdf_url` (**PDF final**), `final_pdf_available`, `pending_others` e
+  `completion_notice`.
+- **`signature_options.certificate`** — sempre `false` (certificado do
+  signatário é Fase 2); a página não mostra esse modo.
+- **`my_fields[]`** traz ainda `auto`, `server_filled` e `options`.
+
+A página **não** deduz o modo de conclusão: ela imprime o
+`completion_notice` que o servidor manda. É esse texto que diz "aceite
+eletrônico com evidências" quando não há certificado da operadora ativo.
+
+### Fluxo do aceite
+
+1. **Confirmar identidade.** O código **não** é disparado sozinho: o signatário
+   clica em "Receber código por e-mail" (`POST sign.otp.send`). É o que a
+   arquitetura §4.1 descreve e o que o aviso de privacidade promete ("não
+   solicitar o código não gera nenhum aceite") — divergência deliberada em
+   relação a ROUTES §3.2, que sugeria envio automático na primeira renderização.
+   O campo de 6 dígitos (`InputOTP`, DESIGN §4.21) envia ao completar e também
+   pelo botão; o reenvio tem contagem regressiva a partir de
+   `otp.resend_available_at` e as tentativas restantes aparecem abaixo de 3.
+2. **Assinar.** `SignerDocument` abre o PDF uma única vez
+   (`usePdfDocument(sign.document)`) e o compartilha com o diálogo "Ampliar".
+   `SignerFieldLayer` desenha as caixas: as do signatário são `<button>`
+   (tracejado azul "Clique para assinar aqui" → sólido verde quando
+   preenchidas), as dos demais são estáticas ("assina depois de você" /
+   "Aceite registrado"). "Próximo campo" na barra pula para o próximo
+   obrigatório pendente, troca de página e foca o controle correspondente.
+3. **Preencher.** Texto e marcação são editados no card lateral
+   (`FieldChecklist`), não dentro da caixa sobre a página: digitar num
+   retângulo de 2 cm é inviável no celular. Clicar no campo do documento
+   destaca e foca a linha correspondente; `checkbox` alterna direto no clique.
+   `name` e `date` são carimbados pelo servidor e aparecem como somente leitura.
+4. **Aceitar.** `ConsentBox` — caixa **desmarcada por padrão**, nunca marcada
+   por rolagem, com o rótulo da §2 ao lado e a declaração completa da §3 logo
+   abaixo (com rolagem própria, nunca escondida atrás de um link). O botão
+   "Assinar documento" só habilita com a caixa marcada **e** nenhum campo
+   obrigatório pendente.
+5. **Recusar.** `RefusalDialog` com motivo obrigatório (10–500 caracteres) →
+   `POST sign.refuse`. O diálogo avisa que a recusa encerra o documento.
+
+`POST sign.complete` envia
+`{ authorization, signature, initials, fields: { [field_id]: string | boolean }, consent: true }`.
+Cada imagem viaja como
+`{ method: 'draw' | 'type' | 'upload', kind: 'drawn' | 'typed' | 'uploaded', image_base64, text, font }`:
+`method` é o nome que o `StoreAcceptanceRequest` valida e `kind` é o enum
+canônico (RECONCILIACAO §2), enviado junto para não depender de um acerto de
+nomenclatura. `image_base64` é base64 **puro** (sem o prefixo
+`data:image/png;base64,`) e `font` só pode ser uma das famílias de
+`RecordAcceptance::FONTS`.
+
+Todos os POSTs desta página usam `preserveState: true`. Sem isso o Inertia
+remonta o componente a cada resposta (o padrão para POST) e o signatário perde
+a assinatura desenhada quando o servidor recusa o aceite — foi um bug real,
+reproduzido no navegador contra o backend e corrigido aqui.
+
+### Captura da representação visual (`components/signature/`)
+
+Três modos, todos produzindo **PNG com fundo transparente** recortado no traço:
+
+| Modo          | Como funciona                                                                                                                                                                                                                                                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desenhar      | `signature_pad@5` em import dinâmico (chunk próprio de ~15 kB), fundo transparente, traço `#0b1f42`, linha-base e dica do DESIGN §4.20, "Limpar" e "Desfazer" (remove o último traço). O canvas usa a densidade da tela limitada a 2× e reescala os traços quando o contêiner muda de largura (girar o celular). `touch-action: none` para o gesto não rolar a página. |
+| Digitar       | Nome em fonte manuscrita com três estilos (`caveat`, `caveat_slanted`, `serif`). O PNG é gerado por `fillText` num canvas depois de `document.fonts.load`, para não cair numa família genérica. Só a Caveat está no build; famílias oferecidas pelo servidor que não existem localmente são ignoradas em vez de deixar o signatário sem opção.                         |
+| Enviar imagem | PNG/JPG até 2 MB, **validados antes de qualquer leitura** (tipo pelo MIME e tamanho). Opção "Remover o fundo claro da foto" (ligada) transforma o papel branco em transparência por limiar de luminância, com meio-tom para não deixar borda dura.                                                                                                                     |
+
+`signature-image.ts` concentra a normalização: recorte pelos pixels opacos,
+margem de 8 px, redução para 1200×400 (assinatura) ou 400×200 (rubrica) e
+`toDataURL('image/png')`. Antes de enviar, a página confere o tamanho contra os
+300 KB do contrato e pede um traço mais simples se estourar. `InitialsCapture` é
+o mesmo motor com moldura menor e as iniciais do nome como sugestão.
+
+### Vocabulário
+
+A imagem é sempre "representação visual" / "sua assinatura", nunca "assinatura
+digital". Um campo de outro participante já concluído diz **"Aceite
+registrado"**. O comprovante usa o texto da `declaracao-de-aceite.md` §4 (data
+local **e** UTC, autenticação, código de verificação) e o selo de conclusão sai
+da §7 daquele documento: sem certificado da operadora, "Concluído · aceite
+eletrônico com evidências".
+
+## Detalhe do documento — abas Signatários e Trilha
+
+- **Signatários**: cabeçalho "Ordem de assinatura: sequencial · Lembretes:
+  manuais" (lembretes automáticos são Fase 2). Cada card traz avatar com o tom
+  do status, papel e posição na ordem, chips de canal e de autenticação, badge
+  de status e um rodapé com a nota do estado. Ações por estado: `notified` →
+  "Reenviar"; `viewed` → "Lembrar"; `pending` aguardando a vez no sequencial →
+  botão desabilitado com a explicação (não existe link emitido ainda,
+  RECONCILIACAO Q11); `signed` → "Ver evidências". "Editar" abre um diálogo com
+  nome e e-mail (`PATCH envelopes.recipients.update`) que avisa, ao alterar o
+  e-mail, que o link anterior é revogado na hora.
+- **Trilha**: cabeçalho do DESIGN §6.4 com atalho "Relatório PDF" (desabilitado
+  enquanto não há evidência gerada) e `Timeline markers="icon" showNotes`. O
+  marcador vira o ícone do tipo de evento, mantendo o tom `ok|info|warn` do
+  backend; a página de evidências continua numerada, que é o que se cita num
+  dossiê impresso. `AUDIT_EVENT_NOTES` acrescenta a nota que impede a leitura
+  errada: `invitation.opened` é **"abertura detectada — registra o acesso ao
+  link, não comprova leitura"**, `acceptance.recorded` é aceite eletrônico com
+  evidências e `envelope.signed_company_a1` identifica a operadora, não a pessoa.
+  A mesma distinção aparece na nota do card do signatário ("Abertura detectada
+  em …" em vez de "Visualizou em …").
+
 ## Responsividade
 
 - Sidebar: `SidebarProvider` + `collapsible="offcanvas"`; abaixo de `md` (768px) vira `Sheet`; estado persistido no cookie `sidebar_state` (prop compartilhada `sidebarOpen`).
 - Topbar: breadcrumb pai oculto `< sm`; busca ⌘K oculta `< md`; pill "Acesso restrito" só `≥ lg`.
 - Tabelas: `DataTable` envolve o grid em `overflow-x-auto` com `minWidth`.
 - Rails de 200px (pastas, configurações) somem abaixo de `md` e viram `FilterChip`/`Select`.
+- Editor de campos: o rail de páginas vira uma faixa horizontal rolável abaixo de `md` e o passo 3 mostra um aviso ("A preparação dos campos funciona melhor no computador") **sem bloquear** — leitura, navegação entre páginas e ajuste dos campos existentes continuam funcionando no celular.
 - Auth: aside navy `hidden lg:flex`; formulário `max-w-[400px]`; logo aparece acima do formulário `< lg`.
 
 ## Divergências deliberadas em relação aos mocks
@@ -185,6 +407,13 @@ Tipografia: Exo 2 (400–800, normal e itálico) e Caveat (600) via `bunny()` em
 | Cobrança         | cartão salvo "Alterar", NF-e                           | método do último pagamento (leitura); recibo PDF interno  | Checkout Pro sem cartão salvo; NF-e = Fase 2                          |
 | Admin › Clientes | "Acessar como", "Nova conta", filtro Segmento          | botão desabilitado com tooltip; ocultos                   | RECONCILIACAO §5                                                      |
 | Notificações     | coluna WhatsApp ativa                                  | coluna presente, desabilitada, badge "Fase 2"             | ROUTES §1.2                                                           |
+| Página pública   | OTP por SMS + selfie de verificação                    | código por e-mail; selfie não aparece                     | RECONCILIACAO §6 (selfie/SMS = Fase 2)                                |
+| Página pública   | modo "Certificado" (ICP-Brasil) na captura             | "Enviar imagem" no lugar                                  | RECONCILIACAO §5 (certificado do signatário = Fase 2)                 |
+| Página pública   | caixa de aceite já marcada                             | desmarcada, com a declaração completa visível abaixo      | `declaracao-de-aceite.md` §2 (manifestação ativa)                     |
+| Página pública   | OTP disparado ao abrir a tela (ROUTES §3.2)            | botão "Receber código por e-mail"                         | arquitetura §4.1 + aviso de privacidade ao signatário                 |
+| Página pública   | "Você receberá o PDF final por WhatsApp"               | "por e-mail"                                              | Fase 1 usa só e-mail (RECONCILIACAO §2)                               |
+| Página pública   | "Documento assinado" no comprovante                    | "Documento concluído" + selo do modo real de conclusão    | arquitetura §2 (não simular assinatura criptográfica)                 |
+| Detalhe › Trilha | marcador numerado                                      | ícone por tipo de evento (evidências mantém o número)     | pedido do incremento 3; DESIGN §4.18 mantido na página de evidências  |
 
 ### Props de página × props compartilhadas (integração I1)
 

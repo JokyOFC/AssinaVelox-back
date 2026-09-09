@@ -1,7 +1,34 @@
+import {
+    Ban,
+    CalendarX2,
+    CheckCheck,
+    CircleAlert,
+    Copy,
+    Eye,
+    FilePlus2,
+    FileSignature,
+    FileText,
+    FolderInput,
+    Hourglass,
+    KeyRound,
+    Loader2,
+    LogIn,
+    Mail,
+    MailCheck,
+    PenLine,
+    Send,
+    ShieldCheck,
+    Trash2,
+    Upload,
+    Users,
+    Wallet,
+    XCircle,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { AuditEvent, AuditEventKind } from '@/types';
+import type { AuditEvent, AuditEventKind, AuditEventType } from '@/types';
 
 const KIND_CLASSES: Record<AuditEventKind, string> = {
     info: 'bg-primary-soft text-primary',
@@ -10,21 +37,88 @@ const KIND_CLASSES: Record<AuditEventKind, string> = {
 };
 
 /**
- * Trilha de auditoria (DESIGN §4.18): marcador numerado 20px colorido por
- * `kind`, conector vertical, título 13.5px e meta 12px.
+ * Ícone por tipo de evento (RECONCILIACAO §3). O tom (`kind`) continua vindo
+ * do backend; o ícone só torna a leitura mais rápida.
+ */
+export const AUDIT_EVENT_ICONS: Partial<Record<AuditEventType, LucideIcon>> = {
+    'envelope.created': FilePlus2,
+    'envelope.updated': PenLine,
+    'document.uploaded': Upload,
+    'document.conversion_started': Loader2,
+    'document.converted': FileText,
+    'document.processing_failed': CircleAlert,
+    'document.blocked': Ban,
+    'document.removed': Trash2,
+    'fields.updated': PenLine,
+    'recipients.updated': Users,
+    'envelope.sent': Send,
+    'invitation.sent': Mail,
+    'invitation.resent': MailCheck,
+    'invitation.opened': Eye,
+    'challenge.sent': KeyRound,
+    'challenge.verified': ShieldCheck,
+    'challenge.failed': CircleAlert,
+    'session.started': LogIn,
+    'acceptance.recorded': FileSignature,
+    'recipient.refused': XCircle,
+    'envelope.refused': XCircle,
+    'envelope.expired': CalendarX2,
+    'envelope.canceled': Ban,
+    'envelope.finalizing': Hourglass,
+    'envelope.consolidated': FileText,
+    'envelope.evidence_generated': ShieldCheck,
+    'envelope.signed_company_a1': ShieldCheck,
+    'envelope.completed': CheckCheck,
+    'envelope.finalization_failed': CircleAlert,
+    'envelope.downloaded': FileText,
+    'envelope.moved': FolderInput,
+    'envelope.duplicated': Copy,
+    'plan.consumption_reserved': Wallet,
+    'plan.consumption_committed': Wallet,
+    'plan.consumption_released': Wallet,
+};
+
+/**
+ * Notas que evitam leitura equivocada de um evento. "Abertura detectada" não é
+ * "leitura": o registro é do acesso ao link, nada além disso (arquitetura §4.1).
+ */
+export const AUDIT_EVENT_NOTES: Partial<Record<AuditEventType, string>> = {
+    'invitation.opened':
+        'Abertura detectada — registra o acesso ao link, não comprova leitura.',
+    'acceptance.recorded':
+        'Aceite eletrônico com evidências (data, IP, navegador, código confirmado por e-mail).',
+    'envelope.signed_company_a1':
+        'Assinatura criptográfica da operadora — identifica a AssinaVelox, não é a assinatura pessoal do participante.',
+};
+
+export type TimelineEvent = Pick<
+    AuditEvent,
+    'id' | 'kind' | 'title' | 'meta' | 'occurred_at'
+> &
+    Partial<Pick<AuditEvent, 'type'>>;
+
+/**
+ * Trilha de auditoria (DESIGN §4.18): marcador 20px colorido por `kind`,
+ * conector vertical, título 13.5px e meta 12px.
+ *
+ * `markers="icon"` troca o número sequencial pelo ícone do tipo de evento —
+ * usado no detalhe do documento. A página de evidências mantém a numeração,
+ * que é o que se cita num dossiê impresso.
  */
 export function Timeline({
     events,
     footer,
     emptyText = 'Nenhum evento registrado ainda.',
+    markers = 'number',
+    showNotes = false,
     className,
 }: {
-    events: Pick<
-        AuditEvent,
-        'id' | 'kind' | 'title' | 'meta' | 'occurred_at'
-    >[];
+    events: TimelineEvent[];
     footer?: ReactNode;
     emptyText?: string;
+    markers?: 'number' | 'icon';
+    /** Exibe a nota explicativa do tipo (ver `AUDIT_EVENT_NOTES`). */
+    showNotes?: boolean;
     className?: string;
 }) {
     if (events.length === 0) {
@@ -40,6 +134,13 @@ export function Timeline({
             <ol className="flex flex-col">
                 {events.map((event, index) => {
                     const last = index === events.length - 1;
+                    const Icon = event.type
+                        ? AUDIT_EVENT_ICONS[event.type]
+                        : undefined;
+                    const note =
+                        showNotes && event.type
+                            ? AUDIT_EVENT_NOTES[event.type]
+                            : undefined;
 
                     return (
                         <li
@@ -53,7 +154,11 @@ export function Timeline({
                                         KIND_CLASSES[event.kind],
                                     )}
                                 >
-                                    {index + 1}
+                                    {markers === 'icon' && Icon ? (
+                                        <Icon className="size-3" />
+                                    ) : (
+                                        index + 1
+                                    )}
                                 </span>
                                 {!last && (
                                     <span className="bg-accent my-1 w-0.5 flex-1" />
@@ -67,6 +172,11 @@ export function Timeline({
                                     {formatDateTime(event.occurred_at)}
                                     {event.meta && ` · ${event.meta}`}
                                 </p>
+                                {note && (
+                                    <p className="text-muted-foreground mt-1 text-[11.5px] leading-[1.4] italic">
+                                        {note}
+                                    </p>
+                                )}
                             </div>
                         </li>
                     );

@@ -6,11 +6,16 @@ use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Envelopes\UpdateEnvelopeRequest;
 use App\Http\Resources\AuditEventResource;
+use App\Http\Resources\DocumentResource;
 use App\Http\Resources\EnvelopeDetailResource;
 use App\Http\Resources\EnvelopeResource;
+use App\Http\Resources\EnvelopeWizardResource;
 use App\Http\Resources\FolderResource;
 use App\Http\Resources\RecipientResource;
+use App\Http\Resources\RecipientWizardResource;
+use App\Http\Resources\SigningFieldResource;
 use App\Http\Resources\UserRefResource;
 use App\Models\AuditEvent;
 use App\Models\Envelope;
@@ -19,6 +24,13 @@ use App\Models\Membership;
 use App\Models\Recipient;
 use App\Models\SigningField;
 use App\Models\User;
+use App\Services\Envelopes\DuplicateEnvelope;
+use App\Services\Envelopes\EnvelopeAudit;
+use App\Services\Envelopes\EnvelopeReadiness;
+use App\Services\Envelopes\FieldGeometry;
+use App\Services\Envelopes\FieldSync;
+use App\Services\Envelopes\PageBox;
+use App\Services\Envelopes\Sending\CancelEnvelope;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Support\CurrentOrganization;
 use App\Support\OrganizationSettings;
@@ -32,8 +44,11 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Documentos (envelopes). `index` e `show` são reais (ROUTES §2.5 / §2.7); as demais ações
- * são esqueletos com o contrato de props/redirect correto — // TODO(Wave B).
+ * Documentos (envelopes): listagem (ROUTES §2.5), detalhe (§2.7) e o wizard de preparo
+ * (§2.6 — create/edit/update/duplicate/move/cancel/destroy).
+ *
+ * A prontidão para envio é recalculada a cada alteração por
+ * `App\Services\Envelopes\EnvelopeReadiness`; o envio em si é do `EnvelopeSendController`.
  */
 class EnvelopeController extends Controller
 {
@@ -163,27 +178,12 @@ class EnvelopeController extends Controller
             ->where('envelope_id', $envelope->getKey())
             ->orderBy('page')
             ->orderBy('sort_order')
-            ->get()
-            ->map(fn (SigningField $field): array => [
-                'id' => $field->ulid,
-                'recipient_id' => $field->recipient->ulid ?? '',
-                'type' => $field->type->value,
-                'page' => (int) $field->page,
-                'x' => (float) $field->x,
-                'y' => (float) $field->y,
-                'w' => (float) $field->width,
-                'h' => (float) $field->height,
-                'required' => (bool) $field->required,
-                'label' => $field->label,
-                'placeholder' => $field->options['placeholder'] ?? null,
-                'value' => $field->relationLoaded('value') ? ($field->value->value_text ?? null) : null,
-                'signed' => $field->recipient?->status === RecipientStatus::Signed,
-            ]);
+            ->get();
 
         return Inertia::render('envelopes/show', [
             'envelope' => EnvelopeDetailResource::make($envelope)->resolve($request),
             'recipients' => $recipients->all(),
-            'fields' => $fields->all(),
+            'fields' => SigningFieldResource::collection($fields)->resolve($request),
             'events' => AuditEventResource::collection($events)->resolve($request),
             'folders' => FolderResource::collection(Folder::query()->whereNull('parent_id')->orderBy('name')->get())->resolve($request),
             'sent' => filter_var($validated['sent'] ?? false, FILTER_VALIDATE_BOOL),
@@ -191,11 +191,11 @@ class EnvelopeController extends Controller
         ]);
     }
 
-    // -- Esqueletos (Wave B) -----------------------------------------------------------
+    // -- Wizard e ações do documento ---------------------------------------------------
 
     /**
-     * Nova solicitação: cria um Envelope(draft) vazio e redireciona para o wizard.
-     * // TODO(Wave B): título padrão, eventos de auditoria, autosave.
+     * Nova solicitação: cria um Envelope(draft) vazio com os padrões da organização e
+     * redireciona para o wizard (garante autosave e ID desde o primeiro clique).
      */
     public function create(Request $request): RedirectResponse
     {
@@ -218,11 +218,13 @@ class EnvelopeController extends Controller
             ],
         ]);
 
+        EnvelopeAudit::record($envelope, AuditEventType::EnvelopeCreated);
+
         return redirect()->route('envelopes.edit', ['envelope' => $envelope->ulid, 'step' => 1]);
     }
 
     /**
-     * Wizard (ROUTES §2.6) — props no formato do contrato; documento/campos reais chegam na Wave B.
+     * Wizard (ROUTES §2.6). O passo pedido é rebaixado quando o anterior está incompleto.
      */
     public function edit(Request $request, Envelope $envelope): Response|RedirectResponse
     {
@@ -232,43 +234,30 @@ class EnvelopeController extends Controller
             return redirect()->route('envelopes.show', $envelope);
         }
 
-        $step = (int) $request->integer('step', 1);
-        $step = max(1, min(4, $step));
-
         $organization = CurrentOrganization::instance()->get();
         $settings = OrganizationSettings::of($organization);
         $subscription = $organization->currentSubscription()->with('plan')->first();
-        $envelope->load(['recipients', 'document']);
 
-        // TODO(Wave B): documento processado, campos, completude real e rebaixamento de passo.
+        $envelope->load([
+            'organization', 'folder',
+            'recipients',
+            'document.currentVersion',
+            'fields.recipient',
+        ]);
+
+        $completeness = EnvelopeReadiness::completeness($envelope);
+        $step = $this->wizardStep((int) $request->integer('step', 1), $completeness);
+
         return Inertia::render('envelopes/wizard', [
-            'envelope' => [
-                'id' => $envelope->ulid,
-                'display_code' => $envelope->display_code,
-                'status' => $envelope->status->value,
-                'title' => $envelope->title,
-                'folder_id' => $envelope->folder?->ulid,
-                'expires_in_days' => (int) $envelope->setting('expiration_days', $settings->defaultExpirationDays()),
-                'message' => (string) ($envelope->message ?? ''),
-                'signing_order' => $envelope->signing_order->value,
-                'send_copy_to_all' => (bool) $envelope->setting('send_copy_to_all', false),
-                'initials_on_all_pages' => (bool) $envelope->setting('initials_on_all_pages', false),
-                'updated_at' => $envelope->updated_at?->toIso8601String(),
-            ],
+            'envelope' => EnvelopeWizardResource::make($envelope)->resolve($request),
             'step' => $step,
-            'document' => null,
-            'recipients' => $envelope->recipients->values()->map(fn (Recipient $r, int $i): array => [
-                'id' => $r->ulid,
-                'client_id' => $r->ulid,
-                'name' => $r->name,
-                'email' => $r->email,
-                'role' => '',
-                'order' => (int) $r->order_index,
-                'color_index' => $i % 4,
-                'channel' => 'email',
-                'auth_methods' => ['email_otp'],
-            ])->all(),
-            'fields' => [],
+            'document' => $this->documentProps($request, $envelope),
+            'recipients' => $envelope->recipients->values()
+                ->map(fn (Recipient $recipient, int $index): array => RecipientWizardResource::make($recipient)
+                    ->withColorIndex($index)
+                    ->resolve($request))
+                ->all(),
+            'fields' => SigningFieldResource::collection($envelope->fields)->resolve($request),
             'folders' => FolderResource::collection(Folder::query()->whereNull('parent_id')->orderBy('name')->get())->resolve($request),
             'defaults' => [
                 'expires_in_days' => $settings->defaultExpirationDays(),
@@ -285,42 +274,28 @@ class EnvelopeController extends Controller
             'limits' => [
                 'max_upload_bytes' => (int) config('assinavelox.upload.max_mb', 25) * 1024 * 1024,
                 'accepted_mimes' => (array) config('assinavelox.upload.accepted_mimes', []),
+                'max_fields' => FieldSync::MAX_FIELDS,
+                'max_recipients' => 20,
+                // Mínimos por tipo, em pontos da página exibida: o editor divide pela
+                // dimensão da página para obter a fração (docs/campos-e-geometria.md §3).
+                'field_minimums' => FieldGeometry::minimumsForProps(),
             ],
-            'completeness' => [
-                'document' => $envelope->document?->isReady() ?? false,
-                'recipients' => $envelope->recipients->isNotEmpty(),
-                'fields' => false,
-            ],
+            'completeness' => $completeness,
+            // Pendências em PT-BR para o passo 4 (EnvelopeReadiness).
+            'issues' => EnvelopeReadiness::issues($envelope),
         ]);
     }
 
     /**
-     * PATCH metadados do wizard. // TODO(Wave B): recomputar prontidão, auditoria envelope.updated.
+     * PATCH dos metadados do wizard (autosave). Recalcula a prontidão a cada alteração.
      */
-    public function update(Request $request, Envelope $envelope): RedirectResponse
+    public function update(UpdateEnvelopeRequest $request, Envelope $envelope): RedirectResponse
     {
-        Gate::authorize('update', $envelope);
-
-        $validated = $request->validate([
-            'title' => ['sometimes', 'required', 'string', 'min:3', 'max:160'],
-            'folder_id' => ['sometimes', 'nullable', 'string', 'size:26', Rule::exists('folders', 'ulid')->where('organization_id', $envelope->organization_id)],
-            'expires_in_days' => ['sometimes', 'integer', 'min:'.(int) config('assinavelox.expiration_days.min', 1), 'max:'.(int) config('assinavelox.expiration_days.max', 90)],
-            'message' => ['sometimes', 'nullable', 'string', 'max:1000'],
-            'signing_order' => ['sometimes', Rule::in(['sequential', 'parallel'])],
-            'send_copy_to_all' => ['sometimes', 'boolean'],
-        ], [], [
-            'title' => 'título',
-            'folder_id' => 'pasta',
-            'expires_in_days' => 'prazo para assinatura',
-            'message' => 'mensagem',
-            'signing_order' => 'ordem de assinatura',
-            'send_copy_to_all' => 'enviar cópia a todos',
-        ]);
-
         if (! $envelope->status->isDraftLike()) {
             abort(409, 'Ação indisponível no status atual.');
         }
 
+        $validated = $request->validated();
         $settings = $envelope->settings ?? [];
 
         if (array_key_exists('expires_in_days', $validated)) {
@@ -347,11 +322,22 @@ class EnvelopeController extends Controller
 
         $envelope->forceFill($attributes)->save();
 
+        EnvelopeAudit::record($envelope, AuditEventType::EnvelopeUpdated, [
+            'changed' => array_keys($validated),
+        ]);
+
+        EnvelopeReadiness::refresh($envelope);
+
         return back();
     }
 
-    /** // TODO(Wave B): notificar pendentes, revogar links, auditoria envelope.canceled. */
-    public function cancel(Request $request, Envelope $envelope): RedirectResponse
+    /**
+     * Cancela o documento. A rotina completa (transição sob lock, pendentes para
+     * `canceled`, revogação dos links, aviso a quem foi convidado e liberação do consumo
+     * do plano quando ninguém assinou) fica em
+     * `App\Services\Envelopes\Sending\CancelEnvelope`.
+     */
+    public function cancel(Request $request, Envelope $envelope, CancelEnvelope $cancellation): RedirectResponse
     {
         Gate::authorize('cancel', $envelope);
 
@@ -361,16 +347,21 @@ class EnvelopeController extends Controller
             return back()->with('error', 'Ação indisponível no status atual.');
         }
 
-        $envelope->transitionTo(EnvelopeStatus::Canceled);
-        $settings = $envelope->settings ?? [];
-        $settings['cancel_reason'] = $validated['reason'] ?? null;
-        $envelope->settings = $settings;
-        $envelope->save();
+        $result = $cancellation->handle($envelope, $validated['reason'] ?? null);
 
-        return back()->with('success', 'Documento cancelado.');
+        if (! $result['canceled']) {
+            return back()->with('error', 'Ação indisponível no status atual.');
+        }
+
+        return back()->with('success', $result['notified'] > 0
+            ? 'Documento cancelado. '.$result['notified'].' signatário(s) avisado(s).'
+            : 'Documento cancelado.');
     }
 
-    /** // TODO(Wave B): remover arquivos do disco `documents`. */
+    /**
+     * Exclui o rascunho (soft delete). Os bytes no disco `documents` continuam até a
+     * rotina de retenção — versões são imutáveis e podem ser referenciadas por cópias.
+     */
     public function destroy(Request $request, Envelope $envelope): RedirectResponse
     {
         Gate::authorize('delete', $envelope);
@@ -379,26 +370,21 @@ class EnvelopeController extends Controller
             return back()->with('error', 'Só rascunhos podem ser excluídos.');
         }
 
+        // Sem evento próprio: RECONCILIACAO §3 não define `envelope.deleted` e a trilha do
+        // rascunho continua acessível pelo soft delete.
         $envelope->delete();
 
         return redirect()->route('envelopes.index')->with('success', 'Rascunho excluído.');
     }
 
-    /** // TODO(Wave B): copiar documento original, recipients e campos. */
-    public function duplicate(Request $request, Envelope $envelope): RedirectResponse
+    /**
+     * Duplica em um novo rascunho independente (documento original + signatários + campos).
+     */
+    public function duplicate(Request $request, Envelope $envelope, DuplicateEnvelope $duplicator): RedirectResponse
     {
         Gate::authorize('duplicate', $envelope);
 
-        $copy = Envelope::query()->create([
-            'created_by_user_id' => $request->user()->getKey(),
-            'folder_id' => $envelope->folder_id,
-            'title' => $envelope->title.' (cópia)',
-            'message' => $envelope->message,
-            'status' => EnvelopeStatus::Draft,
-            'signing_order' => $envelope->signing_order,
-            'terms_version' => (string) config('assinavelox.terms_version'),
-            'settings' => $envelope->settings,
-        ]);
+        $copy = $duplicator->handle($envelope, $request->user());
 
         return redirect()->route('envelopes.edit', ['envelope' => $copy->ulid, 'step' => 1])
             ->with('success', 'Documento duplicado como rascunho.');
@@ -416,8 +402,64 @@ class EnvelopeController extends Controller
 
         $envelope->forceFill(['folder_id' => $folder?->getKey()])->save();
 
-        // TODO(Wave B): auditoria envelope.moved.
+        EnvelopeAudit::record($envelope, AuditEventType::EnvelopeMoved, ['folder' => $folder?->ulid]);
+
         return back()->with('success', $folder ? 'Documento movido para '.$folder->name.'.' : 'Documento movido para "Todos".');
+    }
+
+    // -- Props do wizard ---------------------------------------------------------------
+
+    /**
+     * Passo pedido, rebaixado quando um passo anterior está incompleto (ROUTES §2.6).
+     *
+     * @param  array{document: bool, recipients: bool, fields: bool}  $completeness
+     * @return int<1, 4>
+     */
+    protected function wizardStep(int $requested, array $completeness): int
+    {
+        $step = max(1, min(4, $requested));
+
+        if ($step >= 2 && ! $completeness['document']) {
+            return 1;
+        }
+
+        if ($step >= 3 && ! $completeness['recipients']) {
+            return 2;
+        }
+
+        if ($step >= 4 && ! $completeness['fields']) {
+            return 3;
+        }
+
+        return $step;
+    }
+
+    /**
+     * `WizardProps.document` — reaproveita o `DocumentResource` do pipeline documental
+     * (B-DOC) e acrescenta `pages_meta`: a caixa exibida de cada página, que é o que o
+     * editor precisa para converter pixels do canvas em frações [0,1]
+     * (docs/campos-e-geometria.md). As dimensões saem SEMPRE do banco, nunca do navegador.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function documentProps(Request $request, Envelope $envelope): ?array
+    {
+        $document = $envelope->document;
+
+        if ($document === null) {
+            return null;
+        }
+
+        $document->setRelation('envelope', $envelope);
+
+        $version = $document->currentVersion;
+        $pagesMeta = [];
+
+        foreach ($version === null ? [] : ($version->pages_meta ?? []) as $index => $meta) {
+            $pagesMeta[] = ['page' => $index + 1] + PageBox::fromPageMeta($meta)->toArray();
+        }
+
+        return DocumentResource::make($document)->resolve($request) + ['pages_meta' => $pagesMeta];
     }
 
     // -- Helpers -----------------------------------------------------------------------

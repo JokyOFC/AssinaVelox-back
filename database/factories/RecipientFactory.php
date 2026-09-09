@@ -26,6 +26,7 @@ class RecipientFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'phone' => fake()->optional(0.4)->numerify('+55 11 9####-####'),
             'role' => RecipientRole::Signer,
+            'role_label' => null,
             'order_index' => 1,
             'status' => RecipientStatus::Pending,
             'auth_method' => AuthMethod::EmailOtp,

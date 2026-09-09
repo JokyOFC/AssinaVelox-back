@@ -11,6 +11,7 @@ import type {
     AuditEventType,
     AuthMethod,
     DocumentProcessingStatus,
+    DocumentSourceType,
     EnvelopeStatus,
     FieldType,
     InvitationStatus,
@@ -136,8 +137,15 @@ export interface DocumentInfo {
 
 export interface DocumentProcessing {
     status: DocumentProcessingStatus;
+    /** Rótulo PT-BR já pronto (espelho de `DocumentProcessingStatus::label()`). */
+    label: string;
     pages: number | null;
     error: string | null;
+    failure_code: string | null;
+    /** `ready` **e** com versão exibível — é este o gate do editor. */
+    ready: boolean;
+    terminal: boolean;
+    /** Sempre `null`: o pipeline não reporta percentual (docs/preparacao-documental.md §9). */
     progress_pct: number | null;
 }
 
@@ -147,9 +155,78 @@ export interface EnvelopeDocument {
     size_bytes: number;
     mime: string;
     processing: DocumentProcessing;
-    pdf_url: string;
-    page_thumb_url_template: string; // ".../paginas/{page}.png"
-    page_sizes: { page: number; width_pt: number; height_pt: number }[];
+    source_type: DocumentSourceType;
+    /**
+     * `envelopes.document.preview` — transmite a versão **exibível** em
+     * `application/pdf`. `null` enquanto não há versão exibível. O visualizador
+     * faz `fetch` com as credenciais da sessão.
+     */
+    pdf_url: string | null;
+    /** Sempre `null`: as miniaturas são renderizadas no navegador pelo PDF.js. */
+    page_thumb_url_template: string | null;
+    /**
+     * Dimensões **exibidas** (rotação já aplicada) de cada página, em pontos.
+     * Usadas só para converter os tamanhos mínimos de campo; a geometria em si
+     * sai do canvas do PDF.js e é revalidada pelo backend.
+     */
+    page_sizes: {
+        page: number;
+        width_pt: number;
+        height_pt: number;
+        rotation: number;
+    }[];
+    sha256: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Wizard "Nova solicitação" (ROUTES §2.6)
+// ---------------------------------------------------------------------------
+
+export interface WizardRecipient {
+    /** ULID quando já persistido; `null` enquanto é só rascunho no cliente. */
+    id: string | null;
+    /** Chave estável no cliente — liga os campos ao signatário antes do save. */
+    client_id: string;
+    name: string;
+    email: string;
+    role: string;
+    order: number; // 1..n (persistido também no modo paralelo)
+    color_index: number; // paleta de `components/envelopes/recipient-colors`
+    channel: 'email';
+    auth_methods: AuthMethod[]; // Fase 1: sempre ['email_otp']
+}
+
+/**
+ * Opções por tipo de campo (espelho de `signing_fields.options`). O índice
+ * aberto preserva chaves que o backend acrescente (`auto`, `default`,
+ * `placeholder`) num vaivém sem perdas.
+ */
+export interface WizardFieldOptions {
+    font_size?: number | null;
+    date_format?: string | null;
+    [key: string]: string | number | boolean | null | undefined;
+}
+
+export interface WizardField {
+    id: string | null;
+    /** ULID quando persistido; id temporário do cliente enquanto é novo. */
+    client_id: string;
+    /** ULID do destinatário (o backend resolve `recipient_client_id` como ULID). */
+    recipient_client_id: string;
+    type: FieldType;
+    /** 1-based. `'all'` só para `initials` (rubrica em todas as páginas). */
+    page: number | 'all';
+    /** Frações [0,1] do CropBox exibido, origem no canto superior esquerdo. */
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    required: boolean;
+    label: string | null;
+    placeholder: string | null;
+    options?: WizardFieldOptions | null;
+    /** Rubrica gerada pelo servidor ("Rubrica em todas as páginas"): não editável. */
+    auto?: boolean;
 }
 
 export interface EnvelopeCan {

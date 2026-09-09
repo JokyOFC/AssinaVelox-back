@@ -2,8 +2,11 @@
 
 namespace App\Integrations;
 
+use App\Integrations\Contracts\EmailProvider;
 use App\Integrations\Contracts\PdfConverter;
 use App\Integrations\Contracts\PdfSigner;
+use App\Integrations\Email\LaravelMailEmailProvider;
+use App\Integrations\Email\LogEmailProvider;
 use App\Integrations\Pdf\FakePdfConverter;
 use App\Integrations\Pdf\ImageToPdfConverter;
 use App\Integrations\Pdf\LibreOfficeConverter;
@@ -19,9 +22,8 @@ use Illuminate\Support\ServiceProvider;
 /**
  * Bindings dos adaptadores de App\Integrations (Fase 1: PDF).
  *
- * Deve ser adicionado a bootstrap/providers.php. Os contratos de e-mail e
- * pagamento (EmailProvider, PaymentGateway) ainda não têm implementação e não
- * são registrados aqui.
+ * Deve ser adicionado a bootstrap/providers.php. O contrato de pagamento
+ * (PaymentGateway) ainda não tem implementação e não é registrado aqui.
  */
 class IntegrationsServiceProvider extends ServiceProvider
 {
@@ -29,6 +31,16 @@ class IntegrationsServiceProvider extends ServiceProvider
     {
         $this->app->singleton(PdfToolClient::class);
         $this->app->singleton(ImageNormalizer::class);
+
+        // E-mail transacional. `ASSINAVELOX_EMAIL_PROVIDER=log` troca por um fake explícito
+        // de desenvolvimento, cujo recibo é sempre `unknown` (nunca `sent`).
+        $this->app->singleton(LaravelMailEmailProvider::class);
+        $this->app->singleton(LogEmailProvider::class);
+        $this->app->bind(EmailProvider::class, function (Application $app): EmailProvider {
+            return config('assinavelox.email.provider') === 'log'
+                ? $app->make(LogEmailProvider::class)
+                : $app->make(LaravelMailEmailProvider::class);
+        });
 
         $this->app->singleton(PassthroughPdfConverter::class);
         $this->app->singleton(ImageToPdfConverter::class);

@@ -18,6 +18,7 @@ use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Support\Csv;
 use App\Support\OrganizationSettings;
 use App\Support\TaxId;
 use Illuminate\Database\Eloquent\Builder;
@@ -145,7 +146,7 @@ class OrganizationController extends Controller
             $query->chunk(200, function ($organizations) use ($out): void {
                 foreach ($organizations as $organization) {
                     $row = $this->row($organization);
-                    fputcsv($out, [
+                    fputcsv($out, Csv::row([
                         $row['public_id'],
                         $row['name'],
                         $row['plan']['name'],
@@ -156,7 +157,7 @@ class OrganizationController extends Controller
                         $row['owner']['name'],
                         $row['owner']['email'],
                         $row['created_at'] ? Carbon::parse($row['created_at'])->format('d/m/Y') : '',
-                    ], ';');
+                    ]), ';');
                 }
             });
 

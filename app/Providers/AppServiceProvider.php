@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Services\Envelopes\Contracts\RotatesInvitations;
+use App\Services\Envelopes\Sending\EnvelopeNotifications;
+use App\Services\Envelopes\Sending\ExpireEnvelopes;
+use App\Services\Envelopes\Sending\InvitationDispatcher;
+use App\Services\Signing\Contracts\RevalidatesEnvelopeExpiration;
+use App\Services\Signing\Contracts\SignerNotifications;
 use App\Support\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -22,6 +28,18 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CurrentOrganization::class);
+
+        // Ponto de extensão entre o preparo e o envio: quando o e-mail de um destinatário
+        // pendente muda, `RecipientSync` revoga o link antigo e pede a rotação. Sem este
+        // binding a interface só avisa o remetente para reenviar à mão.
+        $this->app->bind(RotatesInvitations::class, InvitationDispatcher::class);
+
+        // Pontos de extensão entre o fluxo público do signatário e o envio. O fluxo público
+        // muda o estado (avança a vez, encerra o envelope) e delega a MENSAGEM à camada de
+        // envio, que é quem sabe emitir link e escrever e-mail. Sem estes bindings o
+        // signatário continua funcionando: os avisos só ficam registrados no log.
+        $this->app->bind(SignerNotifications::class, EnvelopeNotifications::class);
+        $this->app->bind(RevalidatesEnvelopeExpiration::class, ExpireEnvelopes::class);
     }
 
     /**
@@ -123,17 +141,46 @@ class AppServiceProvider extends ServiceProvider
         // Verificação pública, páginas legais, home: 60/min por IP.
         RateLimiter::for('public', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
 
-        // Página do signatário: 30/min por IP+token.
-        RateLimiter::for('signer', fn (Request $request) => Limit::perMinute(30)
-            ->by($request->ip().'|'.(string) $request->route('token')));
+        /*
+        | Página do signatário: dois limites simultâneos.
+        |
+        | O limite por IP+token freia quem insiste no MESMO convite. Sozinho ele não
+        | freia nada: como o token entra na chave, cada palpite cai em um balde novo e
+        | uma varredura anônima com tokens diferentes passa sem teto — e cada requisição
+        | custa um SHA-256, uma consulta indexada e uma página Inertia de 404. O segundo
+        | limite é por IP puro e cobre o VOLUME da origem, como `throttle:public` faz nas
+        | demais rotas públicas.
+        */
+        RateLimiter::for('signer', fn (Request $request) => [
+            Limit::perMinute(30)->by('signer|'.$request->ip().'|'.(string) $request->route('token')),
+            Limit::perMinute(120)->by('signer-ip|'.$request->ip()),
+        ]);
 
-        // Envio/reenvio de OTP: 3 a cada 10 min por link; verificação: 5 a cada 10 min por link.
-        // A chave é só o token do link: o IP pode ser influenciado pelo cliente quando há
-        // proxy na frente, e trocá-lo não pode reabrir a força bruta do código do signatário.
-        RateLimiter::for('otp-send', fn (Request $request) => Limit::perMinutes(10, 3)
-            ->by('otp-send|'.(string) $request->route('token')));
-        RateLimiter::for('otp-verify', fn (Request $request) => Limit::perMinutes(10, 5)
-            ->by('otp-verify|'.(string) $request->route('token')));
+        /*
+        | Código por e-mail: também dois limites, por ORIGEM e por LINK.
+        |
+        | A chave anterior era só o token do convite. O efeito colateral não estava
+        | previsto: com a chave no token e não na origem, os limites viravam um recurso
+        | COMPARTILHADO entre o signatário legítimo e qualquer pessoa com a URL do
+        | convite. Quem tinha só o link gastava as tentativas de verificação com palpites
+        | errados e os envios, e a partir daí o signatário — em outro navegador, em outro
+        | IP, com o código correto na mão — recebia 429 tanto para verificar quanto para
+        | pedir outro código, indefinidamente.
+        |
+        | Separar por origem não reabre a adivinhação: o teto absoluto por código
+        | continua sendo `auth_challenges.max_attempts` (5) mais o
+        | `invalidateLiveChallenges()` (um código vivo por vez), que valem mesmo se o
+        | atacante trocar de IP. O balde por link continua existindo, com teto alto, para
+        | conter uma varredura distribuída sobre um mesmo convite.
+        */
+        RateLimiter::for('otp-send', fn (Request $request) => [
+            Limit::perMinutes(10, 3)->by('otp-send|'.(string) $request->route('token').'|'.$request->ip()),
+            Limit::perMinutes(10, 15)->by('otp-send|'.(string) $request->route('token')),
+        ]);
+        RateLimiter::for('otp-verify', fn (Request $request) => [
+            Limit::perMinutes(10, 5)->by('otp-verify|'.(string) $request->route('token').'|'.$request->ip()),
+            Limit::perMinutes(10, 25)->by('otp-verify|'.(string) $request->route('token')),
+        ]);
 
         // Busca global ⌘K: 120/min por usuário.
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(120)

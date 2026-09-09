@@ -55,6 +55,9 @@ class Recipient extends Model
         'email',
         'phone',
         'role',
+        // Papel livre exibido na interface ("Locatária", "Fiador"); `role` continua
+        // sendo o enum de domínio (RECONCILIACAO §1, migration add_role_label_to_recipients).
+        'role_label',
         'order_index',
         'status',
         'auth_method',
@@ -188,7 +191,7 @@ class Recipient extends Model
     }
 
     /**
-     * E-mail mascarado para exibição pública (j***@exemplo.com).
+     * E-mail mascarado para exibição pública (j•••@exemplo.com).
      *
      * @return Attribute<string, never>
      */
@@ -197,16 +200,26 @@ class Recipient extends Model
         return Attribute::get(fn (): string => static::maskEmail($this->email));
     }
 
+    /**
+     * O glifo da máscara é `•`, e não `*`, de propósito.
+     *
+     * O e-mail mascarado entra na **declaração de aceite** (`ConsentText::statement()`),
+     * que a página pública renderiza com `components/sign/legal-text.tsx`. Ali `**` é
+     * marcação de negrito: com asteriscos, uma máscara de tamanho par virava um par `**`,
+     * era consumida como marcação e o signatário lia `m@exemplo.test` — um endereço
+     * sintaticamente válido, diferente do dele e diferente do que fica gravado como
+     * evidência. `•` é o mesmo glifo que o front já usa em `lib/format.ts`.
+     */
     public static function maskEmail(string $email): string
     {
         if (! str_contains($email, '@')) {
-            return Str::mask($email, '*', 1);
+            return Str::mask($email, '•', 1);
         }
 
         [$local, $domain] = explode('@', $email, 2);
 
         $visible = Str::substr($local, 0, 1);
 
-        return $visible.str_repeat('*', max(3, Str::length($local) - 1)).'@'.$domain;
+        return $visible.str_repeat('•', max(3, Str::length($local) - 1)).'@'.$domain;
     }
 }

@@ -39,11 +39,26 @@ require_once __DIR__.'/../Support/OrganizationHelpers.php';
 /** Rotas de terceiros/dev que não fazem parte da aplicação. */
 const SMOKE_EXCLUDED_URI_PREFIXES = ['horizon', '_inertia', 'storage/'];
 
-/** Rotas "esqueleto" (Wave B/C) que ainda respondem 404 de propósito. */
+/**
+ * Rotas que respondem 404 de propósito neste contexto: ou continuam esqueleto (Wave C),
+ * ou dependem de um arquivo que o envelope do smoke não tem.
+ *
+ * - `envelopes.download` / `envelopes.document.preview`: implementadas (B-DOC), mas o
+ *   envelope usado aqui não tem documento com arquivo no disco.
+ * - `envelopes.document.page`: miniatura PNG descontinuada por decisão de arquitetura —
+ *   o rail é renderizado no navegador com PDF.js (docs/preparacao-documental.md).
+ */
 const SMOKE_WAVE_B_STUBS_404 = [
     'envelopes.download',
     'envelopes.document.page',
+    'envelopes.document.preview',
     'billing.payments.receipt',
+    // Fluxo público do signatário: o token do smoke não corresponde a convite nenhum, e a
+    // resposta é 404 genérico — idêntica para token desconhecido, revogado, vencido ou fora
+    // da vez, para que a página não vire um oráculo de existência de convites
+    // (docs/fluxo-do-signatario.md §3). `sign.show` devolve a página `sign/show` com
+    // `screen: 'invalid'` e status 404; as demais abortam com 404 seco.
+    'sign.show',
     'sign.document',
     'sign.page',
     'sign.download',
@@ -90,7 +105,7 @@ function smokeRouteParameters(string $name, array $ctx): array
 
     return match ($name) {
         'envelopes.edit' => ['envelope' => $draft->ulid],
-        'envelopes.show', 'envelopes.evidence', 'envelopes.document.status' => ['envelope' => $envelope->ulid],
+        'envelopes.show', 'envelopes.evidence', 'envelopes.document.status', 'envelopes.document.preview' => ['envelope' => $envelope->ulid],
         'envelopes.document.page' => ['envelope' => $envelope->ulid, 'page' => 1],
         'envelopes.download' => ['envelope' => $envelope->ulid, 'type' => 'original'],
         'billing.payments.receipt' => ['payment' => $ctx['payment']->ulid],

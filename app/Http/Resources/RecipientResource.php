@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Recipient;
+use App\Support\IpDisplay;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -81,7 +82,10 @@ class RecipientResource extends JsonResource
             'can_resend' => $canResend,
             'can_edit' => $pendingSignature && ($inProgress || ($envelope?->status->isDraftLike() ?? false)),
             'evidence' => $acceptance ? [
-                'ip' => (string) ($acceptance->ip_address ?? '—'),
+                // `evidence_show_ip` é da ORGANIZAÇÃO (arquitetura §3.1) e vale para todas as
+                // telas, não só para o comprovante do signatário: mostrar o IP inteiro aqui
+                // enquanto a trilha, ao lado, o mascara é vazamento com aparência de descuido.
+                'ip' => IpDisplay::for($acceptance->ip_address, $envelope?->organization) ?? '—',
                 'user_agent_label' => self::userAgentLabel($acceptance->user_agent),
                 'signature_kind' => $acceptance->signature_kind?->value,
             ] : null,
@@ -90,8 +94,13 @@ class RecipientResource extends JsonResource
 
     protected function roleLabel(): ?string
     {
-        // Fase 1: recipients.role = signer; o "papel" livre do wizard (Locatário, Fiador…) é Wave B.
-        return null;
+        // `recipients.role` continua sendo o enum de domínio (Fase 1: sempre `signer`); o
+        // papel livre digitado no wizard ("Locatária", "Fiador") mora em `role_label`,
+        // coluna criada no incremento 2. Devolver null aqui fazia a aba Signatários perder
+        // um dado que o próprio wizard mostra no passo 4.
+        $label = $this->role_label;
+
+        return is_string($label) && trim($label) !== '' ? trim($label) : null;
     }
 
     /**

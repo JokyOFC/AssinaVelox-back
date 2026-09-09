@@ -1,0 +1,578 @@
+<?php
+
+namespace App\Services\Signing;
+
+use App\Enums\AuditEventType;
+use App\Enums\EnvelopeStatus;
+use App\Enums\FieldType;
+use App\Enums\RecipientStatus;
+use App\Enums\SignatureKind;
+use App\Events\EnvelopeReadyForFinalization;
+use App\Models\DocumentVersion;
+use App\Models\Envelope;
+use App\Models\Recipient;
+use App\Models\SignatureAcceptance;
+use App\Models\SigningField;
+use App\Models\SigningFieldValue;
+use App\Models\SigningSession;
+use App\Services\Signing\Exceptions\SigningRejectedException;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+/**
+ * Gravação do **aceite eletrônico** (arquitetura §4.5, §3.3).
+ *
+ * ## O que é revalidado sob lock
+ *
+ * Tudo que a tela já tinha validado, de novo, dentro de `SELECT ... FOR UPDATE` no envelope:
+ * status, prazo, vez no sequencial, sessão autenticada, versão da sessão igual à
+ * `sent_document_version_id`, token de autorização vivo, `snapshot_hash` igual ao da tela e
+ * inexistência de aceite anterior. Entre a renderização e o clique podem ter passado
+ * minutos, e nesse intervalo o remetente pode ter cancelado, o prazo pode ter vencido e
+ * outro participante pode ter recusado. **A tela não é fonte de verdade; o banco sob lock é.**
+ *
+ * A duplicidade tem duas defesas: a checagem sob lock e o `UNIQUE(recipient_id)` de
+ * `signature_acceptances`. A segunda é a que vale quando dois processos passam pela primeira
+ * ao mesmo tempo em um banco onde o lock não serializa — a violação vira 409, nunca dois aceites.
+ *
+ * ## O que é do servidor, não do cliente
+ *
+ * - `accepted_at`: hora do servidor em UTC.
+ * - Campos `date`: carimbados pelo servidor no fuso da organização (RECONCILIACAO Q9). O que
+ *   o cliente mandar nesses campos é descartado sem erro — não é um valor "inválido", é um
+ *   valor que simplesmente não é dele.
+ * - `document_sha256`: dos bytes da versão apresentada, lido do banco.
+ * - `consent_statement`: o texto resolvido no servidor, não o que voltou do formulário.
+ * - IP e user-agent: da requisição, com o IP dependendo dos proxies confiáveis configurados.
+ *
+ * A transação **não** contém chamada externa nem processo: a imagem é normalizada e gravada
+ * no disco antes de abrir a transação (arquitetura §3.3).
+ */
+final class RecordAcceptance
+{
+    public function __construct(
+        private readonly SignerSessions $sessions,
+        private readonly SignerPresentation $presentation,
+        private readonly SignatureImages $images,
+        private readonly SignerNotifier $notifier,
+    ) {}
+
+    /**
+     * @param  array{signature: array<string, mixed>, initials?: array<string, mixed>|null, fields?: array<string, mixed>, authorization: string}  $payload
+     *
+     * @throws SigningRejectedException
+     */
+    public function handle(SignerContext $context, SigningSession $session, Request $request, array $payload): SignatureAcceptance
+    {
+        $version = $context->sentVersion();
+
+        if ($version === null) {
+            throw SigningRejectedException::conflict('missing_sent_version', 'Este documento não está disponível para assinatura.');
+        }
+
+        if ($session->document_version_id !== $version->getKey()) {
+            throw SigningRejectedException::conflict(
+                'stale_session_version',
+                'O documento foi atualizado. Recarregue a página para ver a versão atual antes de assinar.',
+            );
+        }
+
+        $fields = $this->presentation->myFields($context, $version);
+        $consentText = ConsentText::statement($context->envelope, $context->recipient, $context->organization, $version->sha256);
+        $snapshot = $this->presentation->snapshot($context, $version, $fields, $consentText);
+        $snapshotHash = SignerPresentation::hash($snapshot);
+
+        if (! $this->sessions->authorizationMatches($session, $payload['authorization'], $snapshotHash)) {
+            throw SigningRejectedException::conflict(
+                'stale_presentation',
+                'A tela mudou desde que foi carregada (documento, campos ou prazo). Recarregue a página e confira antes de assinar.',
+            );
+        }
+
+        $now = Carbon::now();
+
+        // Valores dos campos: validados AQUI, fora da transação, porque a validação pode
+        // recusar e não faz sentido segurar o lock do envelope enquanto se decide isso.
+        $values = $this->resolveFieldValues($fields, $context, $payload['fields'] ?? [], $now);
+
+        $visual = $this->resolveVisual($context, $payload, $fields);
+
+        $correlationId = SignerTokens::correlationId();
+
+        try {
+            $acceptance = $this->persist(
+                $context,
+                $session,
+                $version,
+                $fields,
+                $values,
+                $visual,
+                $snapshot,
+                $consentText,
+                $request,
+                $now,
+                $correlationId,
+            );
+        } catch (\Throwable $exception) {
+            // A imagem foi normalizada e gravada ANTES da transação (para não segurar o
+            // lock do envelope durante I/O), mas o aceite pode ser recusado sob lock:
+            // envelope cancelado, prazo vencido ou encerrado pela recusa de outro
+            // participante entre a renderização da tela e o clique. Sem esta limpeza o
+            // PNG ficava órfão no disco — dado pessoal sem nenhum registro que permitisse
+            // auditá-lo ou apagá-lo a pedido, e um caminho barato para encher o disco.
+            $this->images->discard($visual['image_path']);
+            $this->images->discard($visual['initials_image_path']);
+
+            throw $exception;
+        }
+
+        $this->sessions->consume($session, $context, $request);
+
+        $this->advance($context->envelope->getKey(), $correlationId);
+
+        return $acceptance;
+    }
+
+    // -- Persistência ------------------------------------------------------------------
+
+    /**
+     * @param  Collection<int, SigningField>  $fields
+     * @param  array<string, array{text: string|null, bool: bool|null}>  $values
+     * @param  array{kind: SignatureKind, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function persist(
+        SignerContext $context,
+        SigningSession $session,
+        DocumentVersion $version,
+        Collection $fields,
+        array $values,
+        array $visual,
+        array $snapshot,
+        string $consentText,
+        Request $request,
+        Carbon $now,
+        string $correlationId,
+    ): SignatureAcceptance {
+        try {
+            return DB::transaction(function () use (
+                $context, $session, $version, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId
+            ): SignatureAcceptance {
+                /** @var Envelope|null $envelope */
+                $envelope = Envelope::withoutOrganizationScope()
+                    ->whereKey($context->envelope->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                /** @var Recipient|null $recipient */
+                $recipient = Recipient::withoutOrganizationScope()
+                    ->whereKey($context->recipient->getKey())
+                    ->first();
+
+                if ($envelope === null || $recipient === null) {
+                    throw SigningRejectedException::conflict('not_signable', 'Este documento não está mais disponível para assinatura.');
+                }
+
+                $this->assertStillSignable($envelope, $recipient, $version);
+
+                $challengeId = $session->authChallenges()
+                    ->withoutGlobalScopes()
+                    ->whereNotNull('consumed_at')
+                    ->latest('id')
+                    ->value('id');
+
+                $acceptance = SignatureAcceptance::query()->create([
+                    'recipient_id' => $recipient->getKey(),
+                    'envelope_id' => $envelope->getKey(),
+                    'document_version_id' => $version->getKey(),
+                    'signing_session_id' => $session->getKey(),
+                    'auth_challenge_id' => $challengeId,
+                    'organization_id' => $envelope->organization_id,
+                    'accepted_at' => $now,
+                    'ip_address' => SignerRequestFacts::ip($request),
+                    'user_agent' => SignerRequestFacts::userAgent($request),
+                    'auth_method' => $recipient->auth_method,
+                    'terms_version' => ConsentText::versionFor($envelope),
+                    'consent_statement' => $consentText,
+                    'document_sha256' => $version->sha256,
+                    'fields_snapshot' => $snapshot + ['values' => $this->snapshotValues($fields, $values, $visual)],
+                    'signature_kind' => $visual['kind'],
+                    'signature_image_path' => $visual['image_path'],
+                    'typed_name' => $visual['typed_name'],
+                    'typed_font' => $visual['typed_font'],
+                ]);
+
+                foreach ($fields as $field) {
+                    $value = $values[$field->ulid] ?? ['text' => null, 'bool' => null];
+
+                    SigningFieldValue::query()->create([
+                        'signing_field_id' => $field->getKey(),
+                        'recipient_id' => $recipient->getKey(),
+                        'signature_acceptance_id' => $acceptance->getKey(),
+                        'envelope_id' => $envelope->getKey(),
+                        'organization_id' => $envelope->organization_id,
+                        'value_text' => $value['text'],
+                        'value_bool' => $value['bool'],
+                        'image_path' => match ($field->type) {
+                            FieldType::Signature => $visual['image_path'],
+                            FieldType::Initials => $visual['initials_image_path'] ?? $visual['image_path'],
+                            default => null,
+                        },
+                    ]);
+                }
+
+                // pending → notified → viewed → signed: um POST direto (sem GET) pula
+                // `viewed`, e a máquina de estados não permite. O aceite é a prova de que a
+                // pessoa viu; o passo intermediário é registrado para manter a trilha coerente.
+                if ($recipient->status === RecipientStatus::Notified) {
+                    $recipient->transitionTo(RecipientStatus::Viewed);
+                }
+
+                $recipient->transitionTo(RecipientStatus::Signed);
+                $recipient->signed_at = $now;
+                $recipient->save();
+
+                SignerAudit::record($envelope, $recipient, AuditEventType::AcceptanceRecorded, [
+                    'acceptance_ulid' => $acceptance->ulid,
+                    'document_version_ulid' => $version->ulid,
+                    'document_sha256' => $version->sha256,
+                    'terms_version' => $acceptance->terms_version,
+                    'auth_method' => $recipient->auth_method->value,
+                    'signature_kind' => $visual['kind']->value,
+                    'fields' => $fields->count(),
+                ], $correlationId);
+
+                return $acceptance;
+            });
+        } catch (QueryException $exception) {
+            // Corrida real: dois processos passaram pela checagem e o UNIQUE(recipient_id)
+            // decidiu. Um aceite, um 409.
+            if ($this->isUniqueViolation($exception)) {
+                throw SigningRejectedException::conflict('already_signed', 'Seu aceite já foi registrado para este documento.');
+            }
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @throws SigningRejectedException
+     */
+    private function assertStillSignable(Envelope $envelope, Recipient $recipient, DocumentVersion $version): void
+    {
+        if ($envelope->status !== EnvelopeStatus::InProgress) {
+            throw SigningRejectedException::conflict('not_signable', 'Este documento não está mais disponível para assinatura.');
+        }
+
+        if ($envelope->expires_at !== null && $envelope->expires_at->isPast()) {
+            throw SigningRejectedException::conflict('expired', 'O prazo para assinar este documento terminou.');
+        }
+
+        if ($envelope->sent_document_version_id !== $version->getKey()) {
+            throw SigningRejectedException::conflict(
+                'stale_session_version',
+                'O documento foi atualizado. Recarregue a página para ver a versão atual antes de assinar.',
+            );
+        }
+
+        if ($recipient->status === RecipientStatus::Signed) {
+            throw SigningRejectedException::conflict('already_signed', 'Seu aceite já foi registrado para este documento.');
+        }
+
+        if (! $recipient->status->isPendingSignature()) {
+            throw SigningRejectedException::conflict('not_signable', 'Este documento não está mais disponível para assinatura.');
+        }
+
+        if ($envelope->isSequential() && $recipient->order_index > $envelope->current_order) {
+            throw SigningRejectedException::conflict('not_your_turn', 'Ainda não é a sua vez de assinar este documento.');
+        }
+
+        if (SignatureAcceptance::withoutOrganizationScope()->where('recipient_id', $recipient->getKey())->exists()) {
+            throw SigningRejectedException::conflict('already_signed', 'Seu aceite já foi registrado para este documento.');
+        }
+    }
+
+    private function isUniqueViolation(QueryException $exception): bool
+    {
+        $code = (string) ($exception->errorInfo[1] ?? '');
+        $message = strtolower($exception->getMessage());
+
+        return $exception->getCode() === '23000'
+            || in_array($code, ['1062', '19'], true)
+            || str_contains($message, 'unique constraint')
+            || str_contains($message, 'duplicate entry');
+    }
+
+    // -- Campos ------------------------------------------------------------------------
+
+    /**
+     * Valores gravados por campo, já validados.
+     *
+     * @param  Collection<int, SigningField>  $fields
+     * @param  array<string, mixed>  $input
+     * @return array<string, array{text: string|null, bool: bool|null}>
+     *
+     * @throws SigningRejectedException
+     */
+    public function resolveFieldValues(Collection $fields, SignerContext $context, array $input, Carbon $now): array
+    {
+        $maxText = max(1, (int) config('assinavelox.signing_session.max_text_field_length', 500));
+        $values = [];
+
+        foreach ($fields as $field) {
+            $raw = $input[$field->ulid] ?? null;
+
+            $values[$field->ulid] = match ($field->type) {
+                // Carimbado pelo servidor: o que o cliente mandou é ignorado (Q9).
+                FieldType::Date => ['text' => $this->presentation->serverDate($field, $context, $now), 'bool' => null],
+
+                FieldType::Checkbox => $this->checkboxValue($field, $raw),
+
+                FieldType::Name => $this->textValue(
+                    $field,
+                    is_string($raw) && trim($raw) !== '' ? trim($raw) : $context->recipient->name,
+                    160,
+                ),
+
+                FieldType::Text => $this->textValue($field, is_string($raw) ? trim($raw) : '', $maxText),
+
+                // Assinatura e rubrica não vêm do mapa de campos: vêm da captura.
+                FieldType::Signature, FieldType::Initials => ['text' => null, 'bool' => null],
+            };
+        }
+
+        return $values;
+    }
+
+    /**
+     * @return array{text: string|null, bool: bool|null}
+     *
+     * @throws SigningRejectedException
+     */
+    private function checkboxValue(SigningField $field, mixed $raw): array
+    {
+        $checked = filter_var($raw, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false;
+
+        if ($field->required && ! $checked) {
+            throw new SigningRejectedException(
+                'required_field_missing',
+                sprintf('Marque a caixa "%s" para continuar.', $field->label ?: 'obrigatória'),
+                context: ['field' => $field->ulid],
+            );
+        }
+
+        return ['text' => null, 'bool' => $checked];
+    }
+
+    /**
+     * @return array{text: string|null, bool: bool|null}
+     *
+     * @throws SigningRejectedException
+     */
+    private function textValue(SigningField $field, string $value, int $max): array
+    {
+        if ($value === '' && $field->required) {
+            throw new SigningRejectedException(
+                'required_field_missing',
+                sprintf('Preencha o campo "%s" para continuar.', $field->label ?: $field->type->label()),
+                context: ['field' => $field->ulid],
+            );
+        }
+
+        if (Str::length($value) > $max) {
+            throw new SigningRejectedException(
+                'field_too_long',
+                sprintf('O campo "%s" aceita no máximo %d caracteres.', $field->label ?: $field->type->label(), $max),
+                context: ['field' => $field->ulid],
+            );
+        }
+
+        return ['text' => $value === '' ? null : $value, 'bool' => null];
+    }
+
+    // -- Representação visual -----------------------------------------------------------
+
+    /**
+     * Normaliza a representação visual conforme o método escolhido.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  Collection<int, SigningField>  $fields
+     * @return array{kind: SignatureKind, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}
+     *
+     * @throws SigningRejectedException
+     */
+    public function resolveVisual(SignerContext $context, array $payload, Collection $fields): array
+    {
+        $signature = is_array($payload['signature'] ?? null) ? $payload['signature'] : [];
+        $method = is_string($signature['method'] ?? null) ? $signature['method'] : '';
+
+        $needsSignature = $fields->contains(fn (SigningField $f): bool => $f->type === FieldType::Signature);
+        $needsInitials = $fields->contains(fn (SigningField $f): bool => $f->type === FieldType::Initials);
+
+        $kind = match ($method) {
+            'draw' => SignatureKind::Drawn,
+            'type' => SignatureKind::Typed,
+            'upload' => SignatureKind::Uploaded,
+            default => throw new SigningRejectedException('invalid_signature_method', 'Escolha como quer assinar: desenhar, digitar ou enviar uma imagem.'),
+        };
+
+        $imagePath = null;
+        $typedName = null;
+        $typedFont = null;
+
+        if ($kind === SignatureKind::Typed) {
+            $typedName = trim((string) ($signature['text'] ?? ''));
+
+            if (Str::length($typedName) < 2 || Str::length($typedName) > 80) {
+                throw new SigningRejectedException('invalid_typed_signature', 'Digite seu nome com 2 a 80 caracteres para assinar.');
+            }
+
+            $font = (string) ($signature['font'] ?? 'caveat');
+            $typedFont = in_array($font, self::FONTS, true) ? $font : 'caveat';
+        } elseif ($needsSignature || $needsInitials || ($signature['image_base64'] ?? null) !== null) {
+            $imagePath = $this->images->store((string) ($signature['image_base64'] ?? ''), $context, 'signature');
+        }
+
+        $initialsPath = null;
+        $initials = is_array($payload['initials'] ?? null) ? $payload['initials'] : null;
+
+        if ($needsInitials && $initials !== null && is_string($initials['image_base64'] ?? null) && $initials['image_base64'] !== '') {
+            $initialsPath = $this->images->store((string) $initials['image_base64'], $context, 'initials');
+        }
+
+        return [
+            'kind' => $kind,
+            'image_path' => $imagePath,
+            'initials_image_path' => $initialsPath,
+            'typed_name' => $typedName,
+            'typed_font' => $typedFont,
+        ];
+    }
+
+    /**
+     * Fontes manuscritas aceitas na assinatura digitada (DESIGN_SYSTEM §1.2).
+     *
+     * `typed_font` é **evidência**: diz em que família a representação visual foi
+     * desenhada. Só pode listar famílias que o build realmente carrega — hoje a
+     * Caveat é a única (`vite.config.ts`, `--font-hand`). Aceitar `dancing_script`
+     * ou `homemade_apple` gravaria uma evidência falsa, porque o navegador teria
+     * caído numa fonte genérica do sistema. Ao acrescentar uma família aqui,
+     * acrescente-a também ao `vite.config.ts` e a `SIGNATURE_STYLES`.
+     */
+    public const FONTS = ['caveat'];
+
+    /**
+     * Valores como entram no `fields_snapshot`. Caminhos de arquivo entram; bytes, não.
+     *
+     * @param  Collection<int, SigningField>  $fields
+     * @param  array<string, array{text: string|null, bool: bool|null}>  $values
+     * @param  array{kind: SignatureKind, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
+     * @return list<array<string, mixed>>
+     */
+    private function snapshotValues(Collection $fields, array $values, array $visual): array
+    {
+        /** @var list<array<string, mixed>> */
+        return $fields
+            ->map(function (SigningField $field) use ($values, $visual): array {
+                $value = $values[$field->ulid] ?? ['text' => null, 'bool' => null];
+
+                return array_filter([
+                    'field_ulid' => $field->ulid,
+                    'type' => $field->type->value,
+                    'text' => $value['text'],
+                    'bool' => $value['bool'],
+                    'image_path' => match ($field->type) {
+                        FieldType::Signature => $visual['image_path'],
+                        FieldType::Initials => $visual['initials_image_path'] ?? $visual['image_path'],
+                        default => null,
+                    },
+                    'typed_name' => $field->type->isImageBased() ? $visual['typed_name'] : null,
+                    'typed_font' => $field->type->isImageBased() ? $visual['typed_font'] : null,
+                ], fn ($v) => $v !== null);
+            })
+            ->values()
+            ->all();
+    }
+
+    // -- Depois do aceite ---------------------------------------------------------------
+
+    /**
+     * Avança a ordem (sequencial) ou dispara a finalização quando ninguém mais falta.
+     *
+     * Roda **depois** do commit do aceite e em transação própria: notificar o próximo é
+     * consequência do aceite, não parte dele. Se falhar aqui, o aceite continua gravado e a
+     * trilha mostra o que aconteceu.
+     */
+    private function advance(int $envelopeId, string $correlationId): void
+    {
+        /** @var array{envelope: Envelope, invite: list<Recipient>, finalize: bool} $outcome */
+        $outcome = DB::transaction(function () use ($envelopeId, $correlationId): array {
+            /** @var Envelope $envelope */
+            $envelope = Envelope::withoutOrganizationScope()->whereKey($envelopeId)->lockForUpdate()->firstOrFail();
+
+            /** @var Collection<int, Recipient> $recipients */
+            $recipients = Recipient::withoutOrganizationScope()
+                ->where('envelope_id', $envelopeId)
+                ->orderBy('order_index')
+                ->orderBy('id')
+                ->get();
+
+            $pending = $recipients->filter(fn (Recipient $r): bool => $r->status->isPendingSignature());
+
+            if ($pending->isEmpty()) {
+                if ($envelope->status === EnvelopeStatus::InProgress) {
+                    $envelope->transitionTo(EnvelopeStatus::Finalizing);
+                    $envelope->finalization_key ??= (string) Str::ulid();
+                    $envelope->save();
+
+                    SignerAudit::system($envelope, AuditEventType::EnvelopeFinalizing, [
+                        'acceptances' => $recipients->where('status', RecipientStatus::Signed)->count(),
+                    ], null, $correlationId);
+
+                    return ['envelope' => $envelope, 'invite' => [], 'finalize' => true];
+                }
+
+                return ['envelope' => $envelope, 'invite' => [], 'finalize' => false];
+            }
+
+            if (! $envelope->isSequential()) {
+                return ['envelope' => $envelope, 'invite' => [], 'finalize' => false];
+            }
+
+            // Sequencial: a vez avança para a menor ordem que ainda tem alguém pendente.
+            $nextOrder = (int) $pending->min('order_index');
+
+            if ($nextOrder <= $envelope->current_order) {
+                return ['envelope' => $envelope, 'invite' => [], 'finalize' => false];
+            }
+
+            $envelope->forceFill(['current_order' => $nextOrder])->save();
+
+            $invite = $pending
+                ->filter(fn (Recipient $r): bool => $r->order_index === $nextOrder && $r->status === RecipientStatus::Pending)
+                ->values()
+                ->all();
+
+            return ['envelope' => $envelope, 'invite' => $invite, 'finalize' => false];
+        });
+
+        if ($outcome['invite'] !== []) {
+            // Emitir o link novo e escrever o convite é do módulo de envio; aqui só se avisa
+            // que a vez mudou (contrato SignerNotifications).
+            $this->notifier->inviteRecipients($outcome['envelope'], $outcome['invite']);
+        }
+
+        if ($outcome['finalize']) {
+            EnvelopeReadyForFinalization::dispatch(
+                (int) $outcome['envelope']->getKey(),
+                (int) $outcome['envelope']->organization_id,
+                $outcome['envelope']->finalization_key,
+                $correlationId,
+            );
+        }
+    }
+}

@@ -64,7 +64,10 @@ class EnvelopeDetailResource extends JsonResource
                 'pages' => (int) ($document->page_count ?? $originalVersion->page_count ?? 0),
                 'sha256_original' => (string) ($document->originalVersion->sha256 ?? $originalVersion->sha256 ?? ''),
                 'sha256_signed' => $finalVersion?->sha256,
-                'pdf_url' => route('envelopes.download', ['envelope' => $this->ulid, 'type' => 'original']),
+                // Exibição no PDF.js: sempre a versão **exibível** (`envelopes.document.preview`).
+                // `envelopes.download?type=original` entrega os bytes como enviados — para DOCX
+                // e imagem isso não é PDF e o PDF.js não abriria (docs/preparacao-documental.md).
+                'pdf_url' => route('envelopes.document.preview', ['envelope' => $this->ulid]),
             ] : null,
             'downloads' => [
                 'original' => $document && $canView ? route('envelopes.download', ['envelope' => $this->ulid, 'type' => 'original']) : null,

@@ -7,6 +7,7 @@ enum DeliveryPurpose: string
     case Invitation = 'invitation';
     case Otp = 'otp';
     case Resend = 'resend';
+    case Expiring = 'expiring';
     case Completed = 'completed';
     case Refused = 'refused';
     case Canceled = 'canceled';
@@ -18,6 +19,7 @@ enum DeliveryPurpose: string
             self::Invitation => 'Convite para assinar',
             self::Otp => 'Código de verificação',
             self::Resend => 'Reenvio de convite',
+            self::Expiring => 'Aviso de prazo',
             self::Completed => 'Documento concluído',
             self::Refused => 'Documento recusado',
             self::Canceled => 'Documento cancelado',

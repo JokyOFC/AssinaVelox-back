@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\ActorType;
 use App\Enums\AuditEventType;
 use App\Models\AuditEvent;
+use App\Support\IpDisplay;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -88,7 +89,11 @@ class AuditEventResource extends JsonResource
             AuditEventType::AcceptanceRecorded,
             AuditEventType::RecipientRefused,
         ], true)) {
-            $parts[] = 'IP '.$this->maskIp($this->ip_address);
+            $ip = $this->maskIp($this->ip_address);
+
+            if ($ip !== null) {
+                $parts[] = 'IP '.$ip;
+            }
         }
 
         return implode(' · ', array_filter($parts));
@@ -105,22 +110,12 @@ class AuditEventResource extends JsonResource
         return isset($payload['recipient_name']) ? (string) $payload['recipient_name'] : null;
     }
 
-    protected function maskIp(string $ip): string
+    /**
+     * Delegado a {@see IpDisplay}: `evidence_show_ip` é da ORGANIZAÇÃO e precisa valer
+     * igual na trilha, no card do signatário e na página de evidências.
+     */
+    protected function maskIp(string $ip): ?string
     {
-        $mode = (string) config('assinavelox.evidence_show_ip', 'masked');
-
-        if ($mode === 'full') {
-            return $ip;
-        }
-
-        if (str_contains($ip, ':')) {
-            $parts = explode(':', $ip);
-
-            return implode(':', array_slice($parts, 0, 3)).':…';
-        }
-
-        $parts = explode('.', $ip);
-
-        return count($parts) === 4 ? "{$parts[0]}.{$parts[1]}.***.***" : $ip;
+        return IpDisplay::for($ip, $this->organization);
     }
 }

@@ -41,8 +41,11 @@ test('páginas públicas do signatário e de verificação não enviam referrer 
         ->assertHeader('Referrer-Policy', 'no-referrer')
         ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
 
+    // Token que não corresponde a convite nenhum: 404 genérico (docs/fluxo-do-signatario.md
+    // §3) — o que importa aqui é que os cabeçalhos valem para /assinar/* inclusive no erro,
+    // que é justamente a resposta que um buscador ou um proxy encontraria.
     $this->get(route('sign.show', ['token' => str_repeat('a', 43)]))
-        ->assertOk()
+        ->assertNotFound()
         ->assertHeader('Referrer-Policy', 'no-referrer')
         ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
 });

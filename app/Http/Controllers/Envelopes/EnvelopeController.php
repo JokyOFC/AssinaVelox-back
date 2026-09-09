@@ -96,7 +96,7 @@ class EnvelopeController extends Controller
         }
 
         $envelopes = $this->applyTab($base(), $filters['status'])
-            ->with(['folder', 'creator', 'recipients', 'document'])
+            ->with(['folder', 'creator', 'recipients', 'document', 'verificationRecord'])
             ->tap(fn (Builder $q) => $this->applySort($q, $filters['sort']))
             ->paginate((int) ($validated['per_page'] ?? 10))
             ->withQueryString();
@@ -145,6 +145,7 @@ class EnvelopeController extends Controller
             'recipients.acceptance',
             'document.currentVersion', 'document.originalVersion',
             'finalVersion',
+            'verificationRecord.certificateReference',
         ]);
 
         $events = AuditEvent::query()

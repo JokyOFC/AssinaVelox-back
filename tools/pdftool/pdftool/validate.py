@@ -209,8 +209,19 @@ def validate_pdf(in_path: Path, trust_paths: Optional[List[Path]] = None, check_
     return {
         "ok": True,
         "signature_count": len(results),
+        # ``intact`` answers "were the bytes COVERED by the signature modified?" — it says
+        # nothing about bytes that were appended AFTER the signed revision. A PDF with an
+        # incremental update tacked on stays intact/valid/trusted; the only tell is
+        # ``coverage`` dropping from ENTIRE_FILE to ENTIRE_REVISION (plus, when the change
+        # touches the document catalog, ``modification_level`` and ``docmdp_ok``). Those
+        # facts were collected per signature and read by nobody, so a caller that only
+        # looked at ``all_intact`` published "no change after the signature" over a file
+        # that had content outside the signed revision. They are now aggregated here, next
+        # to the flags they qualify. ``all_intact`` keeps its own, narrower meaning.
         "all_intact": bool(results) and all(r["intact"] for r in results),
         "all_valid": bool(results) and all(r["intact"] and r["valid"] for r in results),
+        "all_covering": bool(results) and all(r["coverage"] == "ENTIRE_FILE" for r in results),
+        "all_docmdp_ok": bool(results) and all(r["docmdp_ok"] is not False for r in results),
         "trust_roots_configured": len(roots),
         "revocation": REVOCATION_STATUS,
         "signatures": results,

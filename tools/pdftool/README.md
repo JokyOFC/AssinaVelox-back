@@ -12,7 +12,7 @@ Ferramenta de linha de comando autocontida, em Python, usada pelo backend Larave
 2. [Como o Laravel deve invocar](#como-o-laravel-deve-invocar)
 3. [Contrato geral de saida e codigos de saida](#contrato-geral-de-saida-e-codigos-de-saida)
 4. [Convencao de coordenadas](#convencao-de-coordenadas)
-5. [Comandos](#comandos): `inspect`, `image2pdf`, `compose`, `append`, `sign`, `validate`, `gen-test-cert`, `selftest`
+5. [Comandos](#comandos): `inspect`, `image2pdf`, `compose`, `append`, `sign`, `validate`, `cert-info`, `gen-test-cert`, `selftest`
 6. [Codigos de erro](#codigos-de-erro)
 7. [Seguranca](#seguranca)
 8. [Limitacoes](#limitacoes)
@@ -297,6 +297,8 @@ Valida cada assinatura com `pyhanko.sign.validation.validate_pdf_signature`.
     "signature_count": 1,
     "all_intact": true,
     "all_valid": true,
+    "all_covering": true,
+    "all_docmdp_ok": true,
     "trust_roots_configured": 1,
     "revocation": "not_checked",
     "signatures": [
@@ -340,7 +342,26 @@ Campos por assinatura:
 | `summary`            | `summary()` do pyHanko (`INTACT:...` ou `INVALID`)                                                                                                            |
 | `errors`             | lista legivel: `digest_mismatch`, `invalid_signature`, `trust: ...`, `suspicious_modification`, `docmdp_violation`, `validation_error`                        |
 
-`all_intact`/`all_valid` sao `false` quando o PDF nao tem assinaturas (`signature_count: 0`).
+Agregados:
+
+| Campo           | Significado                                                                        |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `all_intact`    | `intact` em todas as assinaturas — apenas sobre os bytes **cobertos** por cada uma |
+| `all_valid`     | `intact` **e** `valid` em todas                                                    |
+| `all_covering`  | `coverage == ENTIRE_FILE` em todas: nao ha conteudo fora da revisao assinada       |
+| `all_docmdp_ok` | nenhuma assinatura com `docmdp_ok == false`                                        |
+
+`all_intact`/`all_valid` sao `false` quando o PDF nao tem assinaturas (`signature_count: 0`); `all_covering` e `all_docmdp_ok` tambem.
+
+> **Atencao:** `all_intact` **nao** significa "o arquivo nao mudou depois da assinatura". Um PDF com uma atualizacao incremental acrescentada apos a revisao assinada continua `intact`, `valid` e ate `trusted`; o que muda e `coverage` (`ENTIRE_REVISION`) e, quando a alteracao toca o catalogo, `modification_level`/`docmdp_ok`. Quem quiser afirmar integridade do arquivo inteiro precisa de `all_intact` **e** `all_covering` **e** `all_docmdp_ok`.
+
+### `cert-info --pfx <arquivo> --pass-env <VAR>`
+
+Metadados **publicos** do certificado dentro de um PKCS#12, sem assinar nada e sem gravar nada: `subject`, `issuer`, `serial_hex`, `cert_fingerprint_sha256`, `not_before`, `not_after`, `self_signed`, `has_private_key`, `chain_length`, `pfx_path`. A senha e lida da variavel de ambiente pelo NOME (nunca de `argv`) e nao aparece na saida nem em mensagem de erro. Nenhum material de chave e exposto.
+
+Serve para **identificar o certificado que vai assinar antes de a assinatura existir** — por exemplo, para a pagina de evidencias imprimir o titular e o emissor corretos em vez de adivinha-los pela ultima linha de `certificate_references`.
+
+Erros: `missing_input` (arquivo ausente), `invalid_pkcs12` (senha errada, container corrompido ou sem certificado de titular), `missing_passphrase`/`invalid_env_name`.
 
 ### `gen-test-cert --out-pfx <arquivo> --pass-env <VAR> [--subject ..] [--days 365] [--out-pem <arquivo>]`
 
@@ -359,8 +380,9 @@ Em um diretorio temporario: gera um PDF de 2 paginas (a segunda com `/Rotate 90`
 | `error.code`                                                                              | Saida | Comandos                                 | Situacao                                                           |
 | ----------------------------------------------------------------------------------------- | ----- | ---------------------------------------- | ------------------------------------------------------------------ |
 | `usage_error`                                                                             | 2     | todos                                    | argumentos invalidos/ausentes                                      |
-| `missing_passphrase`                                                                      | 2     | sign, gen-test-cert                      | variavel de ambiente ausente ou vazia                              |
-| `invalid_env_name`                                                                        | 2     | sign, gen-test-cert                      | nome de variavel invalido                                          |
+| `missing_passphrase`                                                                      | 2     | sign, cert-info, gen-test-cert           | variavel de ambiente ausente ou vazia                              |
+| `invalid_env_name`                                                                        | 2     | sign, cert-info, gen-test-cert           | nome de variavel invalido                                          |
+| `invalid_pkcs12`                                                                          | 2     | cert-info                                | PKCS#12 corrompido, senha errada ou sem certificado de titular     |
 | `invalid_plan`, `missing_plan`                                                            | 2     | compose                                  | plano JSON malformado ou inexistente                               |
 | `same_path`                                                                               | 2     | compose, append, sign                    | `--out` igual a entrada                                            |
 | `invalid_visible`                                                                         | 2     | sign                                     | especificacao `--visible` invalida                                 |
@@ -424,7 +446,7 @@ tools/pdftool/
     inspect_cmd.py                            # inspect + abertura segura de PDFs (pypdf)
     images.py                                 # normalizacao Pillow + image2pdf
     compose.py                                # compose (overlay reportlab + merge pypdf) e append
-    certs.py                                  # gen-test-cert e utilitarios de certificado
+    certs.py                                  # gen-test-cert, cert-info e utilitarios de certificado
     sign.py                                   # PAdES B-B com pyHanko (incremental, carimbo rotacionado)
     validate.py                               # validacao pyHanko com/sem raizes de confianca
     selftest.py                               # smoke test ponta a ponta

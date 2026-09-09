@@ -15,10 +15,21 @@ export type AuthLayoutProps = {
     maxWidth?: number;
 };
 
+/**
+ * Selos da porta de entrada. Cada um afirma algo que a plataforma cumpre sempre.
+ *
+ * DESIGN_SYSTEM §6.1 prescreve um selo de validade e outro de ICP-Brasil; nenhum dos
+ * dois pode ficar. Os Termos de Uso §3.5 ("Sem garantia de validade jurídica universal")
+ * negam o primeiro com todas as letras, e a declaração de aceite repete a ressalva no
+ * item 5. O segundo — anunciado como "Certificado A1 da operadora" — apresentava como
+ * característica fixa algo que só existe quando há certificado configurado; sem ele o
+ * envelope conclui como aceite eletrônico com evidências (arquitetura §2), e a
+ * arquitetura tem precedência sobre o design pela ordem de RECONCILIACAO.md.
+ */
 const TRUST_BADGES = [
-    'Validade jurídica',
+    'Aceite eletrônico com evidências',
     'Conforme LGPD',
-    'Certificado A1 da operadora',
+    'Verificação pública por código',
     'Trilha de auditoria',
 ];
 

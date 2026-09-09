@@ -31,6 +31,10 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { EnvelopeStatusBadge } from '@/components/status/envelope-status-badge';
 import { RecipientStatusBadge } from '@/components/status/recipient-status-badge';
 import { HashBox, Timeline } from '@/components/timeline';
+import {
+    TestCertificateWarning,
+    type VerificationCertificate,
+} from '@/components/verification/signature-statement';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -87,6 +91,7 @@ import type {
     Envelope,
     FolderRef,
     Recipient,
+    SignatureStatus,
     SigningField,
 } from '@/types';
 
@@ -99,7 +104,16 @@ interface ShowLayerField extends LayerField {
 }
 
 export interface EnvelopeShowProps {
-    envelope: Envelope;
+    /**
+     * `signature_status` e `certificate` só existem depois da finalização. São
+     * opcionais para que a tela nunca *deduza* que houve assinatura
+     * criptográfica: sem o dado, a linguagem usada é a de aceite eletrônico
+     * com evidências (arquitetura §2).
+     */
+    envelope: Envelope & {
+        signature_status?: SignatureStatus | null;
+        certificate?: VerificationCertificate | null;
+    };
     recipients: Recipient[];
     fields: SigningField[];
     events: AuditEvent[];
@@ -300,7 +314,15 @@ export default function EnvelopeShow({
                                     disabled={!envelope.downloads.signed}
                                 >
                                     <a href={envelope.downloads.signed ?? '#'}>
-                                        PDF final assinado
+                                        {/*
+                                         * O rótulo segue o `signature_status`, não o status do
+                                         * envelope: sem certificado da operadora não existe
+                                         * "PDF assinado" para oferecer (arquitetura §2).
+                                         */}
+                                        {envelope.signature_status ===
+                                        'company_a1'
+                                            ? 'PDF final assinado'
+                                            : 'Arquivo final (PDF)'}
                                     </a>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
@@ -447,27 +469,7 @@ export default function EnvelopeShow({
                 </StatusBanner>
             )}
             {envelope.status === 'completed' && (
-                <StatusBanner
-                    tone="success"
-                    title={`Documento concluído em ${formatDateTime(envelope.completed_at)}`}
-                    action={
-                        envelope.downloads.signed && (
-                            <Button asChild variant="success" size="sm">
-                                <a href={envelope.downloads.signed}>
-                                    <Download className="size-[15px]" />
-                                    Baixar PDF assinado
-                                </a>
-                            </Button>
-                        )
-                    }
-                >
-                    PDF final com trilha de auditoria disponível. Verificação
-                    pública pelo código{' '}
-                    <b className="tabular">
-                        {formatVerificationCode(envelope.verification_code)}
-                    </b>
-                    .
-                </StatusBanner>
+                <CompletionPanel envelope={envelope} verifyUrl={verifyUrl} />
             )}
             {envelope.status === 'refused' && (
                 <StatusBanner tone="danger" title="Documento recusado">
@@ -1125,6 +1127,111 @@ function RecipientEditDialog({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+    );
+}
+
+/**
+ * Estado concluído (DESIGN §6.4): downloads disponíveis, código de verificação
+ * e — o ponto sensível — a frase correta.
+ *
+ * Sem `signature_status = company_a1` **não** se diz "PDF assinado": o envelope
+ * conclui como aceite eletrônico com evidências (arquitetura §2). O rótulo do
+ * botão e o texto do painel seguem esse dado, nunca o status do envelope.
+ */
+function CompletionPanel({
+    envelope,
+    verifyUrl,
+}: {
+    envelope: EnvelopeShowProps['envelope'];
+    verifyUrl: string | null;
+}) {
+    /*
+     * Três estados, não dois. `signature_status` ausente não é "sem certificado":
+     * é *não sei*. Afirmar a negativa sem o dado seria tão falso quanto afirmar a
+     * positiva, então o texto neutro manda o leitor à página de evidências, que é
+     * onde a situação da assinatura é apurada de verdade.
+     */
+    const signedByOperator = envelope.signature_status === 'company_a1';
+    const knownStatus = envelope.signature_status != null;
+    const code = formatVerificationCode(envelope.verification_code);
+    const completedAt = formatDateTime(envelope.completed_at);
+
+    return (
+        <section className="border-success-border bg-success-bg text-success flex flex-col gap-3 rounded-[10px] border p-4">
+            <div className="flex items-start gap-2.5">
+                <Check className="mt-0.5 size-4 shrink-0" />
+                <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold">
+                        {!knownStatus
+                            ? `Documento concluído em ${completedAt}`
+                            : signedByOperator
+                              ? `Concluído e assinado digitalmente pela operadora em ${completedAt}`
+                              : `Concluído com aceite eletrônico e evidências em ${completedAt}`}
+                    </p>
+                    <p className="mt-1 text-[12.5px] leading-[1.55] opacity-90">
+                        {!knownStatus
+                            ? 'O arquivo final e o relatório de evidências estão disponíveis. A situação da assinatura — com ou sem certificado da operadora — está na página de evidências.'
+                            : signedByOperator
+                              ? 'O arquivo final foi lacrado com o certificado A1 da AssinaVelox. A assinatura identifica a operadora e permite detectar alterações posteriores no arquivo; não é a assinatura pessoal dos participantes.'
+                              : 'Nenhum certificado da operadora estava ativo na finalização, então o arquivo final não tem assinatura criptográfica. As evidências de cada aceite — data, IP, navegador, código confirmado por e-mail e a versão exata do documento — estão no relatório.'}
+                    </p>
+                </div>
+            </div>
+
+            <TestCertificateWarning
+                environment={envelope.certificate?.environment}
+            />
+
+            <div className="flex flex-wrap items-center gap-2">
+                {envelope.downloads.signed && (
+                    <Button asChild variant="success" size="sm">
+                        <a href={envelope.downloads.signed}>
+                            <Download className="size-[15px]" />
+                            {signedByOperator
+                                ? 'Baixar PDF assinado'
+                                : 'Baixar arquivo final'}
+                        </a>
+                    </Button>
+                )}
+                {envelope.downloads.evidence && (
+                    <Button asChild variant="outline" size="sm">
+                        <a href={envelope.downloads.evidence}>
+                            <FileText className="size-[15px]" />
+                            Relatório de evidências
+                        </a>
+                    </Button>
+                )}
+                <Button asChild variant="outline" size="sm">
+                    <Link href={envelopeEvidence(envelope.id)}>
+                        <ShieldCheck className="size-[15px]" />
+                        Ver evidências
+                    </Link>
+                </Button>
+            </div>
+
+            {envelope.verification_code && (
+                <div className="text-text-secondary flex flex-wrap items-center gap-2 rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-[12.5px]">
+                    <span>Código de verificação pública</span>
+                    <b className="tabular text-foreground font-mono">{code}</b>
+                    <CopyButton
+                        value={code}
+                        label="Copiar código de verificação"
+                        className="size-6"
+                    />
+                    {verifyUrl && (
+                        <a
+                            href={verifyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary inline-flex items-center gap-1 font-semibold hover:underline"
+                        >
+                            <ExternalLink className="size-3.5" />
+                            Abrir página pública
+                        </a>
+                    )}
+                </div>
+            )}
+        </section>
     );
 }
 

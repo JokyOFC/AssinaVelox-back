@@ -31,10 +31,14 @@ require_once __DIR__.'/../Sign/Support/SignerHelpers.php';
 | que prova que os cinco módulos entregues em paralelo (documento, campos, envio,
 | assinatura e front) falam a mesma língua.
 |
-| O que ele deliberadamente NÃO afirma: que o envelope conclui. O incremento 4
-| (consolidação, evidências, assinatura da operadora, registro de verificação)
-| ainda não existe, então o estado final observável é `finalizing`. Um teste que
-| esperasse `completed` estaria descrevendo software que não foi escrito.
+| O que ele deliberadamente NÃO afirma: que o envelope conclui. O escopo aqui
+| termina onde o incremento 3 termina — no `finalizing`, com o gancho disparado —
+| e por isso os cenários usam `Event::fake([EnvelopeReadyForFinalization::class])`
+| para interceptar o disparo em vez de deixar a finalização rodar.
+|
+| A continuação (consolidação, evidências, assinatura da operadora, registro de
+| verificação, verificação pública, download e cota) está em `FullLifecycleTest`,
+| que percorre o mesmo caminho e vai até `completed` com PDF e certificado reais.
 */
 
 beforeEach(function () {

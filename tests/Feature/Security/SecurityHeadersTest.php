@@ -67,9 +67,26 @@ test('rotas públicas respondem e o webhook do Mercado Pago aceita POST sem CSRF
     $this->get(route('legal.privacy'))->assertOk();
     $this->get(route('verify.show', ['code' => 'ABCDEFGHJKLM']))->assertOk();
 
+    // O webhook está fora do CSRF (bootstrap/app.php): uma requisição sem token chega ao
+    // controller. Desde o incremento 5 ele exige assinatura válida, então a resposta
+    // esperada é 401 — e NÃO 419, que é o que uma barreira de CSRF devolveria.
     $this->postJson(route('webhooks.mercadopago'), ['type' => 'payment', 'data' => ['id' => '123']])
-        ->assertOk()
-        ->assertJson(['received' => true]);
+        ->assertStatus(401)
+        ->assertExactJson(['error' => 'invalid_signature']);
+
+    // Com assinatura correta, a mesma requisição sem CSRF passa.
+    $secret = 'segredo-do-webhook-no-teste-de-seguranca';
+    config()->set('assinavelox.mercadopago.webhook_secret', $secret);
+
+    $requestId = 'req-seguranca';
+    $ts = (int) round(microtime(true) * 1000);
+    $signature = 'ts='.$ts.',v1='.hash_hmac('sha256', "id:123;request-id:{$requestId};ts:{$ts};", $secret);
+
+    $this->postJson(
+        route('webhooks.mercadopago').'?data.id=123&type=payment',
+        ['type' => 'payment', 'action' => 'payment.updated', 'data' => ['id' => '123']],
+        ['x-signature' => $signature, 'x-request-id' => $requestId],
+    )->assertOk()->assertJson(['received' => true]);
 });
 
 test('o painel interno exige platform admin e as páginas placeholder respondem', function () {

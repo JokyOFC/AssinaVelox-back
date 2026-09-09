@@ -52,7 +52,8 @@ const SMOKE_WAVE_B_STUBS_404 = [
     'envelopes.download',
     'envelopes.document.page',
     'envelopes.document.preview',
-    'billing.payments.receipt',
+    // `billing.payments.receipt` saiu desta lista no incremento 5: o recibo interno em
+    // PDF passou a existir e o pagamento aprovado dos seeders responde 200.
     // Fluxo público do signatário: o token do smoke não corresponde a convite nenhum, e a
     // resposta é 404 genérico — idêntica para token desconhecido, revogado, vencido ou fora
     // da vez, para que a página não vire um oráculo de existência de convites

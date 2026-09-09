@@ -158,7 +158,11 @@ O que **não** é afirmado, nem pela ferramenta nem pela UI:
 | Assinatura pessoal do signatário             | a assinatura é da **empresa operadora** (certificado A1 dela). O aceite de cada participante é o `SignatureAcceptance` com evidências; a UI usa exatamente esse vocabulário (arquitetura §2).       |
 | Validade ICP-Brasil de certificados de teste | ver abaixo.                                                                                                                                                                                         |
 
-O **hash final** do envelope é calculado **depois** da assinatura e gravado em `verification_records` — nunca dentro do próprio PDF (o hash de um arquivo não pode estar contido nele).
+O **hash final** do envelope é calculado **depois** da assinatura e gravado em `verification_records` — nunca dentro do próprio PDF (o hash de um arquivo não pode estar contido nele). Pela mesma razão estrutural, o **resultado técnico da validação** também não consta do PDF: ele é apurado sobre o arquivo já assinado, isto é, depois de a página de evidências existir dentro dele. Gerar a página depois da assinatura e anexá-la em seguida deixaria conteúdo fora da revisão assinada e destruiria a própria cobertura que a validação afirma. Os dois dados vivem na página de verificação, e o PDF diz onde encontrá-los (`docs/juridico/declaracao-de-aceite.md` §5.1 e §5.2).
+
+**`all_intact` não é "o arquivo não mudou".** A `pdftool validate` responde, por assinatura, apenas sobre os bytes **cobertos** por ela. Um PDF com uma atualização incremental acrescentada depois da revisão assinada continua `intact`, `valid` e até `trusted`; o que denuncia o acréscimo é `coverage` cair de `ENTIRE_FILE` para `ENTIRE_REVISION` (e `modification_level`/`docmdp_ok` quando a alteração toca o catálogo). Por isso a ferramenta agrega `all_covering` e `all_docmdp_ok` ao lado de `all_intact`/`all_valid`, e a plataforma exige os quatro para publicar um arquivo como assinado e íntegro.
+
+**`pdftool cert-info --pfx <arquivo> --pass-env <VAR>`** devolve os metadados públicos do certificado dentro de um PKCS#12 (titular, emissor, série, impressão digital SHA-256, validade, autoassinado ou não) sem assinar nem gravar nada, e sem expor chave nem senha. É o que permite **identificar o certificado que vai assinar antes de a assinatura existir** — a página de evidências imprime esse certificado em vez de adivinhá-lo pela última linha de `certificate_references`.
 
 ### Certificado `test` × `production`
 

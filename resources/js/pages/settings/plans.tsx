@@ -1,192 +1,217 @@
-import { Head, router } from '@inertiajs/react';
-import { Check } from 'lucide-react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { CircleAlert, Info } from 'lucide-react';
 import { useState } from 'react';
+import { BillingCallout } from '@/components/billing/billing-callout';
+import {
+    type BillingInterval,
+    isSandboxPlan,
+} from '@/components/billing/billing-state';
+import {
+    type PlanOption,
+    PlanOptionCard,
+} from '@/components/billing/plan-option-card';
+import { SandboxPriceNotice } from '@/components/billing/sandbox-notice';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useConfirmsPassword } from '@/components/confirms-password';
+import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { SegmentedControl } from '@/components/segmented-control';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
-import { formatBytes, formatCurrencyCompact, formatNumber } from '@/lib/format';
-import { cn } from '@/lib/utils';
 import {
     cancel as cancelSubscription,
     checkout as billingCheckout,
     index as billingIndex,
 } from '@/routes/billing';
 import { index as plansIndex } from '@/routes/plans';
-import type { Plan, PlanCode } from '@/types';
+import type { PlanCode } from '@/types';
 
 export interface PlansProps {
     current_plan: PlanCode;
-    interval: 'monthly' | 'yearly';
-    plans: (Plan & {
-        limits: {
-            envelopes_per_month: number | null;
-            members: number | null;
-            storage_bytes: number | null;
-        };
-        highlighted: boolean;
-        cta: 'current' | 'upgrade' | 'downgrade' | 'contact';
-    })[];
+    interval: BillingInterval;
+    plans: PlanOption[];
+    /** Mensagem de falha ao abrir o checkout, quando o servidor a expõe. */
+    checkout_error?: string | null;
 }
 
-/** Escolha de plano (ROUTES §2.16) — versão inicial; refinada na etapa seguinte. */
+/**
+ * Escolha de plano (ROUTES §2.16). Compara os planos ativos e públicos que o
+ * servidor devolveu, destaca o atual e leva ao Checkout Pro.
+ *
+ * Dois pontos de honestidade: o preço só aparece como oferta quando o plano
+ * **não** está marcado como sandbox (PlanSeeder marca todos os pagos hoje), e
+ * a página deixa claro que o Checkout Pro cobra por ciclo, sem recorrência
+ * automática (docs/integracoes/mercado-pago.md §6.1).
+ */
 export default function Plans({
     current_plan,
     interval: initialInterval,
     plans,
+    checkout_error = null,
 }: PlansProps) {
-    const [interval, setInterval] = useState<'monthly' | 'yearly'>(
-        initialInterval,
+    const pageErrors = usePage().props.errors;
+    const [interval, setInterval] = useState<BillingInterval>(initialInterval);
+    const [redirecting, setRedirecting] = useState<string | null>(null);
+    const [downgrade, setDowngrade] = useState<PlanOption | null>(null);
+    const [error, setError] = useState<string | null>(
+        checkout_error ?? pageErrors.plan ?? pageErrors.interval ?? null,
     );
-    const [redirecting, setRedirecting] = useState<PlanCode | null>(null);
 
-    const choose = (plan: PlansProps['plans'][number]) => {
-        if (plan.cta === 'current' || plan.cta === 'contact') {
-            return;
-        }
+    const password = useConfirmsPassword({
+        description:
+            'Voltar para o plano Grátis cancela a renovação do plano pago. Confirme sua senha para continuar.',
+    });
 
+    const sandboxCount = plans.filter(isSandboxPlan).length;
+    const hasYearly = plans.some((plan) => plan.price_cents_yearly !== null);
+    const busy = redirecting !== null;
+
+    const goToCheckout = (plan: PlanOption) => {
+        setError(null);
         setRedirecting(plan.key);
-
-        if (plan.key === 'free') {
-            router.post(
-                cancelSubscription.url(),
-                {},
-                { onFinish: () => setRedirecting(null) },
-            );
-
-            return;
-        }
 
         router.post(
             billingCheckout.url(),
             { plan: plan.key, interval },
-            { onFinish: () => setRedirecting(null) },
+            {
+                onError: (errors) =>
+                    setError(
+                        Object.values(errors)[0] ??
+                            'Não foi possível abrir o checkout do Mercado Pago.',
+                    ),
+                onFinish: () => setRedirecting(null),
+            },
         );
+    };
+
+    /*
+     * Voltar para o Grátis é `billing.cancel`, protegida por `password.confirm`. Igual à
+     * tela de cobrança: a senha é pedida antes do POST, porque o middleware não retoma
+     * um POST interrompido (ele só guarda `url.intended` para requisições GET).
+     */
+    const confirmDowngrade = () => {
+        if (!downgrade) {
+            return;
+        }
+
+        const key = downgrade.key;
+
+        password.ensure(() => {
+            setRedirecting(key);
+
+            router.post(
+                cancelSubscription.url(),
+                {},
+                {
+                    onFinish: () => {
+                        setRedirecting(null);
+                        setDowngrade(null);
+                    },
+                },
+            );
+        });
+    };
+
+    const choose = (plan: PlanOption) => {
+        if (plan.cta === 'current' || plan.cta === 'contact') {
+            return;
+        }
+
+        if (plan.key === 'free') {
+            setDowngrade(plan);
+
+            return;
+        }
+
+        goToCheckout(plan);
     };
 
     return (
         <>
             <Head title="Planos" />
+
             <PageHeader
                 title="Planos"
-                subtitle="Escolha o plano que acompanha o volume de documentos da sua organização. Pagamento via Mercado Pago."
+                subtitle="Escolha o plano que acompanha o volume de documentos da sua organização. O pagamento é feito no Checkout Pro do Mercado Pago."
                 actions={
-                    <SegmentedControl
-                        value={interval}
-                        onChange={setInterval}
-                        options={[
-                            { value: 'monthly', label: 'Mensal' },
-                            { value: 'yearly', label: 'Anual' },
-                        ]}
-                    />
+                    hasYearly && (
+                        <SegmentedControl
+                            value={interval}
+                            onChange={setInterval}
+                            ariaLabel="Periodicidade da cobrança"
+                            options={[
+                                { value: 'monthly', label: 'Mensal' },
+                                { value: 'yearly', label: 'Anual' },
+                            ]}
+                        />
+                    )
                 }
             />
-            <div
-                className="grid gap-4"
-                style={{
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                }}
-            >
-                {plans.map((plan) => {
-                    const price =
-                        interval === 'yearly' &&
-                        plan.price_cents_yearly !== null
-                            ? plan.price_cents_yearly
-                            : plan.price_cents_monthly;
-                    const isCurrent = plan.key === current_plan;
 
-                    return (
-                        <div
+            {error && (
+                <BillingCallout
+                    tone="danger"
+                    role="alert"
+                    icon={CircleAlert}
+                    title="Não foi possível abrir o checkout"
+                >
+                    {error} Nenhuma cobrança foi feita — você pode tentar de
+                    novo.
+                </BillingCallout>
+            )}
+
+            {sandboxCount > 0 && <SandboxPriceNotice count={sandboxCount} />}
+
+            {plans.length === 0 ? (
+                <EmptyState
+                    title="Nenhum plano disponível"
+                    description="Não há plano ativo e público no catálogo desta instalação. Fale com a AssinaVelox para liberar a contratação."
+                />
+            ) : (
+                <div
+                    className="grid gap-4"
+                    style={{
+                        gridTemplateColumns:
+                            'repeat(auto-fit, minmax(260px, 1fr))',
+                    }}
+                >
+                    {plans.map((plan) => (
+                        <PlanOptionCard
                             key={plan.key}
-                            className={cn(
-                                'bg-card shadow-card flex flex-col gap-4 rounded-xl border p-5',
-                                plan.highlighted
-                                    ? 'border-primary'
-                                    : 'border-border',
-                            )}
-                        >
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-muted-foreground text-[11px] font-bold tracking-[.16em] uppercase">
-                                    {plan.name}
-                                </span>
-                                {isCurrent && (
-                                    <Badge variant="info">Plano atual</Badge>
-                                )}
-                                {!isCurrent && plan.highlighted && (
-                                    <Badge variant="planProfessional">
-                                        Mais popular
-                                    </Badge>
-                                )}
-                            </div>
-                            <div>
-                                <span className="tabular text-[30px] leading-none font-bold tracking-[-.02em]">
-                                    {price === 0
-                                        ? 'Grátis'
-                                        : formatCurrencyCompact(price)}
-                                </span>
-                                {price > 0 && (
-                                    <span className="text-muted-foreground ml-1 text-[13px]">
-                                        /{interval === 'yearly' ? 'ano' : 'mês'}
-                                    </span>
-                                )}
-                            </div>
-                            <ul className="text-text-secondary flex flex-col gap-2 text-[13px]">
-                                <li className="flex gap-2">
-                                    <Check className="text-success mt-0.5 size-3.5 shrink-0" />
-                                    {plan.limits.envelopes_per_month === null
-                                        ? 'Documentos ilimitados'
-                                        : `${formatNumber(plan.limits.envelopes_per_month)} documentos/mês`}
-                                </li>
-                                <li className="flex gap-2">
-                                    <Check className="text-success mt-0.5 size-3.5 shrink-0" />
-                                    {plan.limits.members === null
-                                        ? 'Usuários ilimitados'
-                                        : `${formatNumber(plan.limits.members)} ${plan.limits.members === 1 ? 'usuário' : 'usuários'}`}
-                                </li>
-                                {plan.limits.storage_bytes !== null && (
-                                    <li className="flex gap-2">
-                                        <Check className="text-success mt-0.5 size-3.5 shrink-0" />
-                                        {formatBytes(plan.limits.storage_bytes)}{' '}
-                                        de armazenamento
-                                    </li>
-                                )}
-                                {plan.features.map((feature) => (
-                                    <li key={feature} className="flex gap-2">
-                                        <Check className="text-success mt-0.5 size-3.5 shrink-0" />
-                                        {feature}
-                                    </li>
-                                ))}
-                            </ul>
-                            <Button
-                                className="mt-auto w-full"
-                                variant={
-                                    plan.cta === 'upgrade'
-                                        ? 'default'
-                                        : 'outline'
-                                }
-                                disabled={
-                                    plan.cta === 'current' ||
-                                    plan.cta === 'contact' ||
-                                    redirecting !== null
-                                }
-                                onClick={() => choose(plan)}
-                            >
-                                {redirecting === plan.key && <Spinner />}
-                                {redirecting === plan.key
-                                    ? 'Redirecionando para o Mercado Pago…'
-                                    : plan.cta === 'current'
-                                      ? 'Plano atual'
-                                      : plan.cta === 'upgrade'
-                                        ? 'Contratar'
-                                        : plan.cta === 'downgrade'
-                                          ? 'Mudar para este plano'
-                                          : 'Fale com a gente'}
-                            </Button>
-                        </div>
-                    );
-                })}
-            </div>
+                            plan={plan}
+                            isCurrent={plan.key === current_plan}
+                            interval={interval}
+                            redirecting={redirecting === plan.key}
+                            disabled={busy && redirecting !== plan.key}
+                            onChoose={choose}
+                        />
+                    ))}
+                </div>
+            )}
+
+            <BillingCallout
+                tone="neutral"
+                icon={Info}
+                title="Como a cobrança funciona"
+            >
+                Cada ciclo é um pagamento avulso: o Checkout Pro não faz
+                cobrança recorrente e não guarda cartão. Você escolhe o meio de
+                pagamento (cartão, Pix, boleto ou saldo em conta) dentro do
+                checkout, a cada renovação. A troca de plano só vale depois que
+                o Mercado Pago confirmar o pagamento.
+            </BillingCallout>
+
+            <ConfirmDialog
+                open={downgrade !== null}
+                onOpenChange={(open) => !open && setDowngrade(null)}
+                destructive
+                processing={busy}
+                title="Voltar para o plano Grátis?"
+                description="A renovação do plano pago é cancelada. Até o fim do ciclo já pago nada muda; depois disso passam a valer os limites do plano Grátis. Documentos já assinados continuam válidos e disponíveis para download e verificação."
+                confirmLabel="Voltar para o Grátis"
+                cancelLabel="Manter o plano atual"
+                onConfirm={confirmDowngrade}
+            />
+
+            {password.dialog}
         </>
     );
 }

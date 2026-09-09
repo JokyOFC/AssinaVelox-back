@@ -4,11 +4,13 @@ namespace App\Services\Signing;
 
 use App\Enums\AuthMethod;
 use App\Enums\DocumentVersionKind;
+use App\Enums\EnvelopeStatus;
 use App\Models\DocumentVersion;
 use App\Models\Recipient;
 use App\Models\SignatureAcceptance;
 use App\Models\SigningSession;
 use App\Models\User;
+use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -335,7 +337,34 @@ final class SignerPageProps
                 ->reject(fn (Recipient $r): bool => $r->getKey() === $context->recipient->getKey())
                 ->filter(fn (Recipient $r): bool => $r->status->isPendingSignature())
                 ->count(),
-            'completion_notice' => ConsentText::completionNotice(),
+            /*
+             * A coleta terminou SEM conclusão? Quem já tinha assinado continua com acesso ao
+             * próprio comprovante (é a intenção de `SignerLinkResolver::stateFor`), mas a tela
+             * caía em `already_signed_pending_others` e prometia "você receberá o arquivo final
+             * quando todos os participantes concluírem" — ou, com zero pendentes, "o arquivo
+             * final está sendo preparado". Nos dois casos falso: nenhum arquivo final virá.
+             * Mesmo motivo pelo qual `STATE_FINALIZING` foi criado; aqui o fato vai como dado,
+             * sem inventar uma tela nova.
+             */
+            'collection_closed' => match ($context->envelope->status) {
+                EnvelopeStatus::Expired => 'expired',
+                EnvelopeStatus::Canceled => 'canceled',
+                EnvelopeStatus::Refused => 'refused',
+                default => null,
+            },
+            /*
+             * O que a plataforma afirma sobre a conclusão. Enquanto a coleta corre é uma
+             * previsão derivada da configuração (`ConsentText::completionNotice()`); depois
+             * que o envelope entra num estado terminal é um FATO, e o fato é o que
+             * `verification_records` registrou. Resolver pela configuração do momento da
+             * visita faria o comprovante de um arquivo sem assinatura nenhuma passar a
+             * prometer assinatura criptográfica assim que o certificado fosse ligado —
+             * exatamente o que a arquitetura §2 proíbe — além de falar no futuro numa tela
+             * intitulada "Documento concluído".
+             */
+            'completion_notice' => $context->envelope->status->isTerminal()
+                ? SignatureNarrative::for($context->envelope, $context->envelope->verificationRecord)['statement']
+                : ConsentText::completionNotice(),
         ];
     }
 

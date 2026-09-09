@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\Verification\SignatureNarrative;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +39,7 @@ class SearchController extends Controller
         $numeric = ltrim(preg_replace('/^av-?/i', '', $q) ?? '', '0');
 
         $envelopes = EnvelopeVisibility::envelopes($membership)
-            ->with(['recipients', 'folder'])
+            ->with(['recipients', 'folder', 'verificationRecord'])
             ->where(function ($query) use ($like, $numeric): void {
                 $query->where('title', 'like', $like)
                     ->orWhere('verification_code', 'like', $like);
@@ -57,7 +59,11 @@ class SearchController extends Controller
                     'display_code' => $envelope->display_code,
                     'title' => $envelope->title,
                     'status' => $envelope->status->value,
-                    'status_label' => $envelope->status->labelWithProgress($signedCount),
+                    // Concluído sem assinatura criptográfica não é "Assinado"
+                    // ({@see SignatureNarrative::completedLabel()}).
+                    'status_label' => $envelope->status === EnvelopeStatus::Completed
+                        ? SignatureNarrative::completedLabel($envelope->verificationRecord)
+                        : $envelope->status->labelWithProgress($signedCount),
                     'signed_count' => $signedCount,
                     'recipients_count' => $envelope->recipients->count(),
                     'folder' => $envelope->folder?->name,

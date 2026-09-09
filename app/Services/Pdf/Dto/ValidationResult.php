@@ -7,6 +7,13 @@ namespace App\Services\Pdf\Dto;
  * todas as assinaturas (trust_reason=no_trust_roots_configured); a ferramenta
  * nunca afirma confiança sem cadeia validada. Um PDF sem assinaturas tem
  * signatureCount=0 e allIntact/allValid=false.
+ *
+ * `allIntact` responde "os bytes COBERTOS pela assinatura foram alterados?" e nada
+ * mais. Um PDF com conteúdo acrescentado DEPOIS da revisão assinada continua
+ * `intact`, `valid` e até `trusted`: o que muda é `allCovering` (coverage
+ * ENTIRE_REVISION em vez de ENTIRE_FILE) e, quando a alteração toca o catálogo,
+ * `allDocmdpOk`. Quem quiser afirmar "nada mudou depois da assinatura" precisa dos
+ * três, não só do primeiro.
  */
 final readonly class ValidationResult
 {
@@ -23,6 +30,8 @@ final readonly class ValidationResult
         public array $signatures,
         public ?string $correlationId = null,
         public array $raw = [],
+        public bool $allCovering = false,
+        public bool $allDocmdpOk = false,
     ) {}
 
     /**
@@ -46,7 +55,34 @@ final readonly class ValidationResult
             signatures: $signatures,
             correlationId: $correlationId,
             raw: $data,
+            // Chave ausente (ferramenta antiga) não vira sucesso: cai na leitura por
+            // assinatura, que também exige evidência positiva.
+            allCovering: array_key_exists('all_covering', $data)
+                ? $data['all_covering'] === true
+                : self::everySignature($signatures, static fn (SignatureValidation $s): bool => $s->coverage === 'ENTIRE_FILE'),
+            allDocmdpOk: array_key_exists('all_docmdp_ok', $data)
+                ? $data['all_docmdp_ok'] === true
+                : self::everySignature($signatures, static fn (SignatureValidation $s): bool => $s->docmdpOk !== false),
         );
+    }
+
+    /**
+     * @param  list<SignatureValidation>  $signatures
+     * @param  callable(SignatureValidation): bool  $predicate
+     */
+    private static function everySignature(array $signatures, callable $predicate): bool
+    {
+        if ($signatures === []) {
+            return false;
+        }
+
+        foreach ($signatures as $signature) {
+            if (! $predicate($signature)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function allTrusted(): bool
@@ -76,6 +112,8 @@ final readonly class ValidationResult
             'signature_count' => $this->signatureCount,
             'all_intact' => $this->allIntact,
             'all_valid' => $this->allValid,
+            'all_covering' => $this->allCovering,
+            'all_docmdp_ok' => $this->allDocmdpOk,
             'all_trusted' => $this->allTrusted(),
             'trust_roots_configured' => $this->trustRootsConfigured,
             'revocation' => $this->revocation,
@@ -94,6 +132,7 @@ final readonly class ValidationResult
                 'subfilter' => $signature->subfilter,
                 'coverage' => $signature->coverage,
                 'modification_level' => $signature->modificationLevel,
+                'docmdp_ok' => $signature->docmdpOk,
                 'summary' => $signature->summary,
                 'errors' => $signature->errors,
             ], $this->signatures),

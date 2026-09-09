@@ -42,7 +42,25 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
         'envelope.duplicated', 'plan.consumption_reserved', 'plan.consumption_committed', 'plan.consumption_released',
     ];
 
-    expect(AuditEventType::values())->toEqualCanonicalizing($expected)->toHaveCount(35);
+    // Cobrança (incremento 5): eventos da ORGANIZAÇÃO, com `envelope_id` nulo. Não
+    // constam de RECONCILIACAO §3, que enumerou apenas o ciclo do envelope; entraram
+    // porque a ativação de plano, o cancelamento e a inadimplência precisam de trilha
+    // auditável (docs/cobranca.md).
+    // `subscription.renewed` entrou na revisão adversarial: o ciclo do plano Grátis não
+    // gera pagamento, logo não passa por `subscription.activated`, e sem trilha própria a
+    // renovação da cota seria invisível (docs/cobranca.md §7).
+    $billing = [
+        'payment.created', 'payment.approved', 'payment.failed',
+        'subscription.activated', 'subscription.canceled', 'subscription.resumed',
+        'subscription.past_due', 'subscription.expired', 'subscription.renewed',
+    ];
+
+    expect(AuditEventType::values())
+        ->toEqualCanonicalizing([...$expected, ...$billing])
+        ->toHaveCount(44);
+
+    // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
+    expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);
 });
 
 it('deriva o tom (kind) dos eventos para a UI', function () {

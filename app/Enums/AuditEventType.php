@@ -43,6 +43,20 @@ enum AuditEventType: string
     case PlanConsumptionCommitted = 'plan.consumption_committed';
     case PlanConsumptionReleased = 'plan.consumption_released';
 
+    // Cobrança (incremento 5). Eventos da ORGANIZAÇÃO: `envelope_id` fica nulo. Não
+    // constam da lista de RECONCILIACAO §3, que só enumerou o ciclo do envelope; foram
+    // acrescentados aqui porque a ativação de plano, o cancelamento e a inadimplência
+    // precisam de trilha auditável (ver docs/cobranca.md).
+    case PaymentCreated = 'payment.created';
+    case PaymentApproved = 'payment.approved';
+    case PaymentFailed = 'payment.failed';
+    case SubscriptionActivated = 'subscription.activated';
+    case SubscriptionCanceled = 'subscription.canceled';
+    case SubscriptionResumed = 'subscription.resumed';
+    case SubscriptionPastDue = 'subscription.past_due';
+    case SubscriptionExpired = 'subscription.expired';
+    case SubscriptionRenewed = 'subscription.renewed';
+
     public function label(): string
     {
         return match ($this) {
@@ -81,6 +95,15 @@ enum AuditEventType: string
             self::PlanConsumptionReserved => 'Consumo do plano reservado',
             self::PlanConsumptionCommitted => 'Consumo do plano confirmado',
             self::PlanConsumptionReleased => 'Consumo do plano liberado',
+            self::PaymentCreated => 'Checkout iniciado',
+            self::PaymentApproved => 'Pagamento aprovado',
+            self::PaymentFailed => 'Pagamento não aprovado',
+            self::SubscriptionActivated => 'Plano ativado',
+            self::SubscriptionCanceled => 'Renovação cancelada',
+            self::SubscriptionResumed => 'Renovação reativada',
+            self::SubscriptionPastDue => 'Plano em atraso',
+            self::SubscriptionExpired => 'Plano expirado',
+            self::SubscriptionRenewed => 'Ciclo do plano renovado',
         };
     }
 
@@ -95,7 +118,11 @@ enum AuditEventType: string
             self::AcceptanceRecorded,
             self::ChallengeVerified,
             self::EnvelopeCompleted,
-            self::EnvelopeSignedCompanyA1 => 'ok',
+            self::EnvelopeSignedCompanyA1,
+            self::PaymentApproved,
+            self::SubscriptionActivated,
+            self::SubscriptionRenewed,
+            self::SubscriptionResumed => 'ok',
 
             self::ChallengeFailed,
             self::DocumentProcessingFailed,
@@ -104,7 +131,10 @@ enum AuditEventType: string
             self::EnvelopeRefused,
             self::EnvelopeExpired,
             self::EnvelopeCanceled,
-            self::EnvelopeFinalizationFailed => 'warn',
+            self::EnvelopeFinalizationFailed,
+            self::PaymentFailed,
+            self::SubscriptionPastDue,
+            self::SubscriptionExpired => 'warn',
 
             default => 'info',
         };

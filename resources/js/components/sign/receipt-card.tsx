@@ -1,8 +1,15 @@
-import { Check, Download, FileText, Hourglass } from 'lucide-react';
+import {
+    Check,
+    Download,
+    ExternalLink,
+    FileText,
+    Hourglass,
+} from 'lucide-react';
 import { CopyButton } from '@/components/copy-button';
 import { Button } from '@/components/ui/button';
 import { formatDateTime, formatVerificationCode, plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { show as verifyShow } from '@/routes/verify';
 
 /** Comprovante do aceite, como o servidor o envia (`SignerPageProps::receipt`). */
 export interface SignerReceipt {
@@ -33,6 +40,12 @@ export interface SignerReceipt {
      * sem certificado da operadora, "aceite eletrônico com evidências".
      */
     completion_notice: string | null;
+    /**
+     * A coleta terminou SEM conclusão (prazo vencido, cancelamento do remetente ou
+     * recusa de outro participante). Quem já assinou continua vendo o comprovante do
+     * próprio aceite, mas não haverá arquivo final — e a tela precisa dizer isso.
+     */
+    collection_closed?: 'expired' | 'canceled' | 'refused' | null;
 }
 
 /** Data e hora em UTC — o carimbo que a declaração de aceite referencia. */
@@ -80,13 +93,27 @@ export function ReceiptCard({
     // lia "você receberá o arquivo final quando todos os participantes
     // concluírem" — todos já tinham concluído, e a linha "Aguardando N
     // signatário" nem aparecia, porque N era zero.
+    // Quarto estado: a coleta encerrou sem conclusão. Antes dele, quem tinha
+    // assinado um envelope que depois expirou lia "o arquivo final está sendo
+    // preparado" — nenhum arquivo final viria.
+    const closed = receipt.collection_closed ?? null;
     const stillWaiting =
-        !completed && !finalizing && receipt.pending_others > 0;
+        !completed && !closed && !finalizing && receipt.pending_others > 0;
+    const lastSigner =
+        !completed && !closed && (finalizing || receipt.pending_others === 0);
+    const closedLine =
+        closed === 'expired'
+            ? 'O prazo para assinatura terminou antes de todos os aceites, então a coleta foi encerrada e não haverá arquivo final. Seu aceite continua registrado e este comprovante segue válido como prova do que você fez.'
+            : closed === 'canceled'
+              ? 'O remetente cancelou esta solicitação, então a coleta foi encerrada e não haverá arquivo final. Seu aceite continua registrado e este comprovante segue válido como prova do que você fez.'
+              : 'Um participante recusou, então a coleta foi encerrada e não haverá arquivo final. Seu aceite continua registrado e este comprovante segue válido como prova do que você fez.';
     const closingLine = completed
         ? 'O arquivo final já está disponível.'
-        : finalizing || receipt.pending_others === 0
-          ? 'Todos os participantes assinaram; o arquivo final está sendo preparado.'
-          : 'Você receberá o arquivo final quando todos os participantes concluírem.';
+        : closed
+          ? closedLine
+          : lastSigner
+            ? 'Você foi o último a assinar: todos os aceites exigidos foram registrados e o arquivo final está sendo preparado. Assim que ficar pronto, ele aparece aqui e é enviado por e-mail a quem participou.'
+            : 'Você receberá o arquivo final quando todos os participantes concluírem.';
 
     return (
         <div className={cn('flex flex-col gap-4', className)}>
@@ -109,9 +136,11 @@ export function ReceiptCard({
                 <h1 className="text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
                     {completed
                         ? 'Documento concluído'
-                        : finalizing || receipt.pending_others === 0
-                          ? 'Aceites concluídos'
-                          : 'Você já assinou'}
+                        : closed
+                          ? 'Coleta encerrada'
+                          : lastSigner
+                            ? 'Aceites concluídos'
+                            : 'Você já assinou'}
                 </h1>
                 <p className="text-text-secondary mt-2 text-[13.5px] leading-[1.55]">
                     <b className="text-foreground">Aceite registrado.</b> Sua
@@ -200,6 +229,28 @@ export function ReceiptCard({
                 </p>
             )}
 
+            {/*
+             * `verification_code` pode chegar vazio (envelope sem código, caso de
+             * borda de dados antigos): sem código não existe página pública para
+             * apontar, e um link para /verificar/ vazio seria pior que nenhum.
+             */}
+            {receipt.verification_code !== '' && (
+                <p className="text-muted-foreground text-[12px] leading-[1.5]">
+                    Este comprovante pode ser conferido a qualquer momento na
+                    página pública de verificação, sem login e sem expor dados
+                    pessoais:{' '}
+                    <a
+                        href={verifyShow(receipt.verification_code).url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary inline-flex items-center gap-1 font-semibold hover:underline"
+                    >
+                        verificar com o código {code}
+                        <ExternalLink className="size-3" />
+                    </a>
+                </p>
+            )}
+
             <div className="flex flex-wrap gap-2">
                 {receipt.can_download &&
                 receipt.final_pdf_available &&
@@ -223,7 +274,9 @@ export function ReceiptCard({
                         disabled
                     >
                         <Download className="size-4" />
-                        Disponível quando todos assinarem
+                        {closed
+                            ? 'Sem arquivo final'
+                            : 'Disponível quando todos assinarem'}
                     </Button>
                 )}
                 {/*

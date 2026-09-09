@@ -157,3 +157,40 @@ def generate_test_cert(
     result.update(cert_summary(cert))
     result.update({"key_algorithm": "RSA-2048", "self_signed": True, "test_only": True, "warning": TEST_WARNING})
     return result
+
+
+def describe_pkcs12(pfx: Path, pass_env: str) -> Dict[str, Any]:
+    """Public facts about the certificate inside a PKCS#12 file.
+
+    Read-only: it opens the container with the passphrase taken from the named
+    environment variable (never from argv) and returns only non-secret metadata
+    — subject, issuer, serial, SHA-256 fingerprint and validity. No key
+    material and no passphrase ever reaches the output or an error message.
+
+    This is what lets the platform name the certificate that is ABOUT to sign,
+    instead of guessing it from the most recent row of ``certificate_references``.
+    """
+    passphrase = read_passphrase(pass_env)
+    if not pfx.is_file():
+        raise InputRejected("missing_input", f"PKCS#12 file not found: {pfx}")
+    try:
+        key, cert, extra = pkcs12.load_key_and_certificates(pfx.read_bytes(), passphrase.encode("utf-8"))
+    except OSError as exc:
+        raise ProcessingError("read_failed", f"could not read the PKCS#12 file: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 - wrong passphrase, corrupt container, unsupported algorithm
+        raise InputRejected("invalid_pkcs12", f"cannot open the PKCS#12 container: {type(exc).__name__}") from exc
+    finally:
+        del passphrase
+
+    if cert is None:
+        raise InputRejected("invalid_pkcs12", "the PKCS#12 container has no end-entity certificate")
+
+    result: Dict[str, Any] = {
+        "ok": True,
+        "pfx_path": str(pfx),
+        "has_private_key": key is not None,
+        "chain_length": len(extra or []),
+    }
+    result.update(cert_summary(cert))
+    result["self_signed"] = cert.subject == cert.issuer
+    return result

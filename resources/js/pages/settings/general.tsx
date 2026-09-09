@@ -2,6 +2,7 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import { AvatarInitials } from '@/components/avatar-initials';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useConfirmsPassword } from '@/components/confirms-password';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -95,6 +96,10 @@ export default function SettingsGeneral({
     );
     const [savingSecurity, setSavingSecurity] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const password = useConfirmsPassword({
+        description:
+            'Solicitar a exclusão da conta é uma ação protegida. Confirme sua senha para continuar.',
+    });
     const [deleting, setDeleting] = useState(false);
 
     const saveCompany = (event: FormEvent) => {
@@ -118,19 +123,26 @@ export default function SettingsGeneral({
         );
     };
 
+    /*
+     * `settings.organization.destroy` está protegida por `password.confirm` (ROUTES §2.13).
+     * Num POST o middleware não retoma a ação depois da confirmação — ele guarda o
+     * *referer*, não a rota do POST —, então a senha é pedida antes do envio.
+     */
     const requestDelete = () => {
-        setDeleting(true);
-        router.post(
-            requestDeletion.url(),
-            {},
-            {
-                preserveScroll: true,
-                onFinish: () => {
-                    setDeleting(false);
-                    setDeleteOpen(false);
+        password.ensure(() => {
+            setDeleting(true);
+            router.post(
+                requestDeletion.url(),
+                {},
+                {
+                    preserveScroll: true,
+                    onFinish: () => {
+                        setDeleting(false);
+                        setDeleteOpen(false);
+                    },
                 },
-            },
-        );
+            );
+        });
     };
 
     const cancelDelete = () => {
@@ -361,6 +373,8 @@ export default function SettingsGeneral({
                 }
                 onConfirm={requestDelete}
             />
+
+            {password.dialog}
         </>
     );
 }

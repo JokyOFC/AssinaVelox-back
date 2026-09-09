@@ -36,3 +36,12 @@ Schedule::command('envelopes:notify-expiring')
     ->withoutOverlapping(10)
     ->runInBackground()
     ->onOneServer();
+
+// Inadimplência das assinaturas (RECONCILIACAO Q20): `past_due` depois da carência
+// (bloqueia envio, mantém leitura e download) e `expired` depois, voltando ao plano
+// Grátis. Uma vez por dia basta — a granularidade da regra é de dias.
+Schedule::command('billing:dunning')
+    ->dailyAt('03:20')
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->onOneServer();

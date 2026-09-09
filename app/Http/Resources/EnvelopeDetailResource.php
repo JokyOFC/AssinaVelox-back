@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
+use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
@@ -35,6 +36,10 @@ class EnvelopeDetailResource extends JsonResource
         $canUpdate = $user?->can('update', $this->resource) ?? false;
         $canView = $user?->can('view', $this->resource) ?? false;
         $timezone = $this->organization->timezone;
+        $record = $this->verificationRecord;
+        $signature = $record !== null && $completed
+            ? SignatureNarrative::for($this->resource, $record)
+            : ['status' => null, 'certificate' => null];
 
         return [
             'id' => $this->ulid,
@@ -42,7 +47,13 @@ class EnvelopeDetailResource extends JsonResource
             'verification_code' => $this->formatted_verification_code,
             'title' => $this->title,
             'status' => $this->status->value,
-            'status_label' => $this->status->labelWithProgress($signedCount),
+            /*
+             * Concluído sem assinatura criptográfica não é "Assinado": ver
+             * {@see SignatureNarrative::completedLabel()}.
+             */
+            'status_label' => $completed
+                ? SignatureNarrative::completedLabel($record)
+                : $this->status->labelWithProgress($signedCount),
             'signed_count' => $signedCount,
             'recipients_count' => $this->recipients->count(),
             'folder' => $this->folder ? ['id' => $this->folder->ulid, 'name' => $this->folder->name] : null,
@@ -74,6 +85,15 @@ class EnvelopeDetailResource extends JsonResource
                 'signed' => $completed && $canView ? route('envelopes.download', ['envelope' => $this->ulid, 'type' => 'signed']) : null,
                 'evidence' => $completed && $canView ? route('envelopes.download', ['envelope' => $this->ulid, 'type' => 'evidence']) : null,
             ],
+            /*
+             * Situação da assinatura criptográfica (arquitetura §2). `null` enquanto não houver
+             * registro de verificação: a tela precisa distinguir "não há assinatura" (`none`) de
+             * "ainda não se sabe", porque afirmar a negativa sem o dado seria tão falso quanto
+             * afirmar a positiva. `certificate` só existe no caso `company_a1`, e nunca carrega
+             * `secret_ref` nem impressão digital.
+             */
+            'signature_status' => $signature['status'],
+            'certificate' => $signature['certificate'],
             'can' => [
                 'update' => $canUpdate && $isDraftLike,
                 'cancel' => ($user?->can('cancel', $this->resource) ?? false) && $this->status->isCancelable(),
@@ -85,6 +105,12 @@ class EnvelopeDetailResource extends JsonResource
         ];
     }
 
+    /**
+     * Rótulo de prazo. Ele é o marcador de urgência da tira de metadados (DESIGN §6.4,
+     * ROUTES §2.7) e só faz sentido enquanto a coleta corre: num envelope concluído,
+     * recusado ou cancelado não há prazo nenhum a correr, e a contagem regressiva
+     * ("Expira em 02 out (23 dias)") aparecia ao lado do banner de conclusão.
+     */
     protected function expiresLabel(string $timezone): ?string
     {
         if ($this->expires_at === null) {
@@ -96,6 +122,11 @@ class EnvelopeDetailResource extends JsonResource
 
         if ($this->status === EnvelopeStatus::Expired || $this->expires_at->isPast()) {
             return 'Prazo encerrado em '.$date;
+        }
+
+        if ($this->status->isTerminal()) {
+            // Concluído, recusado ou cancelado antes do vencimento: o prazo perdeu o objeto.
+            return null;
         }
 
         $days = (int) Carbon::now($timezone)->startOfDay()->diffInDays($expires->copy()->startOfDay());

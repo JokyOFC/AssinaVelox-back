@@ -6,6 +6,7 @@ use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
+use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -34,7 +35,7 @@ class EnvelopeResource extends JsonResource
             'display_code' => $this->display_code,
             'title' => $this->title,
             'status' => $this->status->value,
-            'status_label' => $this->status->labelWithProgress($signedCount),
+            'status_label' => $this->statusLabel($signedCount),
             'folder' => $this->folder ? ['id' => $this->folder->ulid, 'name' => $this->folder->name] : null,
             'document' => $document ? [
                 'pages' => $document->page_count,
@@ -61,5 +62,23 @@ class EnvelopeResource extends JsonResource
                 'download_signed' => ($user?->can('view', $this->resource) ?? false) && $this->status === EnvelopeStatus::Completed,
             ],
         ];
+    }
+
+    /**
+     * "Assinado" só quando houve assinatura criptográfica da operadora; concluído sem ela é
+     * "Concluído" ({@see SignatureNarrative::completedLabel()}). Fora de `completed` vale o
+     * rótulo do enum.
+     */
+    protected function statusLabel(int $signedCount): string
+    {
+        if ($this->status !== EnvelopeStatus::Completed) {
+            return $this->status->labelWithProgress($signedCount);
+        }
+
+        $record = $this->relationLoaded('verificationRecord')
+            ? $this->verificationRecord
+            : $this->verificationRecord()->first();
+
+        return SignatureNarrative::completedLabel($record);
     }
 }

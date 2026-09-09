@@ -84,6 +84,12 @@ def _cmd_gen_test_cert(args):
     return generate_test_cert(args.out_pfx, args.pass_env, subject=args.subject, days=args.days, out_pem=args.out_pem)
 
 
+def _cmd_cert_info(args):
+    from pdftool.certs import describe_pkcs12
+
+    return describe_pkcs12(args.pfx, args.pass_env)
+
+
 def _cmd_selftest(args):
     from pdftool.selftest import run_selftest
 
@@ -146,6 +152,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--days", type=int, default=365)
     p.add_argument("--out-pem", dest="out_pem", type=_path, default=None, help="also write the certificate as PEM (for --trust)")
     p.set_defaults(func=_cmd_gen_test_cert)
+
+    p = sub.add_parser("cert-info", help="public metadata of the certificate inside a PKCS#12 (no key material, no passphrase)")
+    p.add_argument("--pfx", type=_path, required=True, help="PKCS#12 file with key + certificate")
+    p.add_argument("--pass-env", dest="pass_env", required=True, help="NAME of the environment variable holding the PKCS#12 passphrase")
+    p.set_defaults(func=_cmd_cert_info)
 
     p = sub.add_parser("selftest", help="end-to-end smoke test in a temporary directory")
     p.add_argument("--keep", action="store_true", help="keep the temporary directory and report its path")

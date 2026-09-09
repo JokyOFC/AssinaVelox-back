@@ -78,9 +78,13 @@ export default function Home() {
                         )}
                     </div>
                     <div className="text-on-navy-secondary flex flex-wrap gap-x-6 gap-y-2 text-[12.5px] font-semibold">
-                        <span>✓ Validade jurídica</span>
+                        {/* Ver a nota de TRUST_BADGES em layouts/auth-layout.tsx: nenhum selo
+                            aqui pode prometer aceitação jurídica universal nem assinatura com
+                            certificado: os Termos de Uso §3.5 negam a primeira, e a segunda
+                            depende de haver certificado configurado. */}
+                        <span>✓ Aceite eletrônico com evidências</span>
                         <span>✓ Conforme LGPD</span>
-                        <span>✓ Certificado A1 da operadora</span>
+                        <span>✓ Verificação pública por código</span>
                         <span>✓ Trilha de auditoria</span>
                     </div>
                 </div>

@@ -515,7 +515,13 @@ class DemoOrganizationSeeder extends Seeder
 
         foreach ($fields as $field) {
             SigningFieldValue::factory()->forField($field, $acceptance)->create([
-                'value_text' => $field->type->value === 'date' ? $signedAt->setTimezone($envelope->organization->timezone)->format('d/m/Y') : null,
+                // `copy()` é obrigatório: Carbon é mutável e `setTimezone()` mudaria o
+                // próprio $signedAt para o fuso local, fazendo tudo o que é gravado depois
+                // (sessão, link e o evento `acceptance.recorded`) sair três horas atrás do
+                // aceite — o mesmo fato com dois horários nas telas de evidência.
+                'value_text' => $field->type->value === 'date'
+                    ? $signedAt->copy()->setTimezone($envelope->organization->timezone)->format('d/m/Y')
+                    : null,
                 'created_at' => $signedAt,
             ]);
         }
@@ -579,7 +585,28 @@ class DemoOrganizationSeeder extends Seeder
             'signature_status' => $signedByCompany ? 'company_a1' : 'none',
             'signature_profile' => $signedByCompany ? 'PAdES-B-B' : null,
             'certificate_reference_id' => $certificate?->id,
-            'validation_result' => $signedByCompany ? ['valid' => true, 'validator' => 'pyhanko', 'environment' => 'test'] : null,
+            /*
+             * Forma real de `validation_result` (OperatorSignature::validationPayload):
+             * envelope com os fatos negativos explícitos e o resultado bruto em `result`.
+             *
+             * `result` fica **null** de propósito: os bytes deste envelope de demonstração
+             * são de fábrica e nenhuma `pdftool validate` rodou sobre eles. Fabricar
+             * `all_intact = true` faria a página pública afirmar uma integridade que
+             * ninguém verificou — exatamente o que a arquitetura §2 proíbe. A tela então
+             * mostra o caminho honesto ("resultado não registrado"), que é a verdade
+             * sobre este dado.
+             */
+            'validation_result' => $signedByCompany ? [
+                'signed' => true,
+                'profile' => 'PAdES-B-B',
+                'environment' => 'test',
+                'validated_at' => $completedAt->toIso8601String(),
+                'timestamp' => null,
+                'long_term_validation' => false,
+                'revocation' => 'not_checked',
+                'reason' => 'demo_seed_not_validated',
+                'result' => null,
+            ] : null,
             'validated_at' => $signedByCompany ? $completedAt : null,
             'created_at' => $completedAt,
         ]);

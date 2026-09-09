@@ -127,6 +127,80 @@ return [
     'evidence_show_ip' => env('ASSINAVELOX_EVIDENCE_SHOW_IP', 'masked'),
 
     /*
+    |--------------------------------------------------------------------------
+    | Finalização e página de evidências (docs/finalizacao-e-evidencias.md)
+    |--------------------------------------------------------------------------
+    |
+    | A página de evidências é gerada em Blade → DOMPDF ANTES da assinatura e
+    | anexada ao final do documento consolidado. Ela nunca imprime o hash final
+    | (que só existe depois de o arquivo estar pronto) nem se apresenta como
+    | certificado digital.
+    |
+    */
+    'evidence' => [
+        // View Blade renderizada pelo DOMPDF.
+        'view' => 'evidence.page',
+
+        // Papel e margens (mm) da página de evidências.
+        'paper' => env('ASSINAVELOX_EVIDENCE_PAPER', 'a4'),
+
+        /*
+        | Fonte padrão do DOMPDF. "DejaVu Sans" acompanha o dompdf e tem os
+        | acentos do português; trocar por uma fonte sem cobertura Unicode faz
+        | "ação" virar "a??o" no PDF entregue.
+        */
+        'font' => env('ASSINAVELOX_EVIDENCE_FONT', 'DejaVu Sans'),
+
+        // Eventos da trilha impressos na linha do tempo (os demais são internos).
+        'timeline_events' => [
+            'envelope.sent',
+            'invitation.sent',
+            'invitation.resent',
+            'invitation.opened',
+            'challenge.verified',
+            'acceptance.recorded',
+            'recipient.refused',
+            'envelope.refused',
+            'envelope.finalizing',
+            'envelope.consolidated',
+            'envelope.evidence_generated',
+            'envelope.signed_company_a1',
+            'envelope.completed',
+        ],
+
+        // Limite de eventos impressos (uma trilha longa não pode virar 40 páginas).
+        'timeline_limit' => (int) env('ASSINAVELOX_EVIDENCE_TIMELINE_LIMIT', 200),
+
+        /*
+        | QR code impresso na página de evidências, apontando para
+        | {app.url}/verificar/{code}. Módulo em pixels e margem em módulos.
+        */
+        'qr' => [
+            'module_px' => 4,
+            'quiet_zone' => 2,
+        ],
+
+        /*
+        | Rodapé carimbado em TODAS as páginas do documento consolidado
+        | (docs/juridico/declaracao-de-aceite.md §6). É desenhado na etapa de
+        | composição, antes da assinatura, e nunca contém o hash final, nomes,
+        | e-mails ou IPs — apenas a URL de verificação e o código.
+        |
+        | Geometria normalizada [0,1] sobre a página exibida (mesma convenção de
+        | signing_fields e do `pdftool compose`).
+        */
+        'footer' => [
+            'enabled' => (bool) env('ASSINAVELOX_EVIDENCE_FOOTER', true),
+            'x' => 0.06,
+            'y' => 0.962,
+            'width' => 0.88,
+            'height' => 0.022,
+            'font_size' => 7.0,
+            'align' => 'center',
+        ],
+    ],
+
+    /*
     | Upload de documentos (docs/preparacao-documental.md).
     |
     | A validação real é feita por App\Services\Documents\UploadInspector sobre o
@@ -229,14 +303,57 @@ return [
 
     /*
     | Mercado Pago (Checkout Pro). Placeholders vazios em dev; nunca commitar valores.
-    | environment: sandbox | production.
+    | environment: sandbox | production. Sem `access_token` o adaptador real fica
+    | DESABILITADO (isConfigured() = false) e o checkout responde dizendo isso —
+    | nada de endpoint inventado. Ver docs/cobranca.md e docs/integracoes/mercado-pago.md.
+    |
+    | `driver`: `auto` usa o Mercado Pago quando há credencial e o gateway FAKE quando
+    | não há; `fake` força o gateway fake (desenvolvimento/testes); `mercadopago` força o
+    | real (e falha claramente sem credencial).
     */
     'mercadopago' => [
+        'driver' => env('MERCADOPAGO_DRIVER', 'auto'), // auto | fake | mercadopago
         'environment' => env('MERCADOPAGO_ENVIRONMENT', 'sandbox'),
         'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
         'public_key' => env('MERCADOPAGO_PUBLIC_KEY'),
         'webhook_secret' => env('MERCADOPAGO_WEBHOOK_SECRET'),
         'notification_url' => env('MERCADOPAGO_NOTIFICATION_URL'),
+
+        // Janela aceita entre o `ts` do cabeçalho x-signature e o relógio do servidor.
+        'webhook_tolerance_seconds' => (int) env('MERCADOPAGO_WEBHOOK_TOLERANCE_SECONDS', 300),
+
+        // HTTP: timeout total e tentativas. Só repete em erro de conexão, 429 e 5xx,
+        // sempre com a MESMA X-Idempotency-Key (repetição idempotente).
+        'timeout_seconds' => (int) env('MERCADOPAGO_TIMEOUT_SECONDS', 20),
+        'connect_timeout_seconds' => (int) env('MERCADOPAGO_CONNECT_TIMEOUT_SECONDS', 10),
+        'retries' => (int) env('MERCADOPAGO_RETRIES', 2),
+        'retry_delay_ms' => (int) env('MERCADOPAGO_RETRY_DELAY_MS', 500),
+
+        // Preferência do Checkout Pro. `statement_descriptor` tem no máximo 13 caracteres.
+        'statement_descriptor' => env('MERCADOPAGO_STATEMENT_DESCRIPTOR', 'ASSINAVELOX'),
+        'binary_mode' => (bool) env('MERCADOPAGO_BINARY_MODE', false),
+        'preference_ttl_hours' => (int) env('MERCADOPAGO_PREFERENCE_TTL_HOURS', 48),
+        'installments' => (int) env('MERCADOPAGO_INSTALLMENTS', 1),
+        // Tipos de pagamento excluídos da preferência (lista separada por vírgula).
+        // `account_money` NÃO pode ser excluído (regra do provedor).
+        'excluded_payment_types' => env('MERCADOPAGO_EXCLUDED_PAYMENT_TYPES', ''),
+    ],
+
+    /*
+    | Ciclo de cobrança e inadimplência (RECONCILIACAO Q20: pagamento avulso por ciclo
+    | via Checkout Pro; sem recorrência automática). `grace_days` dias após o fim do
+    | período a assinatura vai para `past_due` (bloqueia envio, mantém leitura e
+    | download); `expired_days` depois ela expira e a organização volta ao plano free.
+    */
+    'billing' => [
+        'grace_days' => (int) env('ASSINAVELOX_BILLING_GRACE_DAYS', 3),
+        'expired_days' => (int) env('ASSINAVELOX_BILLING_EXPIRED_DAYS', 15),
+        // Operadora impressa no recibo interno (que NÃO é documento fiscal).
+        'operator' => [
+            'name' => env('ASSINAVELOX_OPERATOR_NAME', 'AssinaVelox'),
+            'legal_name' => env('ASSINAVELOX_OPERATOR_LEGAL_NAME'),
+            'tax_id' => env('ASSINAVELOX_OPERATOR_TAX_ID'),
+        ],
     ],
 
     // Suporte/ajuda exibidos na UI.

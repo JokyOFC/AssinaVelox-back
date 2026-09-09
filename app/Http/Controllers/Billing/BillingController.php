@@ -11,7 +11,11 @@ use App\Models\DocumentVersion;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Services\Billing\BillingProfile;
+use App\Services\Billing\PaymentMethods;
+use App\Services\Billing\SubscriptionLifecycle;
 use App\Support\CurrentOrganization;
+use App\Support\TaxId;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -19,11 +23,25 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Plano e cobrança (ROUTES §2.15). Leitura real da assinatura/pagamentos existentes;
- * ações de cancelamento/perfil de faturamento // TODO(Wave B - cobrança).
+ * Plano e cobrança (ROUTES §2.15, DESIGN §6.11 aba "Plano e cobrança").
+ *
+ * Três coisas que esta tela **não** faz, de propósito:
+ *
+ * - não mostra cartão salvo: o Checkout Pro não guarda meio de pagamento e não devolve
+ *   dado de cartão (RECONCILIACAO Q21). O card "Forma de pagamento" é **somente
+ *   leitura** e descreve o meio do último pagamento aprovado — `last_four` é sempre
+ *   `null` porque esse dado simplesmente não existe do nosso lado;
+ * - não emite nota fiscal: o "PDF" da lista é recibo interno (Fase 2 trata NFS-e);
+ * - não decide nada a partir do retorno do checkout: `checkout_return` é só um aviso
+ *   "estamos confirmando seu pagamento".
+ *
+ * O uso do ciclo vem dos contadores da assinatura, que são mantidos pelo ledger
+ * `plan_consumptions` (reserva no envio, confirmação na conclusão, liberação na falha).
  */
 class BillingController extends Controller
 {
+    public function __construct(private readonly SubscriptionLifecycle $lifecycle) {}
+
     public function index(Request $request): Response
     {
         $organization = CurrentOrganization::instance()->get();
@@ -32,13 +50,23 @@ class BillingController extends Controller
         $subscription = $organization->currentSubscription()->with('plan')->first();
         $plan = $subscription?->plan;
 
+        /*
+         * A coluna de data da tabela mostra `paid_at ?? created_at`; ordenar por `id` deixaria
+         * as datas visíveis fora de ordem (um pendente de agosto acima de um pago de setembro).
+         * A ordenação segue exatamente o valor exibido. `COALESCE` existe em MySQL e SQLite.
+         */
         $payments = Payment::query()
             ->with('plan')
-            ->latest()
+            ->orderByRaw('COALESCE(paid_at, created_at) DESC')
+            ->orderByDesc('id')
             ->paginate(12)
             ->withQueryString();
 
-        $lastApproved = Payment::query()->where('status', PaymentStatus::Approved->value)->latest('paid_at')->first();
+        $lastApproved = Payment::query()
+            ->where('status', PaymentStatus::Approved->value)
+            ->orderByDesc('paid_at')
+            ->orderByDesc('id')
+            ->first();
 
         $payments->through(fn (Payment $payment): array => [
             'id' => $payment->ulid,
@@ -49,16 +77,25 @@ class BillingController extends Controller
             'status' => $payment->status->value,
             'display_status' => $payment->status->displayStatus()->value,
             'status_label' => $payment->status->label(),
-            'receipt_url' => $payment->status === PaymentStatus::Approved
+            // O recibo só existe para pagamento efetivamente pago.
+            'receipt_url' => $payment->isPaid()
                 ? route('billing.payments.receipt', ['payment' => $payment->ulid])
                 : null,
             'mp_payment_id' => $payment->provider_payment_id,
         ]);
 
+        $checkoutReturn = $request->session()->get('checkout_return');
+        $checkoutError = $request->session()->get('checkout_error');
+
         return Inertia::render('settings/billing', [
             'subscription' => $this->subscriptionPayload($subscription, $plan),
             'usage' => [
-                'envelopes' => ['used' => (int) ($subscription->envelopes_used ?? 0), 'limit' => $plan?->envelope_quota],
+                'envelopes' => [
+                    // O que conta para a cota é o consumo confirmado + o reservado (em
+                    // trânsito): é isso que o ledger desconta do plano.
+                    'used' => (int) (($subscription->envelopes_used ?? 0) + ($subscription->envelopes_reserved ?? 0)),
+                    'limit' => $plan?->envelope_quota,
+                ],
                 'members' => [
                     'used' => $organization->memberships()->where('status', MembershipStatus::Active->value)->count(),
                     'limit' => $plan?->user_quota,
@@ -69,11 +106,12 @@ class BillingController extends Controller
                 ],
             ],
             'payment_method' => $lastApproved ? [
-                'type' => $this->paymentMethodType($lastApproved->payment_method_id),
-                'label' => $this->paymentMethodLabel($lastApproved->payment_method_id),
+                'type' => PaymentMethods::type($lastApproved->payment_method_id),
+                'label' => PaymentMethods::label($lastApproved->payment_method_id),
+                // Não existe: o Checkout Pro não devolve dado de cartão e nada é guardado.
                 'last_four' => null,
             ] : null,
-            'billing_profile' => null, // TODO(Wave B): dados de faturamento
+            'billing_profile' => BillingProfile::for($organization),
             'payments' => [
                 'data' => $payments->items(),
                 'links' => [
@@ -95,22 +133,48 @@ class BillingController extends Controller
             ],
             'can' => [
                 'manage' => true,
-                'cancel' => $request->user()->can('delete', $organization) && $plan !== null && ! $plan->isFree(),
+                'cancel' => $request->user()->can('delete', $organization)
+                    && $plan !== null
+                    && ! $plan->isFree()
+                    && ! (bool) ($subscription->cancel_at_period_end ?? false),
             ],
             'pending_checkout' => Payment::query()
                 ->where('status', PaymentStatus::Pending->value)
                 ->where('created_at', '>=', now()->subDay())
                 ->exists(),
+            'checkout_return' => is_string($checkoutReturn) ? $checkoutReturn : null,
+            'checkout_error' => is_string($checkoutError) ? $checkoutError : null,
         ]);
     }
 
+    /**
+     * Cancelar a renovação (rota com `org.role:owner` e `password.confirm`).
+     *
+     * Não corta o acesso: o plano vale até o fim do ciclo já pago. A volta ao Grátis
+     * acontece na expiração, pelo comando agendado.
+     */
     public function cancel(Request $request): RedirectResponse
     {
         $organization = CurrentOrganization::instance()->get();
         Gate::authorize('delete', $organization);
 
-        // TODO(Wave B): subscription.cancel_at_period_end = true + auditoria.
-        return back()->with('info', 'O cancelamento da renovação estará disponível em breve.');
+        $subscription = $this->lifecycle->currentFor($organization);
+
+        if ($subscription === null || $subscription->plan->isFree()) {
+            return back()->with('info', 'Sua organização já está no plano Grátis — não há renovação para cancelar.');
+        }
+
+        if ($subscription->cancel_at_period_end) {
+            return back()->with('info', 'A renovação deste plano já está cancelada.');
+        }
+
+        $this->lifecycle->cancelAtPeriodEnd($subscription);
+
+        $end = $subscription->current_period_end?->timezone($organization->timezone)?->format('d/m/Y');
+
+        return back()->with('success', $end !== null
+            ? "Renovação cancelada. O plano continua ativo até {$end}."
+            : 'Renovação cancelada. O plano continua ativo até o fim do ciclo atual.');
     }
 
     public function resume(Request $request): RedirectResponse
@@ -118,22 +182,38 @@ class BillingController extends Controller
         $organization = CurrentOrganization::instance()->get();
         Gate::authorize('manageBilling', $organization);
 
-        // TODO(Wave B): cancel_at_period_end = false.
-        return back()->with('info', 'A reativação da renovação estará disponível em breve.');
+        $subscription = $this->lifecycle->currentFor($organization);
+
+        if ($subscription === null || ! $subscription->cancel_at_period_end) {
+            return back()->with('info', 'A renovação deste plano já está ativa.');
+        }
+
+        $this->lifecycle->resume($subscription);
+
+        return back()->with('success', 'Renovação reativada. O plano segue sendo cobrado a cada ciclo.');
     }
 
+    /**
+     * Dados de faturamento. Razão social e documento vão para as colunas da organização
+     * (o documento é criptografado); endereço, cidade, UF, CEP e e-mail ficam em
+     * `organizations.settings.billing_profile`.
+     */
     public function updateProfile(Request $request): RedirectResponse
     {
         $organization = CurrentOrganization::instance()->get();
         Gate::authorize('manageBilling', $organization);
 
-        $request->validate([
+        $validated = $request->validate([
             'legal_name' => ['required', 'string', 'max:160'],
-            'document_number' => ['required', 'string', 'max:20'],
+            'document_number' => ['required', 'string', 'max:20', function (string $attribute, mixed $value, callable $fail): void {
+                if (! TaxId::isValid(is_string($value) ? $value : null)) {
+                    $fail('Informe um CPF ou CNPJ válido.');
+                }
+            }],
             'address_line' => ['required', 'string', 'max:200'],
             'city' => ['required', 'string', 'max:120'],
-            'state' => ['required', 'string', 'size:2'],
-            'postal_code' => ['required', 'digits:8'],
+            'state' => ['required', 'string', 'size:2', 'alpha'],
+            'postal_code' => ['required', 'string', 'max:9'],
             'email' => ['required', 'email:rfc', 'max:255'],
         ], [], [
             'legal_name' => 'razão social',
@@ -145,8 +225,21 @@ class BillingController extends Controller
             'email' => 'e-mail',
         ]);
 
-        // TODO(Wave B): persistir dados de faturamento.
-        return back()->with('info', 'Os dados de faturamento estarão disponíveis em breve.');
+        if (strlen(TaxId::digits($validated['postal_code'])) !== 8) {
+            return back()->withErrors(['postal_code' => 'O CEP precisa ter 8 dígitos.'])->withInput();
+        }
+
+        BillingProfile::store($organization, [
+            'legal_name' => $validated['legal_name'],
+            'document_number' => $validated['document_number'],
+            'address_line' => $validated['address_line'],
+            'city' => $validated['city'],
+            'state' => $validated['state'],
+            'postal_code' => $validated['postal_code'],
+            'email' => $validated['email'],
+        ]);
+
+        return back()->with('success', 'Dados de faturamento salvos. Eles aparecem nos próximos recibos.');
     }
 
     /**
@@ -162,9 +255,13 @@ class BillingController extends Controller
                 'key' => $plan->code ?? 'free',
                 'code' => $plan->code ?? 'free',
                 'name' => $plan->name ?? 'Grátis',
+                'description' => $plan->description ?? null,
                 'price_cents_monthly' => $plan ? ($yearly ? (int) round($plan->price_cents / 12) : (int) $plan->price_cents) : 0,
                 'price_cents_yearly' => $plan && $yearly ? (int) $plan->price_cents : null,
                 'features' => PlanController::featureLabels($plan),
+                // Preço fictício: a interface precisa saber para não anunciá-lo como oferta.
+                'is_sandbox' => (bool) ($plan->is_sandbox ?? false),
+                'is_public' => (bool) ($plan->is_public ?? true),
             ],
             'status' => $status->value,
             'status_label' => $status->label(),
@@ -174,29 +271,5 @@ class BillingController extends Controller
             'cancel_at_period_end' => (bool) ($subscription->cancel_at_period_end ?? false),
             'trial_ends_at' => $status === SubscriptionStatus::Trialing ? $subscription?->current_period_end?->toIso8601String() : null,
         ];
-    }
-
-    protected function paymentMethodType(?string $methodId): string
-    {
-        return match (true) {
-            $methodId === null => 'other',
-            $methodId === 'pix' => 'pix',
-            in_array($methodId, ['bolbradesco', 'boleto', 'pec'], true) => 'boleto',
-            $methodId === 'account_money' => 'account_money',
-            in_array($methodId, ['debvisa', 'debmaster', 'debelo'], true) => 'debit_card',
-            default => 'credit_card',
-        };
-    }
-
-    protected function paymentMethodLabel(?string $methodId): string
-    {
-        return match ($this->paymentMethodType($methodId)) {
-            'pix' => 'Pix',
-            'boleto' => 'Boleto',
-            'account_money' => 'Saldo Mercado Pago',
-            'debit_card' => 'Cartão de débito',
-            'credit_card' => 'Cartão de crédito'.($methodId ? ' ('.ucfirst($methodId).')' : ''),
-            default => 'Outro',
-        };
     }
 }

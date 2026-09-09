@@ -95,7 +95,7 @@ class DashboardController extends Controller
                 ->count(),
             'plan_usage' => $this->planUsage(),
             'recent_envelopes' => EnvelopeResource::collection(
-                $visible()->with(['folder', 'creator', 'recipients', 'document'])
+                $visible()->with(['folder', 'creator', 'recipients', 'document', 'verificationRecord'])
                     ->where('updated_at', '>=', now()->subDays(7))
                     ->latest('updated_at')
                     ->limit(5)

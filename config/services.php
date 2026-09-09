@@ -35,4 +35,17 @@ return [
         ],
     ],
 
+    /*
+    | Mercado Pago (Checkout Pro) — a configuração canônica fica em
+    | config/assinavelox.php, chave `mercadopago`, junto do restante das regras de
+    | negócio (ambiente, tolerância do webhook, timeouts, descrição na fatura).
+    | Repetir as credenciais aqui só criaria duas fontes de verdade, então este
+    | bloco existe apenas como ponteiro: leia `config('assinavelox.mercadopago')`
+    | (ou, no código, App\Services\Billing\BillingSettings).
+    |
+    | Variáveis: MERCADOPAGO_DRIVER, MERCADOPAGO_ENVIRONMENT, MERCADOPAGO_ACCESS_TOKEN,
+    | MERCADOPAGO_PUBLIC_KEY, MERCADOPAGO_WEBHOOK_SECRET, MERCADOPAGO_NOTIFICATION_URL.
+    | Nunca gravar nenhuma delas em log, exceção, argumento de processo ou fila.
+    */
+
 ];

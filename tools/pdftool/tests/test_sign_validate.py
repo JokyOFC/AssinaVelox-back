@@ -219,11 +219,16 @@ def test_validate_unsigned_pdf(tmp_path, run_cli):
     src = make_pdf(tmp_path / "src.pdf", [{}])
     code, val = run_cli("validate", "--in", src)
     assert code == 0
+    # A file with no signatures answers false to every "all_*" flag: there is
+    # nothing intact, valid, covering or DocMDP-clean about an unsigned PDF.
+    # Callers must read signature_count before drawing any conclusion.
     assert val == {
         "ok": True,
         "signature_count": 0,
         "all_intact": False,
         "all_valid": False,
+        "all_covering": False,
+        "all_docmdp_ok": False,
         "trust_roots_configured": 0,
         "revocation": "not_checked",
         "signatures": [],

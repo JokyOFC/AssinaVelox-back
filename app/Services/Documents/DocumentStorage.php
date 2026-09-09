@@ -117,6 +117,53 @@ class DocumentStorage
     }
 
     /**
+     * SHA-256 recalculado dos **bytes que estão no disco agora**, em streaming (um artefato
+     * final pode ter dezenas de megabytes e não precisa caber na memória).
+     *
+     * Serve para conferir a coluna `sha256` contra a realidade: a coluna é o que a plataforma
+     * publica, e os bytes são o que ela entrega. Devolve `null` quando o arquivo não existe
+     * ou não pode ser lido — ausência de resposta nunca é confirmação.
+     */
+    public function sha256(DocumentVersion $version): ?string
+    {
+        $disk = $this->disk();
+
+        if (! $disk->exists($version->storage_path)) {
+            return null;
+        }
+
+        $stream = null;
+
+        try {
+            $stream = $disk->readStream($version->storage_path);
+
+            if (! is_resource($stream)) {
+                return null;
+            }
+
+            $context = hash_init('sha256');
+
+            while (! feof($stream)) {
+                $chunk = fread($stream, 1024 * 1024);
+
+                if ($chunk === false) {
+                    return null;
+                }
+
+                hash_update($context, $chunk);
+            }
+
+            return hash_final($context);
+        } catch (\Throwable) {
+            return null;
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+    }
+
+    /**
      * Transmite a versão pelo controller autorizado. Nunca existe URL pública nem
      * assinada: o disco é privado e cada byte passa por policy (RECONCILIACAO Q23).
      *

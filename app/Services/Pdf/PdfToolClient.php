@@ -235,6 +235,35 @@ class PdfToolClient
     }
 
     /**
+     * Metadados públicos do certificado dentro de um PKCS#12 — titular, emissor, série,
+     * impressão digital SHA-256 e validade.
+     *
+     * Serve para **identificar o certificado que vai assinar** antes de a assinatura
+     * existir, em vez de adivinhá-lo pela linha mais recente de `certificate_references`.
+     * Nada de chave privada e nada de senha sai daqui: a senha é lida pelo processo filho
+     * do NOME da variável de ambiente, como em `sign`.
+     *
+     * @return array<string, mixed>
+     */
+    public function certificateInfo(string $pfxPath, string $passphraseEnvVar, ?string $correlationId = null): array
+    {
+        $correlationId ??= $this->newCorrelationId();
+        $args = [
+            '--pfx', $this->absolute($pfxPath, 'PKCS#12'),
+            '--pass-env', $this->envName($passphraseEnvVar),
+        ];
+
+        $secret = $this->passphrase($passphraseEnvVar, $this->argv('cert-info', $args), $correlationId);
+
+        return $this->run(
+            'cert-info',
+            $args,
+            secretEnv: [$passphraseEnvVar => $secret],
+            correlationId: $correlationId,
+        );
+    }
+
+    /**
      * Certificado autoassinado de TESTE (não é ICP-Brasil). $outPem opcional
      * grava o certificado em PEM para uso como raiz em validate().
      *

@@ -16,6 +16,14 @@ beforeEach(function (): void {
     if (! is_file(public_path('build/manifest.json'))) {
         $this->markTestSkipped('public/build/manifest.json ausente — rode `npm run build` antes deste smoke test.');
     }
+
+    // Este teste verifica o caminho de PRODUÇÃO (manifest do build). Com `npm run dev`
+    // rodando, o Vite escreve `public/hot` e o helper passa a apontar para o servidor de
+    // desenvolvimento — o que é o comportamento certo para quem está desenvolvendo, mas
+    // tornaria o resultado deste teste dependente de haver ou não um dev server aberto na
+    // máquina. Apontar o hot file para um caminho inexistente isola o teste disso sem
+    // tocar no servidor de ninguém.
+    Vite::useHotFile(storage_path('framework/testing/vite-hot-disabled'));
 });
 
 test('páginas públicas saem com CSP com nonce e assets do build', function (string $uri): void {

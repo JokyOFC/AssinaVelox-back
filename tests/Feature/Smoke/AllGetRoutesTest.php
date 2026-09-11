@@ -37,7 +37,16 @@ require_once __DIR__.'/../Support/OrganizationHelpers.php';
 */
 
 /** Rotas de terceiros/dev que não fazem parte da aplicação. */
-const SMOKE_EXCLUDED_URI_PREFIXES = ['horizon', '_inertia', 'storage/'];
+/*
+| Rotas registradas por pacotes, fora do produto:
+| - `sanctum/csrf-cookie`: rota do Sanctum para SPA em outro domínio. O front é Inertia na
+|   mesma origem (sessão + CSRF do Laravel), então ela não participa de nenhum fluxo; o
+|   Sanctum entra na Fase 2 só pelos tokens da API v1.
+| - `docs/api*` e `_scramble/*`: documentação OpenAPI do Scramble. Por padrão responde 403
+|   fora do ambiente local (gate `viewApiDocs`), que é o comportamento desejado até a onda
+|   da API definir quem pode vê-la — e essa onda terá teste próprio para isso.
+*/
+const SMOKE_EXCLUDED_URI_PREFIXES = ['horizon', '_inertia', 'storage/', 'sanctum/', 'docs/api', '_scramble/'];
 
 /**
  * Rotas que respondem 404 de propósito neste contexto: ou continuam esqueleto (Wave C),

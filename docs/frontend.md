@@ -522,6 +522,71 @@ As chaves novas de `Features` (`pin_auth`, `sender_domains`, `cpf_field`, `cpf_l
 5. `field-types.ts` (C-BRAND): acrescentar `cpf` às tabelas; aí `SigningFieldType` e `FieldType` podem ser unificados e `field-type-extras.ts` encolhe.
 6. `php artisan wayfinder:generate --with-form` depois das rotas finais (os helpers usados — `sign.pin.verify`, `sign.capture.store`, `envelopes.recipients.identity_capture`, `settings.organization.cnpj`, `cnpj.lookup` — já estavam gerados no ambiente).
 
+## Fase 2 — onda C: certificado do participante, assinaturas, carimbo, dossiê e preservação
+
+Contratos do backend: `docs/fase-2/a1-do-participante.md` §7 (K-A1), `docs/fase-2/carimbo-e-dossie.md` §7 (K-TSA) e `docs/fase-2/retencao-e-preservacao.md` §6 e §10 (K-RET). Mesma regra de ouro (roadmap T8): **cada recurso só aparece com a sua flag**; com tudo desligado, telas, textos e payloads são os de antes.
+
+### Semântica (T1, T2, T3)
+
+- Três coisas, três nomes: **aceite eletrônico** (todos os participantes, inalterado) ≠ **assinatura com o certificado do próprio participante** ("Assinado com certificado A1 de {nome} (emitido por {AC})", sempre o `label` do servidor) ≠ **assinatura da operadora** ("Certificado da operadora", que "não é a assinatura pessoal de nenhum participante").
+- `SignatureStatus` ganhou `participants_a1` e `mixed`. `hasCryptographicSignature`, `hasOperatorSignature` e `hasParticipantSignatures` (`lib/labels.ts`) decidem "PDF assinado" e o selo verde; nenhuma tela compara mais com `'company_a1'` para isso.
+- Perfil: a interface mostra o que o servidor registrou (`signature_profile`), com `PAdES-B-B` como padrão. Nenhum texto do front fala em B-T/B-LT/B-LTA.
+- Carimbo do tempo: o rótulo é **sempre** o `label` do servidor ("Carimbo do tempo da operadora — não é carimbo ICP-Brasil"); o front não escreve rótulo próprio para o tipo do carimbo. Carimbo de teste mostra o `test_notice`.
+- Certificado de teste: `TestCertificateNotice` com o `kind_label` do servidor ("Certificado de TESTE — não é ICP-Brasil e não tem validade jurídica") na prévia, nas evidências e na verificação.
+- Revogação aparece sempre como **não verificada**; integridade, confiança da cadeia e revogação são linhas separadas.
+
+### De onde vem cada recurso
+
+| Recurso                                   | Lido de                                                                                         | Onde aparece                                            |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Assinar com o próprio certificado (§2.12) | `GET sign.certificate.show` (404 = desligado/não oferecido; **não** existe chave em `features`) | página pública (`sign`, comprovante)                    |
+| Lista de assinaturas de participantes     | prop `participant_signatures` (evidências), `result.participant_signatures` (verificação)       | evidências, verificação, detalhe (se a prop vier)       |
+| Carimbos do tempo (§2.13)                 | prop `timestamps` (evidências), `result.timestamps` (verificação) — **ainda não enviadas**      | evidências, verificação                                 |
+| Dossiê ZIP (§2.13)                        | `features.dossier_export` (opcional; ausente = desligada)                                       | detalhe (painel de conclusão), evidências, lista (lote) |
+| Preservação (§2.19)                       | prop `legal_hold` do detalhe **ou** `GET envelopes.legal_hold.show`                             | detalhe (selo + painel)                                 |
+| Registro excluído pela retenção           | `result.retention.purged`                                                                       | verificação                                             |
+
+### Componentes novos
+
+| Arquivo                                                    | Papel                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/certificates/participant-certificate-card.tsx` | Cartão "Assinar também com o seu certificado digital": estado por `stage`, intenção, desistência, arquivo + senha → prévia → consentimento → envio, acompanhamento da aplicação.                          |
+| `components/certificates/certificate-facts.tsx`            | `CertificateFacts` (titular com CPF mascarado, emissor, validade, tipo, série, impressão digital) e `TestCertificateNotice`.                                                                              |
+| `components/certificates/http.ts`                          | `certificateRequest` (GET/POST multipart com XSRF, `no-store`, tempo-limite; rede/tempo esgotado = desconhecido, T5).                                                                                     |
+| `components/verification/crypto-signature-list.tsx`        | `ParticipantSignatureList` (evidências: por participante e por arquivo, com integridade/cadeia/revogação, perfil, SHA-256 da revisão) e `PublicParticipantSignatureList` (nome mascarado, sem CPF/série). |
+| `components/verification/timestamp-list.tsx`               | `TimestampList` — carimbos com rótulo do servidor, horário local + UTC com milissegundos, série/política/emissor/resumo nas evidências, aviso de teste e a nota do servidor.                              |
+| `components/dossier/use-dossier-export.ts`                 | Pedido (`postJson`) + polling de 2,5 s em `status_url` (teto ~20 min); erros 403/404/422/429 em PT-BR.                                                                                                    |
+| `components/dossier/dossier-export-dialog.tsx`             | Estado da geração, "Baixar ZIP" com o `download_url` recebido, vencimento do link, SHA-256 do ZIP, rótulo do carimbo do manifesto e "O que vem no pacote".                                                |
+| `components/dossier/dossier-buttons.tsx`                   | `DossierButton` (documento concluído + flag) e `BulkDossierButton` ("Baixar dossiês" na barra de seleção).                                                                                                |
+| `components/envelopes/use-envelope-legal-hold.ts`          | Prop `legal_hold` ou `GET envelopes.legal_hold.show`; recarrega depois de cada visita Inertia bem-sucedida do detalhe (preservar/liberar voltam com `back()`).                                            |
+| `types/signatures.ts`                                      | Espelhos dos contratos: estado/prévia/erros do certificado, assinaturas (evidências e pública), carimbos, `DossierExport`, `PublicRetentionNotice`.                                                       |
+
+### Página pública (`sign/show.tsx`)
+
+- **Onde.** Na tela `sign`, um cartão próprio abaixo do cartão do aceite — separado da representação visual e da caixa de aceite, que continuam exatamente como antes (o aceite não depende do certificado). No comprovante (`completed`, `finalizing`, `already_signed_pending_others`), abaixo do recibo. Nunca para aprovador e visualizador (o servidor também devolve 404).
+- **Descoberta.** Um `GET sign.certificate.show` ao montar. 404 → o cartão não existe. Outros erros → "Não foi possível carregar…" com "Tentar de novo".
+- **Antes de todos aceitarem** (`choose`, `awaiting_others`): "Quero assinar também com meu certificado" registra só a escolha (`intent`) — sem arquivo e sem senha — e a tela diz para voltar pelo link quando o documento estiver pronto. "Desistir" pede confirmação.
+- **Conteúdo congelado** (`ready_to_upload`, `failed`): arquivo `.pfx`/`.p12` (validado no cliente por extensão e `max_upload_kb` antes de subir) + senha → "Conferir certificado" (`inspect`). A prévia mostra o `label`, o tipo (aviso destacado se for teste), titular com CPF mascarado, emissor, validade, série, impressão digital, os `warnings` do servidor, a regra de correspondência e o aviso quando o nome difere. O consentimento específico é a caixa `consent.checkbox_label` (desmarcada) com o `consent.statement` integral e a versão. "Autorizar e assinar com este certificado" envia `certificate`, `password`, `consent=1`, `consent_version` e o `fingerprint` da prévia (`store`, 202).
+- **Senha.** Campo `type="password"` com `autoComplete="off"`, fora de `<form>` (nada de "salvar senha"), `data-*-ignore` para gerenciadores; só na memória do componente; apagada depois do envio, ao trocar o arquivo, em `wrong_passphrase` e em envio sem resposta. Nada em `localStorage`, URL ou log.
+- **Erros.** Título curto por código (`participantCertificateErrorTitles`) + o `message` do servidor; o campo culpado fica `aria-invalid`. 429 mostra a espera; 403 `not_authenticated`, 409 e `certificate_changed` reconsultam o estado.
+- **Depois do envio** (`queued`, `applying`): consulta o estado a cada 4 s (teto de 10 min, depois "Atualizar"); ao sair desse estado, recarrega `screen`/`receipt`/`others` para o comprovante mostrar o arquivo final. `applied`, `expired`, `withdrawn` e `closed` têm texto próprio, sempre dizendo que o aceite eletrônico continua valendo.
+- Mobile-first: uma coluna, botões de largura total abaixo de `sm`, caixa de arquivo com área de toque de 44 px.
+
+### Detalhe, evidências e verificação
+
+- **Evidências.** "Situação da assinatura" ganhou a lista de assinaturas de participantes (por arquivo: revisão, integridade, cadeia, revogação, perfil, SHA-256), mantendo "Certificado da operadora" à parte ("assinou por último" no `mixed`). Nova seção "Carimbo do tempo" quando `timestamps.items` vier. "Baixar dossiê (ZIP)" no cabeçalho.
+- **Verificação.** `PublicParticipantSignatureList` abaixo da declaração, "Resultado técnico da validação" para qualquer `signature_status` diferente de `none`, "Carimbo do tempo" quando `result.timestamps` vier. Com `result.retention.purged`, uma tela própria: "Removido por política de retenção em {data}", a mensagem do servidor e **só** o resumo final com a conferência local — sem selo de "concluído", participantes ou marcos.
+- **Selo** (`seal.ts`): textos próprios para `participants_a1` e `mixed`.
+- **Detalhe.** Painel de conclusão com os textos de `participants_a1`/`mixed`, "Baixar PDF assinado" para qualquer assinatura criptográfica, "Baixar dossiê (ZIP)", selo **Preservado** ao lado do status, `EnvelopeLegalHoldPanel` (preservar e liberar com motivo obrigatório, pelos diálogos da área de retenção) abaixo do conteúdo, "Excluir rascunho" oculto quando preservado. A lista completa de assinaturas fica nas evidências (o detalhe a mostra se o controller passar `participant_signatures`).
+- **Lista.** "Baixar dossiês" na barra de seleção → `POST dossiers.bulk` com os ids, a mesma janela de acompanhamento e a nota de que só documentos concluídos entram.
+
+### Pendências fora do front (integração)
+
+1. `HandleInertiaRequests::features()`: `dossier_export` (`DossierFeature::enabled`), `retention_policies` (`RetentionFeature::enabled`), `operator_tsa`/`pades_bt` (`TimestampFeatures`). Sem `dossier_export`, os botões do dossiê não aparecem.
+2. `EnvelopeEvidenceController`: `timestamps => TimestampEvidence::forEnvelope($envelope)`. `PublicVerification::result`: `timestamps => TimestampEvidence::forPublic($envelope)` (e a chave no `VerificationContractTest`). O front já as consome; sem elas, a seção não aparece.
+3. `EnvelopeController::show` (opcional): `legal_hold => RetentionPresenter::forEnvelope(...)` evita o GET extra; `participant_signatures => ParticipantSignatureViews::forEvidence(...)` mostra a lista no próprio detalhe.
+4. `php artisan wayfinder:generate --with-form` na integração (os helpers usados — `sign.certificate.show`, `envelopes.dossier.store`, `dossiers.bulk`, `envelopes.legal_hold.show` — já estavam gerados no ambiente).
+
 ## Responsividade
 
 - Sidebar: `SidebarProvider` + `collapsible="offcanvas"`; abaixo de `md` (768px) vira `Sheet`; estado persistido no cookie `sidebar_state` (prop compartilhada `sidebarOpen`).

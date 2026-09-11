@@ -14,6 +14,7 @@ use App\Models\SigningSessionDocument;
 use App\Models\User;
 use App\Services\Branding\BrandingPresenter;
 use App\Services\Identity\CaptureStep;
+use App\Services\Signing\Certificates\ParticipantCertificateService;
 use App\Services\Signing\Channels\SignerAuthProps;
 use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
@@ -179,9 +180,29 @@ final class SignerPageProps
 
         if (in_array($screen, ['completed', 'finalizing', 'already_signed_pending_others'], true)) {
             $props['receipt'] = $this->receipt($context, $recipients, $request);
+
+            // Fase 2 §2.12: quem já aceitou e volta para enviar o certificado sem a janela de
+            // download precisa confirmar a identidade de novo. As props do código (e do canal/
+            // PIN) vêm também no comprovante — sem elas o cartão do certificado era um beco
+            // sem saída. Só enquanto o envio do certificado está aberto para esta pessoa.
+            $certificates = app(ParticipantCertificateService::class);
+
+            if ($certificates->awaitsReturningSigner($context) && ! $certificates->authenticated($context, $request)) {
+                $props['otp'] = $this->challenges->props($context);
+                $props['signer_auth'] = $this->auth->for($context, $request);
+            }
         }
 
         return $props;
+    }
+
+    /**
+     * A assinatura com o certificado do PRÓPRIO participante é oferecida a esta pessoa? A
+     * previsão de conclusão fica condicional (T1): pode haver assinatura criptográfica dela.
+     */
+    private function participantCertificateOffered(SignerContext $context): bool
+    {
+        return app(ParticipantCertificateService::class)->offeredTo($context);
     }
 
     /**
@@ -279,7 +300,7 @@ final class SignerPageProps
                 'version' => ConsentText::versionFor($context->envelope, $context->recipient, $count),
                 'checkbox_label' => ConsentText::checkboxLabel($context->envelope, $context->recipient, $count),
                 'statement' => $consentText,
-                'completion_notice' => ConsentText::completionNotice(),
+                'completion_notice' => ConsentText::completionNotice(null, $this->participantCertificateOffered($context)),
             ],
             'authorization' => [
                 'token' => $authorization,
@@ -573,7 +594,7 @@ final class SignerPageProps
              */
             'completion_notice' => $context->envelope->status->isTerminal()
                 ? SignatureNarrative::for($context->envelope, $context->envelope->verificationRecord)['statement']
-                : ConsentText::completionNotice(),
+                : ConsentText::completionNotice(null, $this->participantCertificateOffered($context)),
             // Fase 2 (aditivos): o que foi registrado e sobre quais documentos.
             'action' => $acceptance->action->value,
             'action_label' => $acceptance->action->label(),

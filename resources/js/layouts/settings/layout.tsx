@@ -21,6 +21,7 @@ import {
     branding as settingsBranding,
     general as settingsGeneral,
     notifications as settingsNotifications,
+    retention as settingsRetention,
     signing as settingsSigning,
     tags as settingsTags,
 } from '@/routes/settings';
@@ -111,6 +112,16 @@ export default function SettingsLayout({
                     hidden: !(
                         (features?.audit_log ?? false) &&
                         (permissions?.view_audit_log ?? false)
+                    ),
+                },
+                // Fase 2 §2.19: retenção e preservação (flag `retention_policies`).
+                {
+                    key: 'retention',
+                    title: 'Retenção e preservação',
+                    href: settingsRetention(),
+                    hidden: !(
+                        (features?.retention_policies ?? false) &&
+                        (permissions?.manage_settings ?? false)
                     ),
                 },
                 {

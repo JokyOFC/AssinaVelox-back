@@ -13,6 +13,8 @@ use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Services\Identity\CaptureEvidence;
 use App\Services\InPerson\InPersonEvidence;
+use App\Services\Signing\Certificates\ParticipantSignatureViews;
+use App\Services\Timestamp\TimestampEvidence;
 use App\Services\Verification\EvidenceDossier;
 use App\Services\Verification\HashLedger;
 use App\Services\Verification\SignatureNarrative;
@@ -117,7 +119,23 @@ class EnvelopeEvidenceController extends Controller
             'verify_url' => $envelope->verification_code
                 ? route('verify.show', ['code' => $envelope->verification_code])
                 : route('verify.index'),
+            // Fase 2 §2.12 (K-A1, aditivo): `participant_signatures` só existe quando o envelope
+            // tem pedidos de assinatura com o certificado do próprio participante.
+            ...ParticipantSignatureViews::evidenceProps($envelope),
+            // Fase 2 §2.13 (K-TSA, integração I-2C): carimbos do tempo do envelope, só quando
+            // existem (sem carimbo — o caso com `operator_tsa` desligada — a chave não aparece).
+            ...self::timestampProps($envelope),
         ]);
+    }
+
+    /**
+     * @return array<string, array{items: list<array<string, mixed>>, notice: string}>
+     */
+    private static function timestampProps(Envelope $envelope): array
+    {
+        $timestamps = TimestampEvidence::forEnvelope($envelope);
+
+        return $timestamps['items'] === [] ? [] : ['timestamps' => $timestamps];
     }
 
     /**

@@ -12,6 +12,8 @@ use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
 use App\Http\Controllers\Billing\PlanController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Dossier\DossierDownloadController;
+use App\Http\Controllers\Dossier\DossierExportController;
 use App\Http\Controllers\Envelopes\EnvelopeBulkController;
 use App\Http\Controllers\Envelopes\EnvelopeController;
 use App\Http\Controllers\Envelopes\EnvelopeDocumentController;
@@ -20,6 +22,7 @@ use App\Http\Controllers\Envelopes\EnvelopeEvidenceController;
 use App\Http\Controllers\Envelopes\EnvelopeFieldController;
 use App\Http\Controllers\Envelopes\EnvelopeRecipientController;
 use App\Http\Controllers\Envelopes\EnvelopeSendController;
+use App\Http\Controllers\Envelopes\LegalHoldController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\Identity\CaptureRequirementController;
 use App\Http\Controllers\Identity\CnpjLookupController;
@@ -50,8 +53,10 @@ use App\Http\Controllers\Settings\BrandingController;
 use App\Http\Controllers\Settings\BrandingLogoController;
 use App\Http\Controllers\Settings\GeneralController;
 use App\Http\Controllers\Settings\NotificationController as NotificationSettingsController;
+use App\Http\Controllers\Settings\RetentionController;
 use App\Http\Controllers\Settings\SigningController;
 use App\Http\Controllers\Sign\CaptureController as SignCaptureController;
+use App\Http\Controllers\Sign\CertificateController as SignCertificateController;
 use App\Http\Controllers\Sign\DocumentController as SignDocumentController;
 use App\Http\Controllers\Sign\DownloadController as SignDownloadController;
 use App\Http\Controllers\Sign\OtpController;
@@ -64,6 +69,7 @@ use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\Templates\TemplatePickerController;
 use App\Http\Controllers\Templates\TemplateSourceController;
 use App\Http\Controllers\Templates\TemplateUseController;
+use App\Http\Controllers\Tsa\TsaController;
 use App\Http\Controllers\Webhooks\MercadoPagoController;
 use App\Http\Controllers\Webhooks\SmsStatusWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppStatusWebhookController;
@@ -152,6 +158,14 @@ Route::prefix('assinar/{token}')
         // Sem `signer.verified`: o aceite consome a sessão e o comprovante é pedido logo
         // depois. A autorização é feita no controller (aceite registrado ou sessão viva).
         Route::get('download/{type}', [SignDownloadController::class, 'show'])->whereIn('type', ['signed', 'evidence'])->name('download');
+        // Fase 2 §2.12 (K-A1, docs/fase-2/a1-do-participante.md): assinatura com o certificado A1
+        // do PRÓPRIO participante. JSON; 404 com a flag `participant_a1` desligada. Autenticação no
+        // serviço: sessão do código OU janela de download deste navegador (quem já aceitou).
+        Route::get('certificado', [SignCertificateController::class, 'show'])->middleware('throttle:60,1,sign-certificate-show')->name('certificate.show');
+        Route::post('certificado/intencao', [SignCertificateController::class, 'intent'])->middleware('throttle:20,10,sign-certificate-intent')->name('certificate.intent');
+        Route::post('certificado/desistir', [SignCertificateController::class, 'withdraw'])->middleware('throttle:20,10,sign-certificate-withdraw')->name('certificate.withdraw');
+        Route::post('certificado/conferir', [SignCertificateController::class, 'inspect'])->middleware('throttle:10,10,sign-certificate-inspect')->name('certificate.inspect');
+        Route::post('certificado', [SignCertificateController::class, 'store'])->middleware('throttle:6,10,sign-certificate-store')->name('certificate.store');
     });
 
 // -- Assinatura em lote (Fase 2 §2.7, C-PRES — docs/fase-2/presencial-e-lote.md §3) -------
@@ -411,6 +425,18 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         ->middleware('throttle:10,1,batch-link')
         ->scopeBindings()
         ->name('envelopes.recipients.batch');
+
+    // Fase 2 §2.19 (K-RET) — retenção configurável e preservação (docs/fase-2/retencao-e-preservacao.md).
+    // Sem `org.role`: `updateSettings` na tela e `manage_legal_holds` (RetentionAuthorization) nos
+    // bloqueios. Flag `retention_policies` desligada: a tela mostra "Fase 2", gravar e preservar
+    // respondem 404; consultar e liberar um bloqueio já existente continuam possíveis.
+    Route::get('configuracoes/retencao', [RetentionController::class, 'edit'])->name('settings.retention');
+    Route::put('configuracoes/retencao', [RetentionController::class, 'update'])->middleware('throttle:20,1')->name('settings.retention.update');
+    Route::get('configuracoes/retencao/previa', [RetentionController::class, 'preview'])->middleware('throttle:60,1')->name('settings.retention.preview');
+    Route::post('configuracoes/retencao/preservacoes', [LegalHoldController::class, 'store'])->middleware('throttle:20,1')->name('settings.retention.holds.store');
+    Route::post('preservacoes/{legalHold}/liberar', [LegalHoldController::class, 'release'])->middleware('throttle:20,1')->name('legal_holds.release');
+    Route::get('documentos/{envelope}/preservacao', [LegalHoldController::class, 'show'])->middleware('throttle:60,1')->name('envelopes.legal_hold.show');
+    Route::post('documentos/{envelope}/preservacao', [LegalHoldController::class, 'storeForEnvelope'])->middleware('throttle:20,1')->name('envelopes.legal_hold.store');
 });
 
 // -- Painel interno (platform-admin; NÃO passa por org) ------------------------------------
@@ -437,5 +463,30 @@ Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin')->name
 Route::post('admin/acessar-como/encerrar', [AdminImpersonationController::class, 'stop'])
     ->middleware('auth')
     ->name('admin.impersonation.stop');
+
+// -- Fase 2, onda C §2.13 (K-TSA) — TSA da operadora e dossiê ZIP (docs/fase-2/carimbo-e-dossie.md) --
+// TSA RFC 3161 INTERNA: application/timestamp-query → application/timestamp-reply. Sem CSRF (cliente
+// de máquina); Bearer + IPs permitidos + limite no controller/rota. Flag `operator_tsa` desligada: 404.
+Route::post('tsa', TsaController::class)
+    ->middleware('throttle:'.max(1, (int) config('assinavelox.tsa.http.rate_per_minute', 120)).',1,tsa-http')
+    ->withoutMiddleware([PreventRequestForgery::class])
+    ->name('tsa.timestamp');
+
+// Dossiê ZIP (flag `dossier_export`; desligada: 404). Pedido idempotente em fila; status em JSON;
+// download só autenticado + permissão sobre cada envelope + URL assinada com expiração.
+Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): void {
+    Route::post('documentos/{envelope}/dossie', [DossierExportController::class, 'store'])
+        ->middleware('throttle:10,1,dossier-request')
+        ->name('envelopes.dossier.store');
+    Route::post('dossies/lote', [DossierExportController::class, 'storeBulk'])
+        ->middleware('throttle:5,1,dossier-bulk')
+        ->name('dossiers.bulk');
+    Route::get('dossies/{dossierExport}', [DossierExportController::class, 'show'])
+        ->middleware('throttle:120,1,dossier-status')
+        ->name('dossiers.show');
+    Route::get('dossies/{dossierExport}/baixar', [DossierDownloadController::class, 'show'])
+        ->middleware('throttle:download')
+        ->name('dossiers.download');
+});
 
 require __DIR__.'/settings.php';

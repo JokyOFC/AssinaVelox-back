@@ -19,11 +19,13 @@ import type {
     PlanCode,
     RecipientStatus,
     SignatureKind,
+    SignatureStatus,
     SignerAuthMethod,
     SigningFieldType,
     SigningOrder,
     SubscriptionStatus,
 } from '@/types/enums';
+import type { CryptoIntegrity, DossierExportStatus } from '@/types/signatures';
 
 /** Variantes semânticas de badge (cores em DESIGN §1.1 "Semânticas"). */
 export type BadgeTone =
@@ -403,4 +405,106 @@ export const paymentDisplayTones: Record<PaymentDisplayStatus, BadgeTone> = {
 export const notificationChannelLabels: Record<NotificationChannel, string> = {
     mail: 'E-mail',
     database: 'No app',
+};
+
+// ---------------------------------------------------------------------------
+// Assinatura criptográfica, carimbo e dossiê (Fase 2, onda C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Espelho de `SignatureStatus::shortLabel()`. Três coisas diferentes, cada uma com o seu
+ * nome (roadmap T1): certificado do participante ≠ certificado da operadora ≠ aceite.
+ */
+export const signatureStatusLabels: Record<SignatureStatus, string> = {
+    none: 'Sem certificado',
+    company_a1: 'Certificado A1 da operadora',
+    participants_a1: 'Certificado A1 dos participantes',
+    mixed: 'Certificados A1 dos participantes e da operadora',
+};
+
+/** O arquivo final tem alguma assinatura criptográfica (da operadora ou de participante)? */
+export function hasCryptographicSignature(
+    status: SignatureStatus | null | undefined,
+): boolean {
+    return status != null && status !== 'none';
+}
+
+/** O arquivo final tem a assinatura da operadora? */
+export function hasOperatorSignature(
+    status: SignatureStatus | null | undefined,
+): boolean {
+    return status === 'company_a1' || status === 'mixed';
+}
+
+/** O arquivo final tem assinatura de participante com o próprio certificado? */
+export function hasParticipantSignatures(
+    status: SignatureStatus | null | undefined,
+): boolean {
+    return status === 'participants_a1' || status === 'mixed';
+}
+
+/** Resultado técnico de UMA assinatura no arquivo final. */
+export const cryptoIntegrityLabels: Record<CryptoIntegrity, string> = {
+    intact: 'Íntegra e válida',
+    broken: 'Não confirmada',
+    unknown: 'Sem resultado registrado',
+};
+
+export const cryptoIntegrityTones: Record<CryptoIntegrity, BadgeTone> = {
+    intact: 'success',
+    broken: 'danger',
+    unknown: 'neutral',
+};
+
+/** Tom do selo do pedido do participante (`ParticipantSignatureRequestStatus`). */
+export function participantRequestTone(status: string): BadgeTone {
+    switch (status) {
+        case 'applied':
+            return 'success';
+        case 'failed':
+            return 'danger';
+        case 'requested':
+        case 'queued':
+        case 'applying':
+            return 'warning';
+        default:
+            return 'neutral';
+    }
+}
+
+/**
+ * Título curto de cada recusa do certificado (docs/fase-2/a1-do-participante.md §7). O
+ * texto explicativo é sempre o `message` do servidor; aqui só o título do alerta.
+ */
+export const participantCertificateErrorTitles: Record<string, string> = {
+    wrong_passphrase: 'Senha incorreta',
+    invalid_pkcs12: 'Arquivo de certificado inválido',
+    pkcs12_too_large: 'Arquivo grande demais',
+    pkcs12_without_key: 'Arquivo sem a chave privada',
+    pkcs12_without_certificate: 'Arquivo sem certificado',
+    key_certificate_mismatch: 'Chave e certificado não correspondem',
+    certificate_is_ca: 'Certificado de autoridade certificadora',
+    certificate_expired: 'Certificado vencido',
+    certificate_not_yet_valid: 'Certificado ainda não está válido',
+    certificate_not_for_signing: 'Certificado sem uso para assinatura',
+    test_certificate_not_accepted: 'Certificado de teste não aceito',
+    holder_mismatch: 'Titular diferente do participante',
+    certificate_changed: 'Certificado diferente do conferido',
+    not_ready: 'Ainda não é possível enviar',
+    already_queued: 'Certificado já recebido',
+    already_applied: 'Assinatura já aplicada',
+    window_closed: 'Prazo encerrado',
+    envelope_closed: 'Documento encerrado',
+    cannot_withdraw: 'Não é possível desistir agora',
+    not_requested: 'Nenhuma escolha registrada',
+    not_authenticated: 'Confirme sua identidade',
+    certificate_check_unavailable: 'Conferência indisponível no momento',
+};
+
+export const dossierStatusTones: Record<DossierExportStatus, BadgeTone> = {
+    pending: 'info',
+    building: 'info',
+    ready: 'success',
+    failed: 'danger',
+    expired: 'neutral',
 };

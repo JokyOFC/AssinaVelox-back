@@ -32,6 +32,26 @@ export function verificationSeal(
 
     switch (status) {
         case 'completed':
+            // Fase 2 §2.12: assinatura com o certificado do PRÓPRIO participante — com ou
+            // sem a da operadora por último. Nunca "ICP-Brasil"; o aceite continua existindo.
+            if (signatureStatus === 'participants_a1') {
+                return {
+                    tone: 'success',
+                    icon: 'shield-check',
+                    title: 'Concluído e assinado com certificado dos participantes',
+                    description: `O arquivo final recebeu assinaturas criptográficas feitas com o certificado digital do próprio participante${policy}, acrescentadas depois da consolidação e do relatório de evidências. Elas identificam o titular de cada certificado e se somam ao aceite eletrônico de cada participante, sem substituí-lo. A operadora não aplicou assinatura própria.`,
+                };
+            }
+
+            if (signatureStatus === 'mixed') {
+                return {
+                    tone: 'success',
+                    icon: 'shield-check',
+                    title: 'Concluído e assinado com certificados dos participantes e da operadora',
+                    description: `O arquivo final recebeu assinaturas criptográficas feitas com o certificado digital do próprio participante e, por último, a assinatura da AssinaVelox com certificado de sua própria titularidade${policy}. A assinatura da operadora não é a assinatura pessoal de nenhum participante; o aceite eletrônico de cada um continua registrado com as evidências.`,
+                };
+            }
+
             return signatureStatus === 'company_a1'
                 ? {
                       tone: 'success',

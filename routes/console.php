@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\Dossier\PurgeExpiredDossierExports;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -170,6 +171,51 @@ Schedule::command('identity:purge-captures')
 
 Schedule::command('public-forms:purge-submissions')
     ->hourlyAt(25)
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->onOneServer();
+
+/*
+| Fase 2, onda C (K-RET) — retenção configurável e preservação (docs/fase-2/retencao-e-preservacao.md).
+|
+| `retention:apply`: diário, em lotes, idempotente; retoma recibos pendentes; nada sob
+| preservação sai. Inerte com a flag `retention_policies` desligada (nenhuma organização é
+| selecionada). Sem `runInBackground()`, pelo mesmo motivo do `organizations:purge`: APAGA dados
+| em definitivo, e a falha precisa aparecer na saída do cron.
+|
+| `public-forms:prune-timer-marks`: apaga as marcas vencidas de uso único do carimbo de tempo
+| do formulário público (agora no banco). Independe de flag.
+*/
+Schedule::command('retention:apply')
+    ->dailyAt('04:25')
+    ->withoutOverlapping(120)
+    ->onOneServer();
+
+Schedule::command('public-forms:prune-timer-marks')
+    ->hourlyAt(35)
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->onOneServer();
+
+/*
+| Fase 2, onda C — integração I-2C (docs/fase-2/onda-c-relatorio.md).
+|
+| Dossiês vencidos (K-TSA, carimbo-e-dossie.md §5.2): cada montagem já agenda a própria
+| limpeza com atraso; esta varredura de hora em hora é a rede de segurança (só toca no que
+| venceu). Inerte com `dossier_export` desligada (não há dossiê).
+|
+| A1 do participante (K-A1, a1-do-participante.md §14 itens 5 e 6): apaga o material selado
+| órfão (PFX + senha cifrados que nenhum worker consumiu) e conclui envelopes cujo prazo de
+| envio do certificado venceu — com o driver `sync` o prazo só seria conferido quando a
+| finalização rodasse de novo. Inerte sem pedidos.
+*/
+Schedule::job(new PurgeExpiredDossierExports)
+    ->hourlyAt(50)
+    ->withoutOverlapping(10)
+    ->onOneServer();
+
+Schedule::command('participant-a1:maintain')
+    ->everyFifteenMinutes()
     ->withoutOverlapping(10)
     ->runInBackground()
     ->onOneServer();

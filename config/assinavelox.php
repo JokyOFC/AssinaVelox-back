@@ -62,6 +62,15 @@ return [
         // Fase 2, onda B — formulário público que gera envelope (C-FORM,
         // docs/fase-2/formulario-publico.md). Também exige `templates` ligada.
         'public_forms' => filter_var(env('ASSINAVELOX_FEATURE_PUBLIC_FORMS', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda C — K-TSA (docs/fase-2/carimbo-e-dossie.md). `operator_tsa` e `pades_bt`
+        // são da PLATAFORMA (só esta chave); `dossier_export` é da organização (esta chave E plano).
+        // `pades_bt` exige `operator_tsa` e NUNCA muda o perfil anunciado (continua PAdES-B-B, T2).
+        'operator_tsa' => filter_var(env('ASSINAVELOX_FEATURE_OPERATOR_TSA', false), FILTER_VALIDATE_BOOLEAN),
+        'pades_bt' => filter_var(env('ASSINAVELOX_FEATURE_PADES_BT', false), FILTER_VALIDATE_BOOLEAN),
+        'dossier_export' => filter_var(env('ASSINAVELOX_FEATURE_DOSSIER_EXPORT', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda C — K-RET (docs/fase-2/retencao-e-preservacao.md). Organização (esta
+        // chave E plano). Uma preservação já criada continua valendo com a flag desligada.
+        'retention_policies' => filter_var(env('ASSINAVELOX_FEATURE_RETENTION_POLICIES', false), FILTER_VALIDATE_BOOLEAN),
         // Plataforma (só a config global).
         'admin_users' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_USERS', false), FILTER_VALIDATE_BOOLEAN),
         'admin_audit' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_AUDIT', false), FILTER_VALIDATE_BOOLEAN),
@@ -378,6 +387,101 @@ return [
     'integrations' => [
         'timestamp' => ['driver' => env('ASSINAVELOX_TIMESTAMP_DRIVER', 'fake')],
         'fiscal_invoice' => ['driver' => env('ASSINAVELOX_FISCAL_INVOICE_DRIVER', 'fake')],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 2, onda C §2.13 — TSA da OPERADORA, RFC 3161 (K-TSA)
+    |--------------------------------------------------------------------------
+    |
+    | docs/fase-2/carimbo-e-dossie.md. Carimbo emitido com a chave da própria AssinaVelox
+    | (`tsa_kind = operator`): prova apenas que "a operadora atesta que este resumo existia
+    | em genTime". NÃO é carimbo ICP-Brasil (roadmap T3; DOC-ICP-11 §2.7.2) e o rótulo é
+    | sempre "carimbo do tempo da operadora — não é carimbo ICP-Brasil".
+    |
+    | Chave e certificado: PKCS#12 por REFERÊNCIA de arquivo; a senha só existe na variável de
+    | ambiente cujo NOME está em `password_env` (injetada no processo filho do pdftool, nunca
+    | em argv, log, fila ou banco). `php artisan tsa:generate-test` gera uma TSA de TESTE
+    | (autoassinada, CN com "TESTE") — nunca para produção. Checklist de produção (HSM/KMS,
+    | NTP monitorado, OID próprio, AC interna): `php artisan tsa:status`.
+    |
+    */
+    'tsa' => [
+        'pfx_path' => env('ASSINAVELOX_TSA_PFX_PATH'),
+        'password_env' => env('ASSINAVELOX_TSA_PASSWORD_ENV', 'ASSINAVELOX_TSA_PASSWORD'),
+        // Cadeia PÚBLICA da TSA (certificado + AC interna, PEM), distribuída junto do dossiê.
+        'chain_pem' => env('ASSINAVELOX_TSA_CHAIN_PEM'),
+        // Raízes para `tsa-verify` (PEM/DER separados por ";"). Sem raiz: confere integridade,
+        // nunca afirma confiança.
+        'trust_roots' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_TSA_TRUST_ROOTS', ''))))),
+        // test | production. Qualquer outro valor vale `test`.
+        'environment' => env('ASSINAVELOX_TSA_ENVIRONMENT', 'test'),
+        // OID da política no TSTInfo. O padrão é o OID de EXEMPLO da ITU-T X.667 (arco 2.25,
+        // UUID f81d4fae-…): serve para teste e é recusado pelo `tsa:status` em produção.
+        'policy_oid' => env('ASSINAVELOX_TSA_POLICY_OID', '2.25.329800735698586629295641978511506172918'),
+        // Precisão declarada no carimbo. Só é honesta com o NTP monitorado dentro dela.
+        'accuracy_ms' => (int) env('ASSINAVELOX_TSA_ACCURACY_MS', 1000),
+        // Soma ao número sequencial do banco (a sequência nunca reutiliza um valor).
+        'serial_offset' => (int) env('ASSINAVELOX_TSA_SERIAL_OFFSET', 0),
+        'timeout_seconds' => (int) env('ASSINAVELOX_TSA_TIMEOUT_SECONDS', 30),
+        // Endpoint INTERNO `POST /tsa` (application/timestamp-query → timestamp-reply), para o
+        // próprio sistema. Bearer = valor da variável nomeada em `token_env`; IPs permitidos.
+        'http' => [
+            'token_env' => env('ASSINAVELOX_TSA_HTTP_TOKEN_ENV', 'ASSINAVELOX_TSA_HTTP_TOKEN'),
+            'allowed_ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('ASSINAVELOX_TSA_HTTP_ALLOWED_IPS', '127.0.0.1,::1'))))),
+            'max_request_bytes' => (int) env('ASSINAVELOX_TSA_HTTP_MAX_BYTES', 8192),
+            'rate_per_minute' => (int) env('ASSINAVELOX_TSA_HTTP_RATE', 120),
+        ],
+        // Carimbo ICP-Brasil (roadmap §3.6): `disabled` (padrão — produção bloqueada até o
+        // contrato com uma ACT, viabilidade §4.2 item 7) ou `fake` (simulador que NUNCA grava
+        // `icp_brasil`; só fora de produção, `channels.allow_simulated`).
+        'icp_brasil' => [
+            'driver' => env('ASSINAVELOX_TSA_ICP_BRASIL_DRIVER', 'disabled'),
+        ],
+    ],
+
+    /*
+    | Fase 2, onda C §2.13 — dossiê ZIP do envelope (K-TSA). Montado em fila, guardado no
+    | disco privado e servido só por link autorizado com expiração; o arquivo é apagado
+    | depois de `ttl_hours`. Sem segredos, com o IP/e-mail conforme `evidence_show_ip`.
+    */
+    'dossier' => [
+        'disk' => env('ASSINAVELOX_DOSSIER_DISK', 'documents'),
+        'path' => 'dossiers',
+        'ttl_hours' => (int) env('ASSINAVELOX_DOSSIER_TTL_HOURS', 24),
+        // "Baixar" em lote (Q12): teto de envelopes por pedido.
+        'max_bulk_envelopes' => (int) env('ASSINAVELOX_DOSSIER_MAX_BULK', 50),
+        // Teto do ZIP gerado (MB).
+        'max_mb' => (int) env('ASSINAVELOX_DOSSIER_MAX_MB', 500),
+        'queue' => env('ASSINAVELOX_DOSSIER_QUEUE', 'default'),
+        // Revalida no pdftool, na montagem, o PDF final assinado (além do resultado gravado).
+        'revalidate_signatures' => filter_var(env('ASSINAVELOX_DOSSIER_REVALIDATE', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /*
+    | Fase 2, onda C §2.19 — retenção configurável e preservação (K-RET,
+    | docs/fase-2/retencao-e-preservacao.md §8). Os padrões abaixo são os mesmos do código
+    | (App\Services\Retention\RetentionConfig): declarar o bloco não muda comportamento.
+    | Os mínimos são da OPERADORA e AGUARDAM REVISÃO JURÍDICA (§4 da doc).
+    */
+    'retention' => [
+        // hidden | notice | notice_with_final_hash (recomendado; decisão do proprietário, §6).
+        'verification_after_purge' => env('ASSINAVELOX_RETENTION_VERIFICATION', 'notice_with_final_hash'),
+        // A trilha é append-only (T7). Ligar exige DELETE em `audit_events` para o job.
+        'allow_audit_trail_deletion' => filter_var(env('ASSINAVELOX_RETENTION_ALLOW_AUDIT_TRAIL_DELETION', false), FILTER_VALIDATE_BOOLEAN),
+        'batch_size' => (int) env('ASSINAVELOX_RETENTION_BATCH_SIZE', 100),
+        // Janela de rotação dos backups declarada na Política de Privacidade (§7.1). PENDENTE:
+        // alinhar com docs/implantacao.md §14.1 (arquivos hoje ficam 90 dias).
+        'backup_window_days' => (int) env('ASSINAVELOX_RETENTION_BACKUP_WINDOW_DAYS', 35),
+        'minimum_days' => [
+            'completed' => (int) env('ASSINAVELOX_RETENTION_MIN_COMPLETED', 1825),
+            'terminal_other' => (int) env('ASSINAVELOX_RETENTION_MIN_TERMINAL', 180),
+            'draft' => (int) env('ASSINAVELOX_RETENTION_MIN_DRAFT', 30),
+            'identity_capture' => (int) env('ASSINAVELOX_RETENTION_MIN_CAPTURE', 7),
+            'dossier' => (int) env('ASSINAVELOX_RETENTION_MIN_DOSSIER', 1),
+            'audit_trail' => (int) env('ASSINAVELOX_RETENTION_MIN_AUDIT_TRAIL', 1825),
+        ],
+        // 'derived_artifacts' => [...] — só para sobrescrever o padrão de RetentionConfig.
     ],
 
     // Unidade de consumo do plano: envelope_sent (Fase 1). Reservado para outras unidades.
@@ -874,4 +978,44 @@ return [
     // Suporte/ajuda exibidos na UI.
     'help_url' => env('ASSINAVELOX_HELP_URL', 'https://ajuda.assinavelox.com.br'),
     'support_email' => env('ASSINAVELOX_SUPPORT_EMAIL', 'suporte@assinavelox.com.br'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 2, onda C §2.12 — assinatura com o certificado A1 do PRÓPRIO participante (K-A1)
+    |--------------------------------------------------------------------------
+    |
+    | docs/fase-2/a1-do-participante.md. `enabled` é o interruptor GLOBAL; a organização
+    | também precisa de `plans.features.participant_a1` (App\Services\Signing\Certificates\
+    | ParticipantA1Feature). Nasce DESLIGADA: com ela desligada, nada muda.
+    |
+    | Segredos: o PFX e a senha do participante nunca vão para banco, fila, log ou argv. Entre
+    | a requisição e o worker, o conjunto fica CIFRADO (AES-256-GCM, chave derivada da
+    | APP_KEY) em `sealed_path`, por no máximo `sealed_ttl_minutes`, e é apagado ao ser
+    | consumido. Nada é guardado depois do uso (custódia persistente NÃO é implementada).
+    |
+    */
+    'participant_a1' => [
+        'enabled' => filter_var(env('ASSINAVELOX_FEATURE_PARTICIPANT_A1', false), FILTER_VALIDATE_BOOLEAN),
+        // Um A1 tem poucos KB; o teto barra arquivo que não é certificado.
+        'max_upload_kb' => (int) env('ASSINAVELOX_PARTICIPANT_A1_MAX_UPLOAD_KB', 64),
+        // Material cifrado temporário (fora de public/, 0700) e o prazo dele.
+        'sealed_path' => env('ASSINAVELOX_PARTICIPANT_A1_SEALED_PATH') ?: storage_path('app/private/participant-a1'),
+        'sealed_ttl_minutes' => (int) env('ASSINAVELOX_PARTICIPANT_A1_SEALED_TTL_MINUTES', 15),
+        // Prazo para os participantes que optaram aplicarem o certificado depois que todos
+        // aceitaram. Vencido, o envelope conclui sem aquela assinatura (o aceite continua valendo).
+        'application_window_minutes' => (int) env('ASSINAVELOX_PARTICIPANT_A1_WINDOW_MINUTES', 4320),
+        // Lock por envelope (um gravador criptográfico por vez) e a espera por ele.
+        'lock_seconds' => (int) env('ASSINAVELOX_PARTICIPANT_A1_LOCK_SECONDS', 900),
+        'lock_wait_seconds' => (int) env('ASSINAVELOX_PARTICIPANT_A1_LOCK_WAIT_SECONDS', 120),
+        // Raízes para validar os certificados dos participantes (PEM/DER separados por ";"). Sem
+        // raiz, a validação afirma integridade e diz "cadeia não verificada" — nunca ICP-Brasil.
+        'trust_roots' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_PARTICIPANT_A1_TRUST_ROOTS', ''))))),
+        // Certificados de TESTE (CN com "TESTE"): aceitos fora de produção, recusados em produção
+        // por padrão. Mesmo aceitos, são sempre rotulados como teste.
+        'accept_test_certificates' => filter_var(
+            env('ASSINAVELOX_PARTICIPANT_A1_ACCEPT_TEST_CERTIFICATES', env('APP_ENV', 'production') !== 'production'),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        'reason' => env('ASSINAVELOX_PARTICIPANT_A1_REASON', 'Assinatura com o certificado do participante'),
+    ],
 ];

@@ -63,6 +63,7 @@ class EvidenceData
         ?CarbonInterface $generatedAt = null,
         array $documents = [],
         ?int $position = null,
+        bool $participantMode = false,
     ): array {
         $organization = $envelope->organization;
         $timezone = $organization->timezone !== '' ? $organization->timezone : (string) $this->config->get('app.timezone', 'UTC');
@@ -114,7 +115,11 @@ class EvidenceData
                     'not_after' => $this->local($certificate->not_after, $timezone),
                 ],
                 'validation_summary' => $this->validationSummary($validationResult),
-            ],
+            ] + ($participantMode ? [
+                // Fase 2 §2.12 (K-A1): participantes assinam com o próprio certificado DEPOIS
+                // desta página (revisões incrementais). Chave presente só nesse modo.
+                'participant_mode' => true,
+            ] : []),
             'verification' => [
                 'url' => $verificationUrl,
                 'public_url' => $publicUrl,

@@ -7,6 +7,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Requests\Settings\UpdateOrganizationSettingsRequest;
 use App\Http\Requests\Settings\UpdateSecuritySettingsRequest;
 use App\Services\Branding\BrandingPresenter;
+use App\Services\Retention\LegalHolds;
 use App\Support\CurrentOrganization;
 use App\Support\OrganizationSettings;
 use App\Support\TaxId;
@@ -115,8 +116,16 @@ class GeneralController extends Controller
         // A exclusão efetiva (job após o período de carência) e o cancelamento da assinatura
         // pertencem ao incremento de cobrança; aqui só registramos a solicitação.
         $scheduled = $settings->deletionScheduledFor();
+        $message = 'Exclusão agendada para '.$scheduled?->setTimezone($organization->timezone)->format('d/m/Y').'. Você pode cancelar até essa data.';
 
-        return back()->with('warning', 'Exclusão agendada para '.$scheduled?->setTimezone($organization->timezone)->format('d/m/Y').'. Você pode cancelar até essa data.');
+        // Fase 2 §2.19 (integração I-2C, retencao-e-preservacao.md §5.4): com preservação ativa
+        // a exclusão definitiva fica bloqueada até a última ser liberada. Sem bloqueio, o texto
+        // é o de sempre.
+        if (app(LegalHolds::class)->anyActive((int) $organization->getKey()) !== null) {
+            $message .= ' Atenção: há documentos sob preservação legal. A exclusão definitiva só acontece depois que todas as preservações forem liberadas.';
+        }
+
+        return back()->with('warning', $message);
     }
 
     public function cancelDeletion(Request $request): RedirectResponse

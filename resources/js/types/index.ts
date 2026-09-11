@@ -3,6 +3,7 @@ import type { MembershipRole, PlanCode, SubscriptionStatus } from './enums';
 export type * from './enums';
 export type * from './models';
 export type * from './navigation';
+export type * from './signatures';
 
 // ---------------------------------------------------------------------------
 // Props compartilhadas (HandleInertiaRequests::share) — ROUTES §0.3
@@ -123,6 +124,20 @@ export interface Features {
     batch_signing?: boolean;
     /** §2.2 — formulário público que gera envelope a partir de um modelo. */
     public_forms?: boolean;
+    /*
+     * Fase 2, onda C — opcionais até `HandleInertiaRequests::features()` compartilhá-las
+     * (`DossierFeature::enabled`, `TimestampFeatures`, `RetentionFeature::enabled`).
+     * Ausente = desligada. A assinatura com o certificado do participante NÃO tem chave aqui:
+     * a página pública descobre o recurso por `GET sign.certificate.show` (404 = desligado).
+     */
+    /** §2.13 — "Baixar dossiê (ZIP)" no detalhe e "Baixar dossiês" em lote. */
+    dossier_export?: boolean;
+    /** §2.13 — TSA da operadora (só informativo na interface). */
+    operator_tsa?: boolean;
+    /** §2.13 — B-T técnico; a interface continua anunciando PAdES-B-B. */
+    pades_bt?: boolean;
+    /** §2.19 — retenção e preservação. */
+    retention_policies?: boolean;
 }
 
 export interface SharedProps {

@@ -351,7 +351,7 @@ class PdfToolClient
 
             try {
                 $process->run();
-            } catch (ProcessTimedOutException $exception) {
+            } catch (ProcessTimedOutException) {
                 $stderr = $this->excerpt($process->getErrorOutput(), $secretEnv);
                 $this->logger->error('pdftool: tempo limite excedido', [
                     'command' => $command,
@@ -368,17 +368,16 @@ class PdfToolClient
                     $argv,
                     $correlationId,
                     $stderr,
-                    $exception,
                 );
             } catch (ProcessException $exception) {
+                // Sem encadear a exceção do Symfony Process: ela carrega o objeto Process, e o
+                // Process carrega o ambiente do filho (com as senhas de $secretEnv).
                 throw new PdfToolProcessingException(
                     sprintf('Não foi possível executar o pdftool (%s): %s', $command, $this->redact($exception->getMessage(), $secretEnv)),
                     'process_failed',
                     null,
                     $argv,
                     $correlationId,
-                    null,
-                    $exception,
                 );
             }
 

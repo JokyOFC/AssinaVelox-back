@@ -122,7 +122,10 @@ export function SignatureStatement({
     statement?: string | null;
     className?: string;
 }) {
-    const signed = status === 'company_a1';
+    // Fase 2 §2.12: verde para qualquer assinatura criptográfica real (operadora,
+    // participantes com o próprio certificado ou as duas); o texto é o do servidor.
+    const signed = status !== 'none';
+    const operatorOnly = status === 'company_a1';
     const subject = certificateSubject(certificate);
     const issuer = certificateIssuer(certificate);
     const policy = certificate?.policy ?? 'PAdES-B-B';
@@ -156,7 +159,7 @@ export function SignatureStatement({
                                 </p>
                             )}
                         </>
-                    ) : signed ? (
+                    ) : operatorOnly ? (
                         <>
                             <p>
                                 Este arquivo recebeu uma assinatura digital no
@@ -197,6 +200,14 @@ export function SignatureStatement({
                                 </p>
                             )}
                         </>
+                    ) : signed ? (
+                        <p>
+                            Este arquivo recebeu assinaturas criptográficas
+                            feitas com o certificado digital do próprio
+                            participante. Cada uma identifica o titular do
+                            certificado usado e se soma ao aceite eletrônico
+                            registrado para cada participante, sem substituí-lo.
+                        </p>
                     ) : (
                         <>
                             <p>

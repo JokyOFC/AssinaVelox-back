@@ -136,7 +136,21 @@ def sign_pdf(
     location: Optional[str] = None,
     contact: Optional[str] = None,
     visible: Optional[str] = None,
+    tsa_pfx: Optional[Path] = None,
+    tsa_pass_env: Optional[str] = None,
+    tsa_serial: Optional[int] = None,
+    tsa_policy_oid: Optional[str] = None,
+    tsa_accuracy_ms: int = 1000,
 ) -> Dict[str, Any]:
+    # Optional signature time stamp from the OPERATOR TSA (K-TSA, docs/fase-2/carimbo-e-dossie.md).
+    # The declared profile below stays "PAdES-B-B" (roadmap T2); the fact is reported apart.
+    timestamper = None
+    if tsa_pfx is not None:
+        if tsa_pass_env is None or tsa_serial is None or tsa_policy_oid is None:
+            raise UsageError("tsa_options_incomplete", "--tsa-pfx requires --tsa-pass-env, --tsa-serial and --tsa-policy-oid")
+        from pdftool.timestamp import operator_timestamper
+
+        timestamper = operator_timestamper(tsa_pfx, tsa_pass_env, tsa_serial, tsa_policy_oid, tsa_accuracy_ms)
     passphrase = read_passphrase(pass_env)
     if not pfx_path.is_file():
         raise InputRejected("pfx_not_found", f"PKCS#12 file not found: {pfx_path}")
@@ -190,7 +204,7 @@ def sign_pdf(
             )
             stamp_style = _build_stamp_style(page_meta)
 
-        pdf_signer = signers.PdfSigner(meta, signer, stamp_style=stamp_style, new_field_spec=new_field_spec)
+        pdf_signer = signers.PdfSigner(meta, signer, stamp_style=stamp_style, new_field_spec=new_field_spec, timestamper=timestamper)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with out_path.open("wb") as outf:
@@ -220,4 +234,7 @@ def sign_pdf(
         "timestamp": None,
         "visible": visible_spec is not None,
         "page_count": page_count,
+        # K-TSA: facts about an embedded signature time stamp (None without --tsa-pfx). Never
+        # changes "profile": B-T is not announced before the roadmap T2 checklist is met.
+        "signature_timestamp": timestamper.report() if timestamper is not None else None,
     }

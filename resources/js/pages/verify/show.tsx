@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { EyeOff, ShieldOff } from 'lucide-react';
+import { ArchiveX, EyeOff, ShieldOff } from 'lucide-react';
 import { CopyButton } from '@/components/copy-button';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
@@ -18,6 +18,8 @@ import {
     type VerificationValidation,
 } from '@/components/verification/signature-statement';
 import { VerificationSealCard } from '@/components/verification/verification-seal';
+import { PublicParticipantSignatureList } from '@/components/verification/crypto-signature-list';
+import { TimestampList } from '@/components/verification/timestamp-list';
 import { formatDateTime, formatVerificationCode, plural } from '@/lib/format';
 import {
     check_file as verifyCheckFile,
@@ -28,6 +30,11 @@ import type {
     RecipientStatus,
     SignatureStatus,
 } from '@/types/enums';
+import type {
+    PublicParticipantSignature,
+    PublicRetentionNotice,
+    PublicTimestamp,
+} from '@/types/signatures';
 
 /**
  * Resultado publicável (`App\Services\Verification\PublicVerification::result`).
@@ -56,7 +63,7 @@ export interface PublicVerificationResult {
     };
     hash_primer?: string | null;
     signature_status: SignatureStatus;
-    signature_state?: 'pending' | 'none' | 'company_a1';
+    signature_state?: 'pending' | SignatureStatus;
     signature_label?: string | null;
     signature_statement?: string | null;
     signature_profile?: string | null;
@@ -87,6 +94,15 @@ export interface PublicVerificationResult {
         final_sha256: string | null;
     }[];
     documents_count?: number;
+    /**
+     * Fase 2 §2.12: só quando há assinatura com o certificado do próprio participante
+     * APLICADA — nome mascarado, sem CPF, série ou impressão digital.
+     */
+    participant_signatures?: PublicParticipantSignature[];
+    /** Fase 2 §2.13 (`TimestampEvidence::forPublic`): carimbos do envelope, quando houver. */
+    timestamps?: PublicTimestamp[];
+    /** Fase 2 §2.19: registro excluído pela política de retenção (`RetentionTombstones`). */
+    retention?: PublicRetentionNotice;
 }
 
 export interface VerifyShowProps {
@@ -218,6 +234,25 @@ export default function VerifyShow({
                   : []),
           ])
         : singleTargets;
+
+    // Fase 2 §2.19: excluído pela política de retenção — só o aviso e o resumo final.
+    if (result.retention?.purged) {
+        return (
+            <PurgedVerification
+                code={code}
+                formattedCode={formattedCode}
+                retention={result.retention}
+                hashEntries={hashEntries.filter(
+                    (entry) => entry.kind === 'final',
+                )}
+                primer={result.hash_primer ?? null}
+                checkTargets={checkTargets}
+                fileCheck={file_check}
+                multi={multi}
+                files={files}
+            />
+        );
+    }
 
     return (
         <>
@@ -429,10 +464,25 @@ export default function VerifyShow({
                         verificationCode={formattedCode}
                         validationSummary={result.validation_summary}
                     />
+                    {/* Fase 2 §2.12: com o nome mascarado, sem CPF nem série. */}
+                    {result.participant_signatures &&
+                        result.participant_signatures.length > 0 && (
+                            <PublicParticipantSignatureList
+                                signatures={result.participant_signatures}
+                                profile={result.signature_profile ?? policy}
+                                revocationLabel={
+                                    result.validation?.available
+                                        ? result.validation.revocation_label
+                                        : null
+                                }
+                            />
+                        )}
                     {result.certificate && (
                         <div className="border-border rounded-lg border p-3.5">
                             <p className="mb-2 text-[12.5px] font-semibold">
-                                Certificado da operadora
+                                {result.signature_status === 'mixed'
+                                    ? 'Certificado da operadora (assinou por último)'
+                                    : 'Certificado da operadora'}
                             </p>
                             <CertificateDetails
                                 certificate={result.certificate}
@@ -445,7 +495,7 @@ export default function VerifyShow({
                         inconclusivo — e onde a plataforma tem uma ressalva a fazer, o
                         silêncio ao lado do selo verde é lido como confirmação.
                     */}
-                    {result.signature_status === 'company_a1' &&
+                    {result.signature_status !== 'none' &&
                         result.validation && (
                             <div className="border-border rounded-lg border p-3.5">
                                 <p className="mb-2 text-[12.5px] font-semibold">
@@ -457,6 +507,13 @@ export default function VerifyShow({
                             </div>
                         )}
                 </section>
+
+                {result.timestamps && result.timestamps.length > 0 && (
+                    <section className="flex flex-col gap-3">
+                        <Heading variant="small" title="Carimbo do tempo" />
+                        <TimestampList items={result.timestamps} />
+                    </section>
+                )}
 
                 <p className="text-muted-foreground flex items-start gap-2 text-[11.5px] leading-[1.5]">
                     <EyeOff className="mt-[1px] size-3.5 shrink-0" />
@@ -470,6 +527,126 @@ export default function VerifyShow({
                         a validade do ato.
                     </span>
                 </p>
+
+                <Button asChild variant="outline" className="self-start">
+                    <Link href={verifyIndex()}>Verificar outro código</Link>
+                </Button>
+            </div>
+        </>
+    );
+}
+
+/**
+ * Fase 2 §2.19 — o registro foi excluído pela política de retenção da organização
+ * (`RetentionTombstones::result`). Só o aviso, a data e, conforme a regra vigente, o resumo
+ * SHA-256 do arquivo final: sem título, organização, participantes nem linha do tempo. O
+ * selo de "concluído" não aparece — afirmar o estado de um registro que não existe mais
+ * seria enganoso.
+ */
+function PurgedVerification({
+    code,
+    formattedCode,
+    retention,
+    hashEntries,
+    primer,
+    checkTargets,
+    fileCheck,
+    multi,
+    files,
+}: {
+    code: string;
+    formattedCode: string;
+    retention: PublicRetentionNotice;
+    hashEntries: HashEntry[];
+    primer: string | null;
+    checkTargets: FileCheckTarget[];
+    fileCheck: VerifyShowProps['file_check'];
+    multi: boolean;
+    files: NonNullable<PublicVerificationResult['documents']>;
+}) {
+    return (
+        <>
+            <Head title={`Verificação · ${formattedCode}`} />
+
+            <div className="border-border bg-card shadow-card flex flex-col gap-5 rounded-xl border p-6 md:p-8">
+                <header className="flex flex-col gap-3">
+                    <p className="text-muted-foreground text-[11px] font-bold tracking-[.18em] uppercase">
+                        Verificação pública
+                    </p>
+                    <h1 className="text-[22px] leading-[1.2] font-bold tracking-[-.01em]">
+                        Registro removido por política de retenção
+                    </h1>
+                    <div className="border-border bg-sidebar flex items-center justify-between gap-2 rounded-lg border p-3">
+                        <span className="tabular font-mono text-[16px] font-bold">
+                            {formattedCode}
+                        </span>
+                        <CopyButton
+                            value={formattedCode}
+                            label="Copiar código de verificação"
+                            className="size-7"
+                        />
+                    </div>
+                </header>
+
+                <div className="border-neutral-border bg-neutral-bg text-text-secondary flex items-start gap-3 rounded-xl border p-4">
+                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-white/70">
+                        <ArchiveX className="size-[18px]" />
+                    </span>
+                    <div className="min-w-0">
+                        <p className="text-foreground text-[15px] leading-[1.3] font-bold">
+                            {retention.purged_at
+                                ? `Removido por política de retenção em ${formatDateTime(retention.purged_at)}`
+                                : 'Removido por política de retenção'}
+                        </p>
+                        <p className="mt-1.5 text-[12.5px] leading-[1.55]">
+                            {retention.message}
+                        </p>
+                    </div>
+                </div>
+
+                {checkTargets.length > 0 ? (
+                    <section className="flex flex-col gap-3">
+                        <Heading
+                            variant="small"
+                            title="Resumo do arquivo final (SHA-256)"
+                            description="Só o resumo do arquivo final foi mantido. Ele não revela o conteúdo nem identifica pessoas; serve para quem guardou uma cópia conferir se ela é o arquivo emitido."
+                        />
+                        {multi ? (
+                            <ol className="flex flex-col gap-2">
+                                {files.map((file) => (
+                                    <li
+                                        key={file.position}
+                                        className="border-border rounded-lg border p-3 text-[12.5px]"
+                                    >
+                                        <p className="font-semibold">
+                                            {file.position}. {file.name}
+                                        </p>
+                                        <HashLine
+                                            label="Final"
+                                            value={file.final_sha256}
+                                        />
+                                    </li>
+                                ))}
+                            </ol>
+                        ) : (
+                            <HashList
+                                entries={hashEntries}
+                                primerText={primer}
+                            />
+                        )}
+                        <FileCheck
+                            targets={checkTargets}
+                            manual={{
+                                action: verifyCheckFile(code).url,
+                                result: fileCheck ?? null,
+                            }}
+                        />
+                    </section>
+                ) : (
+                    <p className="text-muted-foreground text-[12.5px] leading-[1.5]">
+                        Nenhum resumo foi mantido para este registro.
+                    </p>
+                )}
 
                 <Button asChild variant="outline" className="self-start">
                     <Link href={verifyIndex()}>Verificar outro código</Link>

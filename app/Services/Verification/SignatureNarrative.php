@@ -9,6 +9,7 @@ use App\Models\CertificateReference;
 use App\Models\Envelope;
 use App\Models\VerificationRecord;
 use App\Services\Pdf\Dto\ValidationResult;
+use App\Services\Signing\Certificates\ParticipantSignatureNarrative;
 
 /**
  * Linguagem honesta para a situação da assinatura (arquitetura §2).
@@ -77,6 +78,12 @@ final class SignatureNarrative
             ];
         }
 
+        // Fase 2 §2.12 (K-A1): assinaturas com o certificado A1 dos próprios participantes
+        // (com ou sem a da operadora por último) — linguagem própria, mesmo formato.
+        if ($status->hasParticipantSignatures()) {
+            return ParticipantSignatureNarrative::for($envelope, $record);
+        }
+
         // A saída antecipada de `! $concluded` já garantiu `$record !== null` aqui.
         if ($status === SignatureStatus::CompanyA1) {
             $certificate = $record->certificateReference;
@@ -124,9 +131,12 @@ final class SignatureNarrative
             };
         }
 
-        return ($record->signature_status ?? SignatureStatus::None) === SignatureStatus::CompanyA1
-            ? 'Concluído · assinado com certificado da operadora'
-            : 'Concluído · aceite eletrônico com evidências';
+        return match ($record->signature_status ?? SignatureStatus::None) {
+            SignatureStatus::CompanyA1 => 'Concluído · assinado com certificado da operadora',
+            SignatureStatus::ParticipantsA1 => 'Concluído · assinado com certificado dos participantes',
+            SignatureStatus::Mixed => 'Concluído · assinado com certificados dos participantes e da operadora',
+            SignatureStatus::None => 'Concluído · aceite eletrônico com evidências',
+        };
     }
 
     /**
@@ -144,7 +154,9 @@ final class SignatureNarrative
      */
     public static function completedLabel(?VerificationRecord $record): string
     {
-        return ($record->signature_status ?? SignatureStatus::None) === SignatureStatus::CompanyA1
+        // "Assinado" só quando há assinatura criptográfica de fato: da operadora, dos
+        // participantes com o próprio certificado (Fase 2 §2.12) ou das duas.
+        return ($record->signature_status ?? SignatureStatus::None) !== SignatureStatus::None
             ? 'Assinado'
             : 'Concluído';
     }

@@ -5,8 +5,8 @@ namespace App\Services\PublicForms;
 use App\Models\PublicForm;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Tempo mínimo de preenchimento (antiabuso sem CAPTCHA — docs/fase-2/formulario-publico.md §7).
@@ -19,10 +19,16 @@ use Illuminate\Support\Facades\Crypt;
  * **Uso único.** Cada exibição do formulário emite um carimbo próprio (o vetor de
  * inicialização aleatório da cifra o torna único, e ele é protegido pelo MAC: não dá para
  * produzir outro carimbo válido para o mesmo instante sem a chave). O envio ACEITO o consome
- * ({@see self::consume()}), com uma marca atômica no cache que expira quando o próprio
- * carimbo venceria. Reusar o carimbo — outro envio sem abrir a página de novo — é recusado.
- * Envio RECUSADO (rápido demais, dado inválido, limite) não consome: a pessoa corrige e
- * reenvia da mesma página.
+ * ({@see self::consume()}) gravando uma marca no BANCO (`public_form_timer_marks`, com
+ * `token_digest` único): o consumo é um INSERT com unicidade, atômico — de dois envios
+ * simultâneos com o mesmo carimbo, só um grava. Reusar o carimbo — outro envio sem abrir a
+ * página de novo — é recusado. Envio RECUSADO (rápido demais, dado inválido, limite) não
+ * consome: a pessoa corrige e reenvia da mesma página.
+ *
+ * Fase 2, onda C (K-RET): as marcas saíram do cache. Esvaziar o cache (`cache:clear`,
+ * `FLUSHALL`, reinício do Redis sem persistência) não reabre nenhum carimbo. A marca vive até
+ * o carimbo vencer por conta própria (+1 min); a limpeza agendada ({@see self::prune()}) apaga
+ * as vencidas.
  */
 final class FillTimer
 {
@@ -34,7 +40,7 @@ final class FillTimer
 
     public const USED = 'used';
 
-    private const CACHE_PREFIX = 'public-form-timer-used:';
+    public const TABLE = 'public_form_timer_marks';
 
     public function issue(PublicForm $form): string
     {
@@ -66,7 +72,7 @@ final class FillTimer
         }
 
         /** @var string $token */
-        if (Cache::has($this->usedKey($form, $token))) {
+        if (DB::table(self::TABLE)->where('token_digest', $this->digest($form, $token))->exists()) {
             return self::USED;
         }
 
@@ -74,9 +80,9 @@ final class FillTimer
     }
 
     /**
-     * Marca o carimbo como usado. Atômico (`Cache::add`): de dois envios simultâneos com o
-     * mesmo carimbo, só um consegue. Devolve false quando o carimbo já tinha sido usado ou
-     * não é válido para este formulário.
+     * Marca o carimbo como usado. Atômico (INSERT com `token_digest` único, sem exceção de
+     * corrida: `insertOrIgnore`): de dois envios simultâneos com o mesmo carimbo, só um grava.
+     * Devolve false quando o carimbo já tinha sido usado ou não é válido para este formulário.
      */
     public function consume(PublicForm $form, mixed $token): bool
     {
@@ -88,11 +94,25 @@ final class FillTimer
 
         // A marca vive até o carimbo vencer por conta própria (+1 min de folga): depois
         // disso ele já é recusado como velho, e a marca pode sumir.
-        $expiresAt = $issuedAt + PublicFormsConfig::maxFillMinutes() * 60 + 60;
-        $ttl = max(60, $expiresAt - Carbon::now()->getTimestamp());
+        $expiresAt = max(
+            Carbon::now()->getTimestamp() + 60,
+            $issuedAt + PublicFormsConfig::maxFillMinutes() * 60 + 60,
+        );
 
         /** @var string $token */
-        return Cache::add($this->usedKey($form, $token), 1, $ttl);
+        return DB::table(self::TABLE)->insertOrIgnore([
+            'token_digest' => $this->digest($form, $token),
+            'expires_at' => Carbon::createFromTimestamp($expiresAt),
+            'created_at' => Carbon::now(),
+        ]) === 1;
+    }
+
+    /**
+     * Apaga as marcas cujo carimbo já venceu (não protegem mais nada). Idempotente.
+     */
+    public static function prune(?Carbon $now = null): int
+    {
+        return DB::table(self::TABLE)->where('expires_at', '<', $now ?? Carbon::now())->delete();
     }
 
     /**
@@ -121,9 +141,9 @@ final class FillTimer
      * Identidade do carimbo para a marca de uso. Vem do vetor de inicialização e do texto
      * cifrado — as partes cobertas pelo MAC — e não da string enviada: reformatar o JSON ou o
      * base64 do envelope não gera um "carimbo novo". Só é chamada depois de decifrar com
-     * sucesso, então o envelope é válido.
+     * sucesso, então o envelope é válido. O banco guarda só o SHA-256, nunca o carimbo.
      */
-    private function usedKey(PublicForm $form, string $token): string
+    private function digest(PublicForm $form, string $token): string
     {
         $envelope = json_decode((string) base64_decode($token, true), true);
 
@@ -131,6 +151,6 @@ final class FillTimer
             ? base64_decode($envelope['iv']).'|'.$envelope['value']
             : $token;
 
-        return self::CACHE_PREFIX.$form->ulid.':'.hash('sha256', $identity);
+        return hash('sha256', 'public-form-timer|'.$form->ulid.'|'.$identity);
     }
 }

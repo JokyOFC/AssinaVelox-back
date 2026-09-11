@@ -153,9 +153,29 @@ enum AuditEventType: string
     case PublicFormSubmissionApproved = 'public_form.submission_approved';
     case PublicFormSubmissionRejected = 'public_form.submission_rejected';
 
+    // Fase 2, onda C — assinatura com o certificado A1 do PRÓPRIO participante (K-A1,
+    // docs/fase-2/a1-do-participante.md). Gravados no envelope. Payload só com ULIDs, códigos,
+    // impressão digital e emissor do certificado — nunca PFX, senha, CPF completo ou caminho.
+    case ParticipantCertificateRequested = 'participant_certificate.requested';
+    case ParticipantCertificateWithdrawn = 'participant_certificate.withdrawn';
+    case ParticipantCertificateSubmitted = 'participant_certificate.submitted';
+    case ParticipantCertificateRejected = 'participant_certificate.rejected';
+    case ParticipantSignatureApplied = 'participant_signature.applied';
+    case ParticipantSignatureFailed = 'participant_signature.failed';
+    case ParticipantSignatureExpired = 'participant_signature.expired';
+    case EnvelopeAwaitingParticipantSignatures = 'envelope.awaiting_participant_signatures';
+
     public function label(): string
     {
         return match ($this) {
+            self::ParticipantCertificateRequested => 'Participante optou por assinar com o próprio certificado',
+            self::ParticipantCertificateWithdrawn => 'Participante desistiu de assinar com o próprio certificado',
+            self::ParticipantCertificateSubmitted => 'Certificado do participante conferido e autorizado para uso',
+            self::ParticipantCertificateRejected => 'Certificado do participante recusado',
+            self::ParticipantSignatureApplied => 'Assinatura com o certificado do participante aplicada',
+            self::ParticipantSignatureFailed => 'Falha ao aplicar a assinatura com o certificado do participante',
+            self::ParticipantSignatureExpired => 'Prazo para assinar com o próprio certificado encerrado',
+            self::EnvelopeAwaitingParticipantSignatures => 'Aguardando assinaturas com certificado dos participantes',
             self::PublicFormCreated => 'Formulário público criado',
             self::PublicFormUpdated => 'Formulário público alterado',
             self::PublicFormActivated => 'Formulário público publicado',
@@ -287,6 +307,7 @@ enum AuditEventType: string
             self::PublicFormSubmissionApproved,
             self::EnvelopeCompleted,
             self::EnvelopeSignedCompanyA1,
+            self::ParticipantSignatureApplied,
             self::PaymentApproved,
             self::SubscriptionActivated,
             self::SubscriptionRenewed,
@@ -306,6 +327,9 @@ enum AuditEventType: string
             self::EnvelopeExpired,
             self::EnvelopeCanceled,
             self::EnvelopeFinalizationFailed,
+            self::ParticipantCertificateRejected,
+            self::ParticipantSignatureFailed,
+            self::ParticipantSignatureExpired,
             self::PaymentFailed,
             self::SubscriptionPastDue,
             self::SubscriptionExpired,

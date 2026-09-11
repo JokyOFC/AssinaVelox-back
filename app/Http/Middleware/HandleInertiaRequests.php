@@ -12,14 +12,17 @@ use App\Models\User;
 use App\Services\AdminLog\ToolFlags;
 use App\Services\Branding\BrandingFeature;
 use App\Services\Branding\BrandingPresenter;
+use App\Services\Dossier\DossierFeature;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Identity\IdentityFeatures;
 use App\Services\InPerson\PresenceFeatures;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Services\PublicForms\PublicFormsFeature;
+use App\Services\Retention\RetentionFeature;
 use App\Services\Signing\Channels\ChannelFeatures;
 use App\Services\Templates\TemplatesFeature;
+use App\Services\Timestamp\TimestampFeatures;
 use App\Support\CurrentOrganization;
 use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Builder;
@@ -116,6 +119,15 @@ class HandleInertiaRequests extends Middleware
                 : IdentityFeatures::cnpjLookup($organization),
             ...PresenceFeatures::forOrganization($organization),
             'public_forms' => PublicFormsFeature::enabled($organization),
+            // Fase 2, onda C (docs/fase-2/onda-c-relatorio.md). `dossier_export` e
+            // `retention_policies`: global E plano. `operator_tsa` e `pades_bt`: só a chave da
+            // plataforma, e NENHUMA das duas muda o perfil anunciado (continua PAdES-B-B, T2).
+            // `participant_a1` não entra aqui: a página pública descobre o recurso pelo
+            // `GET sign.certificate.show` (404 = desligado), docs/fase-2/a1-do-participante.md §1.
+            'dossier_export' => DossierFeature::enabled($organization),
+            'retention_policies' => RetentionFeature::enabled($organization),
+            'operator_tsa' => TimestampFeatures::operatorTsa(),
+            'pades_bt' => TimestampFeatures::padesBt(),
         ];
     }
 

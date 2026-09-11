@@ -24,6 +24,7 @@ use App\Services\Pdf\PdfToolClient;
 use App\Services\Pdf\Support\TemporaryDirectory;
 use App\Services\Plans\PlanFeatures;
 use App\Services\Plans\PlanLedger;
+use App\Services\Signing\Certificates\IncrementalChain;
 use App\Services\Signing\SignerAudit;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -91,6 +92,7 @@ class EnvelopeFinalizer
         private readonly PlanLedger $ledger,
         private readonly CompletionNotifier $notifier,
         private readonly LoggerInterface $logger,
+        private readonly ParticipantSignatureStage $participants,
     ) {}
 
     /**
@@ -226,6 +228,22 @@ class EnvelopeFinalizer
             $rebuilt = true;
         } else {
             $steps['evidence'] = 'reused';
+        }
+
+        // -- Fase 2 §2.12: assinaturas com o certificado A1 dos próprios participantes ------
+        // Com pedidos de participantes, o arquivo final é montado em revisões incrementais
+        // (base congelada → participantes, um por vez → operadora por último). Sem pedidos,
+        // nada abaixo muda: é o pipeline da Fase 1.
+        if ($this->participants->activeFor($envelope)) {
+            return $this->participantsPipeline(
+                $envelope,
+                [['document' => $document, 'version' => $sentVersion]],
+                [$consolidated],
+                [$evidence],
+                [$rebuilt],
+                $correlationId,
+                $steps,
+            );
         }
 
         // -- c/d/e. Junção, assinatura e versão final -----------------------------------
@@ -386,6 +404,11 @@ class EnvelopeFinalizer
             }
 
             $evidences[$index] = $evidence;
+        }
+
+        // -- Fase 2 §2.12: assinaturas com o certificado dos participantes (por documento) --
+        if ($this->participants->activeFor($envelope)) {
+            return $this->participantsPipeline($envelope, $sent, $consolidated, $evidences, $rebuilt, $correlationId, $steps);
         }
 
         // -- c/d/e. Arquivo final de cada documento --------------------------------------
@@ -654,7 +677,7 @@ class EnvelopeFinalizer
     // -- Etapa b ---------------------------------------------------------------------
 
     /**
-     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null, documents_digest?: string}  $variant
+     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null, documents_digest?: string, participant_mode?: bool}  $variant
      * @param  list<array<string, mixed>>  $documents  todos os documentos do envelope (vários documentos)
      */
     private function generateEvidence(
@@ -691,6 +714,7 @@ class EnvelopeFinalizer
             generatedAt: Carbon::now(),
             documents: $documents,
             position: $position,
+            participantMode: ($variant['participant_mode'] ?? false) === true,
         );
 
         $output = $this->evidenceRenderer->render($data, $workDir->path('evidencias.pdf'));
@@ -716,7 +740,7 @@ class EnvelopeFinalizer
             // certificado é dado público — não é segredo, não é a chave e não é a senha.
             'signature_status' => $variant['signature_status'],
             'certificate_fingerprint_sha256' => $variant['certificate_fingerprint_sha256'],
-        ], null, $correlationId);
+        ] + (($variant['participant_mode'] ?? false) === true ? ['participant_mode' => true] : []), null, $correlationId);
 
         return $version;
     }
@@ -724,16 +748,26 @@ class EnvelopeFinalizer
     /**
      * O que a página de evidências vai afirmar sobre a assinatura desta execução.
      *
-     * @return array{signature_status: string, certificate_fingerprint_sha256: string|null}
+     * `participant_mode` (Fase 2 §2.12) só existe quando o envelope tem pedidos de assinatura
+     * com o certificado do participante: a página passa a dizer que essas assinaturas vêm
+     * depois dela. Sem pedidos, a variante é exatamente a da Fase 1.
+     *
+     * @return array{signature_status: string, certificate_fingerprint_sha256: string|null, participant_mode?: bool}
      */
     private function evidenceVariant(Envelope $envelope, ?CertificateReference $certificate): array
     {
         $willSign = $this->signsFor($envelope);
 
-        return [
+        $variant = [
             'signature_status' => ($willSign ? SignatureStatus::CompanyA1 : SignatureStatus::None)->value,
             'certificate_fingerprint_sha256' => $willSign ? $certificate?->fingerprint_sha256 : null,
         ];
+
+        if ($this->participants->activeFor($envelope)) {
+            $variant['participant_mode'] = true;
+        }
+
+        return $variant;
     }
 
     /**
@@ -747,7 +781,7 @@ class EnvelopeFinalizer
      * Com vários documentos, a marca inclui também `documents_digest` (os resumos de todos os
      * documentos que a página lista).
      *
-     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null, documents_digest?: string}  $variant
+     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null, documents_digest?: string, participant_mode?: bool}  $variant
      */
     private function evidenceMatchesVariant(Envelope $envelope, DocumentVersion $evidence, array $variant): bool
     {
@@ -767,6 +801,7 @@ class EnvelopeFinalizer
 
             return ($payload['signature_status'] ?? null) === $variant['signature_status']
                 && ($payload['certificate_fingerprint_sha256'] ?? null) === $variant['certificate_fingerprint_sha256']
+                && (($payload['participant_mode'] ?? false) === true) === (($variant['participant_mode'] ?? false) === true)
                 && (! array_key_exists('documents_digest', $variant)
                     || ($payload['documents_digest'] ?? null) === $variant['documents_digest']);
         }
@@ -934,6 +969,276 @@ class EnvelopeFinalizer
         ];
     }
 
+    // -- Fase 2 §2.12: assinaturas com o certificado dos participantes -----------------
+
+    /**
+     * Etapas c/d/e/f/g quando o envelope tem pedidos de assinatura com o certificado A1 dos
+     * próprios participantes (docs/fase-2/a1-do-participante.md §3). Ordem, por documento:
+     *
+     * ```
+     *  consolidado ─┐
+     *  evidências ──┴─ append ──► pre_signature (base congelada, sem assinatura)
+     *                                 │ participante 1 (ApplyParticipantSignature, sob o lock)
+     *                              signed_incremental #1
+     *                                 │ participante 2 …
+     *                              signed_incremental #N
+     *                                 │ operadora POR ÚLTIMO (se configurada e no plano)
+     *                              final ── sha256 final, calculado DEPOIS da última assinatura
+     * ```
+     *
+     * Enquanto houver pedido pendente dentro do prazo, a finalização PARA aqui com
+     * `awaiting_participant_signatures`: o envelope continua em `finalizing` e nada é
+     * publicado. A base, a decisão "não falta ninguém" e a montagem do `final` acontecem sob
+     * o lock do envelope — o mesmo das assinaturas dos participantes —, então nenhuma
+     * assinatura de participante entra entre a decisão e o `final`.
+     *
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
+     * @param  array<int, DocumentVersion>  $consolidated
+     * @param  array<int, DocumentVersion>  $evidences
+     * @param  array<int, bool>  $rebuilt
+     * @param  array<string, string>  $steps
+     *
+     * @throws FinalizationException
+     */
+    private function participantsPipeline(
+        Envelope $envelope,
+        array $sent,
+        array $consolidated,
+        array $evidences,
+        array $rebuilt,
+        string $correlationId,
+        array $steps,
+    ): FinalizationOutcome {
+        $multi = count($sent) > 1;
+        $key = static fn (int $index, string $step): string => $multi ? self::documentStepKey($index).'.'.$step : $step;
+
+        /** @var array<int, array{final: DocumentVersion, status: SignatureStatus, profile: string|null, validation: array<string, mixed>, certificate: CertificateReference|null}>|null $results */
+        $results = $this->participants->locked($envelope, function () use ($envelope, $sent, $consolidated, $evidences, $rebuilt, $correlationId, $multi, $key, &$steps): ?array {
+            foreach ($sent as $index => $row) {
+                $steps[$key($index, 'pre_signature')] = $this->withWorkDir(fn (TemporaryDirectory $dir): string => $this->participants->ensureBase(
+                    $envelope, $row['document'], $consolidated[$index], $evidences[$index], $dir, $correlationId, (bool) ($rebuilt[$index] ?? false),
+                ));
+            }
+
+            if ($this->participants->awaiting($envelope, $correlationId)) {
+                return null;
+            }
+
+            $results = [];
+
+            foreach ($sent as $index => $row) {
+                $results[$index] = $this->withWorkDir(function (TemporaryDirectory $dir) use ($envelope, $row, $index, $correlationId, $multi, $key, &$steps): array {
+                    return $this->participantFinal(
+                        $envelope,
+                        $row['document'],
+                        $dir,
+                        $correlationId,
+                        $multi ? self::documentAudit($row['document']) : [],
+                        $steps,
+                        $key($index, 'final'),
+                        $key($index, 'signature'),
+                    );
+                });
+            }
+
+            return $results;
+        });
+
+        if ($results === null) {
+            $steps['participants'] = 'awaiting';
+
+            return new FinalizationOutcome('awaiting_participant_signatures', $envelope->refresh(), null, null, SignatureStatus::None, $steps);
+        }
+
+        $first = $results[0];
+
+        $record = $this->verificationRecord(
+            $envelope,
+            $sent[0]['document'],
+            $sent[0]['version'],
+            $consolidated[0],
+            $first['final'],
+            $first['status'],
+            $first['profile'],
+            $first['validation'],
+            $first['certificate'],
+            $steps,
+        );
+
+        $steps['verification_documents'] = $this->verificationDocuments($record, $sent, $consolidated, $results);
+
+        $documentFinals = [];
+        $summary = [];
+
+        foreach ($sent as $index => $row) {
+            $documentFinals[(int) $row['document']->getKey()] = (int) $results[$index]['final']->getKey();
+            $summary[] = [
+                'document_ulid' => $row['document']->ulid,
+                'final_sha256' => $results[$index]['final']->sha256,
+            ];
+        }
+
+        $completed = $this->complete($envelope, $first['final'], $record, $first['status'], $correlationId, $steps, $documentFinals, [
+            'participant_signatures' => $this->participants->appliedRequestCount($envelope),
+        ] + ($multi ? ['documents' => $summary] : []));
+
+        return new FinalizationOutcome(
+            $completed ? 'completed' : 'already_completed',
+            $envelope->refresh(),
+            $first['final'],
+            $record,
+            $first['status'],
+            $steps,
+        );
+    }
+
+    /**
+     * Arquivo final de UM documento sobre a última revisão assinada pelos participantes:
+     * a operadora assina por último (se configurada) e TODAS as assinaturas são validadas
+     * juntas — cadeia íntegra, nenhuma a mais, nenhuma a menos. Chamado sob o lock.
+     *
+     * @param  array<string, mixed>  $auditExtra
+     * @param  array<string, string>  $steps
+     * @return array{final: DocumentVersion, status: SignatureStatus, profile: string|null, validation: array<string, mixed>, certificate: CertificateReference|null}
+     *
+     * @throws FinalizationException
+     */
+    private function participantFinal(
+        Envelope $envelope,
+        Document $document,
+        TemporaryDirectory $workDir,
+        string $correlationId,
+        array $auditExtra,
+        array &$steps,
+        string $finalKey,
+        string $signatureKey,
+    ): array {
+        $operator = $this->signsFor($envelope);
+        $latest = $this->participants->latestRevision($document);
+        $participantSignatures = $this->participants->signatureCount($document);
+        $expected = $participantSignatures + ($operator ? 1 : 0);
+        $status = $this->participants->statusFor($operator, $participantSignatures);
+        $profile = $expected > 0 ? PyHankoSigner::PROFILE : null;
+
+        // Reaproveitar um `final` de execução anterior exige que ele seja a última revisão
+        // assinada + (só) a assinatura da operadora, com a quantidade exata de assinaturas.
+        $final = $this->artifacts->existing($document, DocumentVersionKind::Final);
+
+        if ($final !== null) {
+            $local = $this->artifacts->copyToTemporary($final, $workDir, 'final-existente.pdf');
+
+            if ($this->participants->finalMatches($local, $latest, $expected, $correlationId)) {
+                $validation = $expected > 0 ? $this->participants->validate($local, $correlationId) : null;
+
+                if ($validation !== null) {
+                    IncrementalChain::assertSound($validation, $expected);
+                }
+
+                $certificate = $operator && $validation !== null ? $this->operatorCertificateFor($validation) : null;
+                $steps[$finalKey] = 'reused';
+                $steps[$signatureKey] = 'reused';
+
+                return [
+                    'final' => $final,
+                    'status' => $status,
+                    'profile' => $profile,
+                    'validation' => $this->participants->validationPayload(
+                        $status,
+                        $validation,
+                        $profile,
+                        $operator ? ($certificate->environment ?? CertificateEnvironment::Test) : null,
+                    ),
+                    'certificate' => $certificate,
+                ];
+            }
+
+            $this->artifacts->discard($final, 'o arquivo final não corresponde à última revisão assinada pelos participantes');
+        }
+
+        $base = $this->artifacts->copyToTemporary($latest, $workDir, 'pre-assinatura.pdf');
+        $finalPath = $workDir->path('final.pdf');
+        $certificate = null;
+        $signResult = null;
+
+        if ($operator) {
+            $signed = $this->signature->signAndValidate($base, $finalPath, $correlationId, static function (ValidationResult $validation) use ($expected): void {
+                IncrementalChain::assertSound($validation, $expected);
+            });
+
+            /** @var CertificateReference|null $certificate */
+            $certificate = $signed['certificate'];
+            $profile = $signed['profile'] ?? PyHankoSigner::PROFILE;
+            $signResult = $signed['result'];
+        } elseif (! @copy($base, $finalPath)) {
+            throw FinalizationException::writeFailed('final', ['reason' => 'copy_failed']);
+        }
+
+        $validation = null;
+
+        if ($expected > 0) {
+            // TODAS as assinaturas do arquivo pronto, com as raízes dos participantes e da operadora.
+            $validation = $this->participants->validate($finalPath, $correlationId);
+            IncrementalChain::assertSound($validation, $expected);
+        }
+
+        $version = $this->artifacts->store($envelope, $document, DocumentVersionKind::Final, $finalPath, $correlationId);
+        $environment = $operator ? ($certificate->environment ?? CertificateEnvironment::Test) : null;
+
+        if ($signResult !== null && $validation !== null) {
+            SignerAudit::system($envelope, AuditEventType::EnvelopeSignedCompanyA1, [
+                'document_version_ulid' => $version->ulid,
+                'profile' => $profile,
+                'field_name' => $signResult->fieldName,
+                'certificate_fingerprint_sha256' => $signResult->certFingerprintSha256,
+                'certificate_environment' => $environment?->value,
+                'timestamp' => null,
+                'signature_count' => $validation->signatureCount,
+                'participant_signatures' => $participantSignatures,
+                'all_intact' => $validation->allIntact,
+                'all_valid' => $validation->allValid,
+                'all_trusted' => $validation->allTrusted(),
+                'revocation' => $validation->revocation,
+            ] + $auditExtra, null, $correlationId);
+        }
+
+        if ($auditExtra !== []) {
+            SignerAudit::system($envelope, AuditEventType::DocumentFinalized, $auditExtra + [
+                'final_document_version_ulid' => $version->ulid,
+                'final_sha256' => $version->sha256,
+                'signature_status' => $status->value,
+            ], null, $correlationId);
+        }
+
+        $steps[$finalKey] = 'created';
+        $steps[$signatureKey] = $operator ? 'created' : 'skipped';
+
+        return [
+            'final' => $version,
+            'status' => $status,
+            'profile' => $profile,
+            'validation' => $this->participants->validationPayload($status, $validation, $profile, $environment),
+            'certificate' => $certificate,
+        ];
+    }
+
+    /**
+     * Certificado da operadora identificado pela ÚLTIMA assinatura do arquivo (a dela).
+     */
+    private function operatorCertificateFor(ValidationResult $validation): ?CertificateReference
+    {
+        $signatures = $validation->signatures;
+        $fingerprint = $signatures === [] ? null : $signatures[count($signatures) - 1]->certFingerprintSha256;
+
+        if ($fingerprint === null || $fingerprint === '') {
+            return null;
+        }
+
+        /** @var CertificateReference|null $certificate */
+        $certificate = CertificateReference::query()->where('fingerprint_sha256', $fingerprint)->first();
+
+        return $certificate;
+    }
+
     // -- Etapa f ----------------------------------------------------------------------
 
     /**
@@ -965,7 +1270,8 @@ class EnvelopeFinalizer
             // O hash final é dos bytes DEPOIS da assinatura e mora aqui, fora do PDF.
             'final_sha256' => $final->sha256,
             'signature_status' => $signatureStatus,
-            'signature_profile' => $signatureStatus === SignatureStatus::CompanyA1 ? $profile : null,
+            // Perfil só quando há assinatura criptográfica (operadora, participantes ou ambas).
+            'signature_profile' => $signatureStatus !== SignatureStatus::None ? $profile : null,
             'certificate_reference_id' => $certificate?->getKey(),
             'validation_result' => $validationPayload,
             'validated_at' => Carbon::now(),

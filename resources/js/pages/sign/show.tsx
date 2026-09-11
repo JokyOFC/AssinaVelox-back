@@ -7,8 +7,9 @@ import {
     PenLine,
     ShieldCheck,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SignerBrand } from '@/components/branding/types';
+import { ParticipantCertificateCard } from '@/components/certificates/participant-certificate-card';
 import {
     CaptureStepCard,
     CaptureStepPreview,
@@ -409,6 +410,14 @@ export default function SignShow(props: SignShowProps) {
     } = props;
 
     const errors = usePage().props.errors;
+
+    /*
+     * Fase 2 §2.12: quando a assinatura com o certificado do participante sai de "em
+     * aplicação", o comprovante e a tela (finalizando → concluído) são recarregados.
+     */
+    const reloadReceipt = useCallback(() => {
+        router.reload({ only: ['screen', 'receipt', 'others'] });
+    }, []);
     // Fase 2 §2.9: nunca confundir com o `auth` compartilhado (`{ user }`).
     const auth = signerAuthOf(props.signer_auth ?? props.auth);
 
@@ -937,6 +946,45 @@ export default function SignShow(props: SignShowProps) {
                                 </p>
                             )}
                         </div>
+                        {/*
+                         * Fase 2 §2.12: quem já aceitou e voltou para enviar o próprio
+                         * certificado sem a janela de download confirma a identidade de
+                         * novo aqui (o servidor só manda `otp` nesse caso).
+                         */}
+                        {otp && (
+                            <div
+                                id="certificate-reauth"
+                                className="border-border bg-card shadow-card mt-4 rounded-[14px] border p-5 sm:p-[22px]"
+                            >
+                                <OtpCard
+                                    token={token}
+                                    firstName={recipient.first_name}
+                                    emailMasked={recipient.email_masked}
+                                    senderName={sender.user_name}
+                                    organizationName={sender.organization_name}
+                                    sentAt={envelope.sent_at}
+                                    expiresAt={envelope.expires_at}
+                                    otp={otp}
+                                    notice={notice}
+                                    termsUrl={legal.terms_url}
+                                    privacyUrl={legal.privacy_url}
+                                    errors={errors}
+                                    codeLength={limits?.otp_length}
+                                    ttlMinutes={limits?.otp_ttl_minutes}
+                                    heading="Confirme sua identidade para enviar o certificado"
+                                    auth={auth}
+                                />
+                            </div>
+                        )}
+                        {/* Fase 2 §2.12: só aparece se o servidor oferecer (404 = oculto). */}
+                        {action?.type !== 'approve' &&
+                            action?.type !== 'view' && (
+                                <ParticipantCertificateCard
+                                    token={token}
+                                    className="mt-4"
+                                    onApplied={reloadReceipt}
+                                />
+                            )}
                         <ParticipantsCard
                             others={others}
                             className="mt-4"
@@ -1473,6 +1521,12 @@ export default function SignShow(props: SignShowProps) {
                                 : 'Recusar assinatura'}
                         </button>
                     </div>
+
+                    {/*
+                     * Fase 2 §2.12: opção SEPARADA da representação visual e do aceite —
+                     * o servidor decide se é oferecida (404 = o cartão não aparece).
+                     */}
+                    {!approving && <ParticipantCertificateCard token={token} />}
 
                     <ParticipantsCard
                         others={others}

@@ -145,11 +145,13 @@ A configuração é salva contra a **versão atual** do modelo (`PUT public_form
 | confirmação obrigatória | —                        | nenhum envelope sem ela                                                                                                                    |
 | limite do período       | configurável             | respostas **confirmadas**; envio não confirmado não bloqueia o formulário de ninguém                                                       |
 
-- **Carimbo de uso único** (revisão adversarial da onda B). Cada exibição da página emite um carimbo próprio; o envio **aceito** o consome (`FillTimer::consume()`, marca atômica `Cache::add` no cache padrão, que expira quando o carimbo venceria de qualquer jeito). Reenviar com o mesmo carimbo, sem abrir a página de novo, é recusado com "Esta página já foi usada para um envio…". Sem isso, uma leitura da página servia para envios ilimitados por 6 h e a barreira de tempo só valia no primeiro.
+- **Carimbo de uso único** (revisão adversarial da onda B; marcas no banco desde a onda C). Cada exibição da página emite um carimbo próprio; o envio **aceito** o consome (`FillTimer::consume()`). Reenviar com o mesmo carimbo, sem abrir a página de novo, é recusado com "Esta página já foi usada para um envio…". Sem isso, uma leitura da página servia para envios ilimitados por 6 h e a barreira de tempo só valia no primeiro.
+    - A marca de "já usado" fica na tabela `public_form_timer_marks` (`token_digest` único + `expires_at`). O consumo é um INSERT com unicidade (`insertOrIgnore`): de dois envios simultâneos com o mesmo carimbo, só um grava. O banco guarda só o SHA-256 da identidade do carimbo, nunca o carimbo.
     - A identidade do carimbo vem do vetor de inicialização e do texto cifrado (cobertos pelo MAC), não da string enviada: reformatar o JSON ou o base64 não gera um carimbo "novo".
     - Envio **recusado** (rápido demais, campo inválido, limite, e-mail com links pendentes) não consome: a pessoa corrige e reenvia da mesma página. Toda tentativa continua contando nos limites por IP e por formulário.
     - O consumo acontece depois de todas as barreiras e antes de gravar; a confirmação por e-mail não muda.
-    - Limitação: limpar o cache (`cache:clear`) apaga as marcas; carimbos emitidos antes disso voltam a valer até vencer (6 h).
+    - A marca vive até o carimbo vencer por conta própria (+1 min). A limpeza `public-forms:prune-timer-marks` roda de hora em hora e apaga só as vencidas.
+    - **Esvaziar o cache não reabre nenhum carimbo** (`cache:clear`, `FLUSHALL`, reinício do Redis sem persistência): a limitação da onda B deixou de existir. Teste: `tests/Feature/Phase2/PublicForms/FillTimerDatabaseTest.php`.
 - Todos os limites têm padrão no código (`PublicFormsConfig`) e podem ser sobrescritos em `config('assinavelox.public_forms.*')`, um bloco opcional ainda não declarado no arquivo de configuração.
 - **CAPTCHA como extensão**: o ponto de entrada é `PublicFormIntake::submit`, entre o tempo mínimo e a validação.
     - A flag seria `public_forms_captcha`, com o contrato em `App\Integrations\Contracts`.

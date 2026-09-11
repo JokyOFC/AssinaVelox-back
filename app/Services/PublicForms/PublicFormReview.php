@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
 use App\Services\Envelopes\Sending\SendEnvelope;
 use App\Services\Plans\Exceptions\SendingBlockedException;
+use App\Services\Retention\LegalHolds;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -67,6 +68,12 @@ final class PublicFormReview
     public function reject(PublicFormSubmission $submission, User $user): PublicFormSubmission
     {
         $envelope = $this->pendingEnvelope($submission);
+
+        // Recusar exclui o rascunho — o mesmo efeito de "Excluir rascunho". A preservação legal
+        // vence (retencao-e-preservacao.md §5.2, regra única): registra a tentativa com o autor
+        // e volta com a mensagem (LegalHoldActiveException se renderiza); o envio continua em
+        // revisão.
+        app(LegalHolds::class)->guardEnvelope($envelope, 'public_form_reject', $user);
 
         $submission->forceFill([
             'status' => SubmissionStatus::Rejected,

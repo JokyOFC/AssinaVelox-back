@@ -22,6 +22,12 @@ import { AvatarInitials, recipientTone } from '@/components/avatar-initials';
 import { SendBatchLinkButton } from '@/components/batch/send-batch-link-button';
 import { StartInPersonLink } from '@/components/in-person/start-in-person-link';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { DossierButton } from '@/components/dossier/dossier-buttons';
+import { useEnvelopeLegalHold } from '@/components/envelopes/use-envelope-legal-hold';
+import { EnvelopeLegalHoldPanel } from '@/components/retention/envelope-legal-hold-panel';
+import { PreservedBadge } from '@/components/retention/preserved-badge';
+import type { EnvelopeLegalHold } from '@/components/retention/types';
+import { ParticipantSignatureList } from '@/components/verification/crypto-signature-list';
 import {
     FieldLayer,
     type LayerField,
@@ -82,6 +88,8 @@ import {
     authMethodLabels,
     deliveryChannelLabels,
     fieldTypeLabels,
+    hasCryptographicSignature,
+    hasParticipantSignatures,
     participantRoleLabels,
     signingOrderLabels,
 } from '@/lib/labels';
@@ -111,6 +119,7 @@ import type {
     Recipient,
     SignatureStatus,
     SigningField,
+    EvidenceParticipantSignature,
 } from '@/types';
 
 type Tab = 'signers' | 'audit' | 'details';
@@ -143,6 +152,16 @@ export interface EnvelopeShowProps {
      * `EnvelopeController::show`; ausente, a aba mostra "Lembretes: manuais" (Fase 1).
      */
     reminders?: EnvelopeReminders | null;
+    /**
+     * Fase 2 §2.19 (`RetentionPresenter::forEnvelope`). Ainda não exposta pelo
+     * controller: sem ela, o detalhe consulta `GET envelopes.legal_hold.show`.
+     */
+    legal_hold?: EnvelopeLegalHold | null;
+    /**
+     * Fase 2 §2.12 (`ParticipantSignatureViews::forEvidence`), opcional: sem ela o detalhe
+     * mostra só o resumo e remete às evidências, onde a lista completa é publicada.
+     */
+    participant_signatures?: EvidenceParticipantSignature[];
 }
 
 /**
@@ -163,9 +182,16 @@ export default function EnvelopeShow({
     sent,
     tab,
     reminders,
+    legal_hold = null,
+    participant_signatures = [],
 }: EnvelopeShowProps) {
     const { errors } = usePage().props;
     const [currentTab, setCurrentTab] = useState<Tab>(tab ?? 'signers');
+    // Fase 2 §2.19: selo "Preservado" e o bloco de preservação.
+    const legalHold = useEnvelopeLegalHold(envelope.id, legal_hold);
+    const preserved = legalHold?.preserved === true;
+    // Fase 2 §2.12: "assinado" vale para a operadora e para o participante com certificado.
+    const signedFile = hasCryptographicSignature(envelope.signature_status);
     const [page, setPage] = useState(1);
     const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
@@ -291,16 +317,25 @@ export default function EnvelopeShow({
                 }
                 title={envelope.title}
                 badge={
-                    <EnvelopeStatusBadge
-                        status={envelope.status}
-                        signedCount={envelope.signed_count}
-                        label={
-                            envelope.status === 'in_progress'
-                                ? `${envelope.status_label} · ${formatProgress(envelope.signed_count, envelope.recipients_count)}`
-                                : envelope.status_label
-                        }
-                        className="px-[9px] py-[3px]"
-                    />
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <EnvelopeStatusBadge
+                            status={envelope.status}
+                            signedCount={envelope.signed_count}
+                            label={
+                                envelope.status === 'in_progress'
+                                    ? `${envelope.status_label} · ${formatProgress(envelope.signed_count, envelope.recipients_count)}`
+                                    : envelope.status_label
+                            }
+                            className="px-[9px] py-[3px]"
+                        />
+                        {preserved && (
+                            <PreservedBadge
+                                since={legalHold?.holds[0]?.starts_at}
+                                until={legalHold?.holds[0]?.ends_at}
+                                className="px-[9px] py-[3px]"
+                            />
+                        )}
+                    </span>
                 }
                 subtitle={
                     <span className="tabular inline-flex flex-wrap items-center gap-1.5">
@@ -392,8 +427,7 @@ export default function EnvelopeShow({
                                                         '#'
                                                     }
                                                 >
-                                                    {envelope.signature_status ===
-                                                    'company_a1'
+                                                    {signedFile
                                                         ? 'PDF final assinado'
                                                         : 'Arquivo final (PDF)'}
                                                 </a>
@@ -449,8 +483,7 @@ export default function EnvelopeShow({
                                                  * envelope: sem certificado da operadora não existe
                                                  * "PDF assinado" para oferecer (arquitetura §2).
                                                  */}
-                                                {envelope.signature_status ===
-                                                'company_a1'
+                                                {signedFile
                                                     ? 'PDF final assinado'
                                                     : 'Arquivo final (PDF)'}
                                             </a>
@@ -563,14 +596,17 @@ export default function EnvelopeShow({
                                             Cancelar documento
                                         </DropdownMenuItem>
                                     )}
-                                {envelope.can.delete && isDraft && (
-                                    <DropdownMenuItem
-                                        variant="destructive"
-                                        onSelect={() => setDeleteOpen(true)}
-                                    >
-                                        Excluir rascunho
-                                    </DropdownMenuItem>
-                                )}
+                                {/* Fase 2 §2.19: documento preservado não pode ser excluído. */}
+                                {envelope.can.delete &&
+                                    isDraft &&
+                                    !preserved && (
+                                        <DropdownMenuItem
+                                            variant="destructive"
+                                            onSelect={() => setDeleteOpen(true)}
+                                        >
+                                            Excluir rascunho
+                                        </DropdownMenuItem>
+                                    )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </>
@@ -618,6 +654,14 @@ export default function EnvelopeShow({
             )}
             {envelope.status === 'completed' && (
                 <CompletionPanel envelope={envelope} verifyUrl={verifyUrl} />
+            )}
+            {participant_signatures.length > 0 && (
+                <section className="border-border bg-card shadow-card rounded-xl border p-5">
+                    <ParticipantSignatureList
+                        signatures={participant_signatures}
+                        profile={envelope.certificate?.policy ?? null}
+                    />
+                </section>
             )}
             {envelope.status === 'refused' && (
                 <StatusBanner tone="danger" title="Documento recusado">
@@ -734,14 +778,7 @@ export default function EnvelopeShow({
                             Nenhum arquivo enviado ainda.
                         </div>
                     )}
-                    {multi && (
-                        <FilesPanel
-                            files={files}
-                            signedByOperator={
-                                envelope.signature_status === 'company_a1'
-                            }
-                        />
-                    )}
+                    {multi && <FilesPanel files={files} signed={signedFile} />}
                     {!multi && envelope.document && (
                         <p className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
                             <FileText className="size-3.5" />
@@ -1058,6 +1095,9 @@ export default function EnvelopeShow({
                     )}
                 </div>
             </div>
+
+            {/* Fase 2 §2.19: sem a flag e sem preservação, o painel não renderiza nada. */}
+            {legalHold && <EnvelopeLegalHoldPanel legalHold={legalHold} />}
 
             <ConfirmDialog
                 open={cancelOpen}
@@ -1646,8 +1686,12 @@ function CompletionPanel({
      * positiva, então o texto neutro manda o leitor à página de evidências, que é
      * onde a situação da assinatura é apurada de verdade.
      */
-    const signedByOperator = envelope.signature_status === 'company_a1';
-    const knownStatus = envelope.signature_status != null;
+    const status = envelope.signature_status ?? null;
+    const signedByOperator = status === 'company_a1';
+    // Fase 2 §2.12: participantes com o próprio certificado (com ou sem a operadora).
+    const participants = hasParticipantSignatures(status);
+    const signedFile = hasCryptographicSignature(status);
+    const knownStatus = status != null;
     const code = formatVerificationCode(envelope.verification_code);
     const completedAt = formatDateTime(envelope.completed_at);
 
@@ -1659,16 +1703,24 @@ function CompletionPanel({
                     <p className="text-[13.5px] font-semibold">
                         {!knownStatus
                             ? `Documento concluído em ${completedAt}`
-                            : signedByOperator
-                              ? `Concluído e assinado digitalmente pela operadora em ${completedAt}`
-                              : `Concluído com aceite eletrônico e evidências em ${completedAt}`}
+                            : status === 'mixed'
+                              ? `Concluído e assinado com certificados dos participantes e da operadora em ${completedAt}`
+                              : participants
+                                ? `Concluído e assinado com certificado dos participantes em ${completedAt}`
+                                : signedByOperator
+                                  ? `Concluído e assinado digitalmente pela operadora em ${completedAt}`
+                                  : `Concluído com aceite eletrônico e evidências em ${completedAt}`}
                     </p>
                     <p className="mt-1 text-[12.5px] leading-[1.55] opacity-90">
                         {!knownStatus
                             ? 'O arquivo final e o relatório de evidências estão disponíveis. A situação da assinatura — com ou sem certificado da operadora — está na página de evidências.'
-                            : signedByOperator
-                              ? 'O arquivo final foi lacrado com o certificado A1 da AssinaVelox. A assinatura identifica a operadora e permite detectar alterações posteriores no arquivo; não é a assinatura pessoal dos participantes.'
-                              : 'Nenhum certificado da operadora estava ativo na finalização, então o arquivo final não tem assinatura criptográfica. As evidências de cada aceite — data, IP, navegador, código confirmado por e-mail e a versão exata do documento — estão no relatório.'}
+                            : status === 'mixed'
+                              ? 'O arquivo final recebeu assinaturas feitas com o certificado A1 do próprio participante e, por último, a assinatura da operadora, que lacra o arquivo e não é a assinatura pessoal de ninguém. Cada assinatura de participante se soma ao aceite eletrônico dele, sem substituí-lo. A lista está na página de evidências.'
+                              : participants
+                                ? 'O arquivo final recebeu assinaturas feitas com o certificado A1 do próprio participante, acrescentadas depois das evidências. Elas identificam o titular de cada certificado e se somam ao aceite eletrônico, sem substituí-lo. A operadora não aplicou assinatura própria. A lista está na página de evidências.'
+                                : signedByOperator
+                                  ? 'O arquivo final foi lacrado com o certificado A1 da AssinaVelox. A assinatura identifica a operadora e permite detectar alterações posteriores no arquivo; não é a assinatura pessoal dos participantes.'
+                                  : 'Nenhum certificado da operadora estava ativo na finalização, então o arquivo final não tem assinatura criptográfica. As evidências de cada aceite — data, IP, navegador, código confirmado por e-mail e a versão exata do documento — estão no relatório.'}
                     </p>
                 </div>
             </div>
@@ -1682,7 +1734,7 @@ function CompletionPanel({
                     <Button asChild variant="success" size="sm">
                         <a href={envelope.downloads.signed}>
                             <Download className="size-[15px]" />
-                            {signedByOperator
+                            {signedFile
                                 ? 'Baixar PDF assinado'
                                 : 'Baixar arquivo final'}
                         </a>
@@ -1702,6 +1754,12 @@ function CompletionPanel({
                         Ver evidências
                     </Link>
                 </Button>
+                {/* Fase 2 §2.13: só com a flag `dossier_export`. */}
+                <DossierButton
+                    envelopeId={envelope.id}
+                    status={envelope.status}
+                    size="sm"
+                />
             </div>
 
             {envelope.verification_code && (
@@ -1732,14 +1790,15 @@ function CompletionPanel({
 
 /**
  * Arquivos do envelope sob o visualizador (Fase 2 §2.3): nome, páginas, tamanho e os
- * downloads de cada um (original; final e evidências só depois da conclusão).
+ * downloads de cada um (original; final e evidências só depois da conclusão). `signed` =
+ * o arquivo final tem assinatura criptográfica (operadora e/ou participantes, §2.12).
  */
 function FilesPanel({
     files,
-    signedByOperator,
+    signed,
 }: {
     files: EnvelopeFile[];
-    signedByOperator: boolean;
+    signed: boolean;
 }) {
     return (
         <ol className="border-border bg-card shadow-card mt-3 flex flex-col rounded-xl border px-4 py-1.5 text-[12.5px]">
@@ -1772,9 +1831,7 @@ function FilesPanel({
                                 href={file.downloads.signed}
                                 className="text-primary font-semibold hover:underline"
                             >
-                                {signedByOperator
-                                    ? 'PDF assinado'
-                                    : 'Arquivo final'}
+                                {signed ? 'PDF assinado' : 'Arquivo final'}
                             </a>
                         )}
                         {file.downloads.evidence && (

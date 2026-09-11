@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-from pdftool.errors import ProcessingError, UsageError
+from pdftool.errors import InputRejected, ProcessingError, UsageError
 
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 DEFAULT_SUBJECT = "CN=AssinaVelox TESTE,O=AssinaVelox,C=BR"

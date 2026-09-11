@@ -78,6 +78,11 @@ test('props compartilhadas do owner são coerentes com o contrato', function () 
             'in_person' => false,
             'batch_signing' => false,
             'public_forms' => false,
+            // Fase 2, onda C: chaves novas, todas desligadas por padrão (roadmap §1 T8).
+            'dossier_export' => false,
+            'retention_policies' => false,
+            'operator_tsa' => false,
+            'pades_bt' => false,
         ])
         ->has('flash')
         ->has('sidebarOpen')

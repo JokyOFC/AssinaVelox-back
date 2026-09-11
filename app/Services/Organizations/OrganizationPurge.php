@@ -8,11 +8,14 @@ use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Branding\BrandingManager;
+use App\Services\Retention\LegalHolds;
+use App\Services\Retention\RetentionConfig;
 use App\Support\OrganizationSettings;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Psr\Log\LoggerInterface;
 
@@ -77,6 +80,13 @@ class OrganizationPurge
      * @var list<string>
      */
     private const TABLES_IN_ORDER = [
+        // Fase 2 §2.19 (K-RET): trilha e recibos da retenção, bloqueios (já liberados — com
+        // bloqueio ativo a exclusão nem chega aqui) e a política. Antes de tudo: apontam para
+        // envelopes, pastas e usuários.
+        'retention_events',
+        'retention_deletions',
+        'legal_holds',
+        'retention_policies',
         // Fase 2: "acessar como" é RESTRICT na organização (a sessão de suporte é trilha);
         // sai antes de tudo. `platform_audit_events` fica — é trilha da plataforma
         // (organization_id nullOnDelete).
@@ -153,11 +163,33 @@ class OrganizationPurge
             $query->limit($limit * 20);
         }
 
+        $holds = app(LegalHolds::class);
+
         return $query->get()
-            ->filter(function (Organization $organization) use ($now): bool {
+            ->filter(function (Organization $organization) use ($now, $holds): bool {
                 $scheduled = OrganizationSettings::of($organization)->deletionScheduledFor();
 
-                return $scheduled !== null && $scheduled->lessThanOrEqualTo($now);
+                if ($scheduled === null || $scheduled->greaterThan($now)) {
+                    return false;
+                }
+
+                // Fase 2 §2.19 (K-RET): qualquer preservação ativa vence a exclusão da
+                // organização. Ela fica fora da lista (continua agendada) e a tentativa entra na
+                // trilha da retenção, no máximo uma vez por dia.
+                $hold = $holds->anyActive((int) $organization->getKey(), $now);
+
+                if ($hold !== null) {
+                    $holds->recordBlocked((int) $organization->getKey(), 'organization_purge', $hold);
+
+                    $this->logger->warning('organization.purge.blocked_by_legal_hold', [
+                        'organization' => $organization->ulid,
+                        'hold' => $hold->ulid,
+                    ]);
+
+                    return false;
+                }
+
+                return true;
             })
             ->when($limit !== null, fn ($collection) => $collection->take($limit))
             ->values();
@@ -171,6 +203,10 @@ class OrganizationPurge
      */
     public function purge(Organization $organization): array
     {
+        // Fase 2 §2.19 (K-RET): defesa também para quem chama `purge()` direto, sem `due()`.
+        // Registra a tentativa e lança LegalHoldActiveException — nada é apagado.
+        app(LegalHolds::class)->guardOrganization($organization, 'organization_purge');
+
         $ulid = $organization->ulid;
         $requestedAt = OrganizationSettings::of($organization)->deletionRequestedAt();
         $organizationId = (int) $organization->getKey();
@@ -211,6 +247,14 @@ class OrganizationPurge
                 ]);
 
             $rows = [];
+
+            // Fase 2 §2.19 (K-RET): artefatos derivados de outros itens (dossiês, carimbos,
+            // assinaturas de participante) que existirem, antes das tabelas que eles referenciam.
+            foreach (RetentionConfig::derivedArtifacts() as $artifact) {
+                if (Schema::hasTable($artifact['table']) && Schema::hasColumn($artifact['table'], 'organization_id')) {
+                    $rows[$artifact['table']] = DB::table($artifact['table'])->where('organization_id', $organizationId)->delete();
+                }
+            }
 
             foreach (self::TABLES_IN_ORDER as $table) {
                 $rows[$table] = DB::table($table)->where('organization_id', $organizationId)->delete();
@@ -323,10 +367,31 @@ class OrganizationPurge
             ->pluck('signature_image_path')
             ->all();
 
-        return array_values(array_unique(array_map(
+        // Fase 2 §2.19 (K-RET): imagens de campo, fotos da captura e artefatos derivados que
+        // tenham sido gravados fora de `orgs/{ulid}` (dossiês, carimbos).
+        $extra = array_merge(
+            DB::table('signing_field_values')->where('organization_id', $organizationId)->whereNotNull('image_path')->pluck('image_path')->all(),
+            Schema::hasTable('identity_captures')
+                ? DB::table('identity_captures')->where('organization_id', $organizationId)->whereNotNull('storage_path')->pluck('storage_path')->all()
+                : [],
+        );
+
+        foreach (RetentionConfig::derivedArtifacts() as $artifact) {
+            if (! Schema::hasTable($artifact['table']) || ! Schema::hasColumn($artifact['table'], 'organization_id')) {
+                continue;
+            }
+
+            foreach ($artifact['path_columns'] as $column) {
+                if (Schema::hasColumn($artifact['table'], $column)) {
+                    $extra = array_merge($extra, DB::table($artifact['table'])->where('organization_id', $organizationId)->whereNotNull($column)->pluck($column)->all());
+                }
+            }
+        }
+
+        return array_values(array_unique(array_filter(array_map(
             static fn ($path): string => (string) $path,
-            array_merge($versions, $images),
-        )));
+            array_merge($versions, $images, $extra),
+        ), static fn (string $path): bool => $path !== '')));
     }
 
     /**

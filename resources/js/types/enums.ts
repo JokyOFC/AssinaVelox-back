@@ -158,8 +158,22 @@ export type PaymentDisplayStatus =
     | 'refunded'
     | 'cancelled';
 
-/** verification_records.signature_status */
-export type SignatureStatus = 'none' | 'company_a1';
+/**
+ * verification_records.signature_status
+ *
+ * - `company_a1`: só a operadora (certificado de titularidade da operadora);
+ * - `participants_a1` (Fase 2 §2.12): participantes com o PRÓPRIO certificado A1, sem a
+ *   operadora;
+ * - `mixed` (Fase 2 §2.12): participantes com o próprio certificado e, por último, a
+ *   operadora.
+ *
+ * Nenhum desses valores substitui o aceite eletrônico, que existe para todos.
+ */
+export type SignatureStatus =
+    | 'none'
+    | 'company_a1'
+    | 'participants_a1'
+    | 'mixed';
 
 export type ActorType = 'user' | 'recipient' | 'system';
 
@@ -231,7 +245,16 @@ export type AuditEventType =
     | 'cpf_lookup.performed'
     | 'identity_capture.requirement_updated'
     | 'identity_capture.recorded'
-    | 'identity_capture.purged';
+    | 'identity_capture.purged'
+    // Fase 2 §2.12 (docs/fase-2/a1-do-participante.md §8)
+    | 'participant_certificate.requested'
+    | 'participant_certificate.withdrawn'
+    | 'participant_certificate.submitted'
+    | 'participant_certificate.rejected'
+    | 'participant_signature.applied'
+    | 'participant_signature.failed'
+    | 'participant_signature.expired'
+    | 'envelope.awaiting_participant_signatures';
 
 /** Cor/semântica de um evento na timeline (derivado no backend). */
 export type AuditEventKind = 'ok' | 'info' | 'warn';

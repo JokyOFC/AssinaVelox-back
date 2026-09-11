@@ -11,6 +11,8 @@ use App\Models\Recipient;
 use App\Models\VerificationRecord;
 use App\Models\VerificationRecordDocument;
 use App\Services\Documents\EnvelopeDocuments;
+use App\Services\Signing\Certificates\ParticipantSignatureViews;
+use App\Services\Timestamp\TimestampEvidence;
 
 /**
  * Consulta pública por código de verificação (arquitetura §6, ROUTES §4).
@@ -35,6 +37,14 @@ use App\Services\Documents\EnvelopeDocuments;
  *
  * Só envelopes **já enviados**: `in_progress`, `finalizing`, `completed`, `refused`, `expired`
  * e `canceled`. `draft`, `preparing` e `ready` nunca aparecem.
+ *
+ * ## Exceção: excluído pela política de retenção (Fase 2 §2.19)
+ *
+ * O código de um envelope que JÁ ERA publicável e foi expurgado pela retenção responde
+ * conforme `assinavelox.retention.verification_after_purge` ({@see RetentionTombstones}): por
+ * padrão, "removido por política de retenção em {data}" + só o resumo do arquivo final. O código
+ * foi publicado (impresso no documento), então confirmar que ele existiu não cria oráculo novo;
+ * com `hidden`, a resposta volta a ser idêntica à de código inexistente.
  */
 final class PublicVerification
 {
@@ -80,7 +90,12 @@ final class PublicVerification
             ->first();
 
         if ($envelope === null) {
-            return null;
+            // Fase 2 §2.19 (K-RET): o código de um envelope JÁ PUBLICADO e depois excluído pela
+            // política de retenção responde conforme a decisão configurada (RetentionTombstones).
+            // Com `hidden`, ou para qualquer outro código, a resposta continua a de "não existe".
+            $deletion = app(RetentionTombstones::class)->find($this->normalize($code));
+
+            return $deletion !== null ? PurgedEnvelope::fromDeletion($deletion) : null;
         }
 
         $publishable = $envelope->sent_at !== null
@@ -101,6 +116,10 @@ final class PublicVerification
      */
     public function result(Envelope $envelope): array
     {
+        if ($envelope instanceof PurgedEnvelope) {
+            return app(RetentionTombstones::class)->result($envelope);
+        }
+
         $record = $envelope->verificationRecord;
         $signature = SignatureNarrative::for($envelope, $record);
         $hashes = HashLedger::values($envelope, $record);
@@ -156,6 +175,14 @@ final class PublicVerification
             $result['documents'] = $documents;
             $result['documents_count'] = count($documents);
         }
+
+        // Fase 2 §2.12 (K-A1, aditivo): assinaturas com o certificado do próprio participante —
+        // nome mascarado, emissor, validade, teste, resultado; sem CPF. Só quando existem.
+        $result += ParticipantSignatureViews::publicProps($envelope);
+
+        // Fase 2 §2.13 (K-TSA, integração I-2C): carimbos do tempo com o rótulo do tipo de TSA
+        // (T3), só quando existem — e nunca o do manifesto do dossiê (TimestampEvidence::publicProps).
+        $result += TimestampEvidence::publicProps($envelope);
 
         return $result;
     }
@@ -340,6 +367,11 @@ final class PublicVerification
      */
     public function checkHash(Envelope $envelope, string $sha256): array
     {
+        if ($envelope instanceof PurgedEnvelope) {
+            /** @var array{matches: 'signed'|'original'|'none', checked_sha256: string} */
+            return app(RetentionTombstones::class)->checkHash($envelope, $sha256);
+        }
+
         $checked = strtolower(trim($sha256));
         $hashes = HashLedger::values($envelope, $envelope->verificationRecord);
 

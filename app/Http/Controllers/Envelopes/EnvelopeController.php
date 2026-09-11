@@ -43,6 +43,9 @@ use App\Services\Envelopes\Sending\CancelEnvelope;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Identity\IdentityFeatures;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\Retention\LegalHolds;
+use App\Services\Retention\RetentionPresenter;
+use App\Services\Signing\Certificates\ParticipantSignatureViews;
 use App\Services\Signing\Channels\ChannelAvailability;
 use App\Services\Tags\EnvelopeTagIndex;
 use App\Services\Templates\TemplatesFeature;
@@ -217,6 +220,12 @@ class EnvelopeController extends Controller
             // Fase 2 §2.5 (docs/fase-2/lembretes-e-agendamento.md): `available=false` com a
             // flag desligada — o front mantém a tela da Fase 1.
             'reminders' => app(ReminderProps::class)->forEnvelope($envelope),
+            // Fase 2 §2.19 (K-RET, integração I-2C): selo "Preservado" e ações de preservar e
+            // liberar. Com a flag desligada e sem bloqueio, o painel não renderiza nada.
+            'legal_hold' => app(RetentionPresenter::class)->forEnvelope($envelope, CurrentOrganization::instance()->membership()),
+            // Fase 2 §2.12 (K-A1, integração I-2C): só quando há pedidos de assinatura com o
+            // certificado do próprio participante.
+            ...ParticipantSignatureViews::evidenceProps($envelope),
         ]);
     }
 
@@ -472,6 +481,10 @@ class EnvelopeController extends Controller
             return back()->with('error', 'Só rascunhos podem ser excluídos.');
         }
 
+        // Fase 2 §2.19 (K-RET): a preservação legal vence a exclusão manual. Registra a tentativa
+        // e volta com a mensagem (LegalHoldActiveException se renderiza). Sem bloqueio, nada muda.
+        app(LegalHolds::class)->guardEnvelope($envelope, 'manual_delete', $request->user());
+
         // Sem evento próprio: RECONCILIACAO §3 não define `envelope.deleted` e a trilha do
         // rascunho continua acessível pelo soft delete.
         $envelope->delete();
@@ -501,6 +514,10 @@ class EnvelopeController extends Controller
         ], [], ['folder_id' => 'pasta']);
 
         $folder = $validated['folder_id'] ? Folder::query()->where('ulid', $validated['folder_id'])->first() : null;
+
+        // Fase 2 §2.19 (integração I-2C): mover para fora de uma pasta preservada tiraria a
+        // proteção. Sem bloqueio de pasta, nada muda (LegalHoldActiveException se renderiza).
+        app(LegalHolds::class)->guardMove($envelope, $folder?->getKey(), 'move', $request->user());
 
         $envelope->forceFill(['folder_id' => $folder?->getKey()])->save();
 

@@ -72,6 +72,8 @@ const SMOKE_WAVE_B_STUBS_404 = [
     'sign.document',
     'sign.page',
     'sign.download',
+    // Fase 2 §2.12 (K-A1): estado do certificado do participante — mesmo token sintético, 404.
+    'sign.certificate.show',
     // Fase 2 §2.2 (C-FORM): token sintético de formulário público e de confirmação. Token
     // desconhecido, rascunho, revogado ou flag desligada recebem o mesmo 404
     // (docs/fase-2/formulario-publico.md §5).
@@ -115,6 +117,16 @@ const SMOKE_OVERRIDES = [
     // o padrão — todas as telas internas do formulário público respondem 404.
     'public_forms.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'public_forms.edit' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 2 §2.19 (K-RET, docs/fase-2/retencao-e-preservacao.md): a tela de retenção exige
+    // `manage_settings` pela Policy (sem `org.role`), então o operador recebe 403.
+    'settings.retention' => ['member' => 403],
+    // Revisão adversarial da onda C: prévia da exclusão (JSON) — flag `retention_policies`
+    // desligada responde 404 (RetentionFeature::ensure); sem `manage_settings`, 403.
+    'settings.retention.preview' => ['owner' => 404, 'admin' => 404, 'member' => 403],
+    // Fase 2 §2.13 (K-TSA, docs/fase-2/carimbo-e-dossie.md): com a flag `dossier_export`
+    // desligada — o padrão — status e download do dossiê respondem 404.
+    'dossiers.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'dossiers.download' => ['owner' => 404, 'admin' => 404, 'member' => 404],
 ];
 
 /**
@@ -136,13 +148,15 @@ function smokeRouteParameters(string $name, array $ctx): array
     return match ($name) {
         'envelopes.edit' => ['envelope' => $draft->ulid],
         'envelopes.show', 'envelopes.evidence', 'envelopes.document.status', 'envelopes.document.preview' => ['envelope' => $envelope->ulid],
+        // Fase 2 §2.19 (K-RET): JSON de preservação do detalhe (só `view`).
+        'envelopes.legal_hold.show' => ['envelope' => $envelope->ulid],
         'envelopes.document.page' => ['envelope' => $envelope->ulid, 'page' => 1],
         'envelopes.download' => ['envelope' => $envelope->ulid, 'type' => 'original'],
         'billing.payments.receipt' => ['payment' => $ctx['payment']->ulid],
         'billing.return' => ['outcome' => 'success'],
         'admin.organizations.show' => ['organization' => $org->ulid],
         'invitations.accept' => ['token' => str_repeat('a', 43)],
-        'sign.show', 'sign.document' => ['token' => str_repeat('b', 43)],
+        'sign.show', 'sign.document', 'sign.certificate.show' => ['token' => str_repeat('b', 43)],
         'sign.page' => ['token' => str_repeat('b', 43), 'page' => 1],
         'sign.download' => ['token' => str_repeat('b', 43), 'type' => 'signed'],
         'verify.show' => ['code' => 'ABCD-EFGH-JKLM'],
@@ -156,6 +170,8 @@ function smokeRouteParameters(string $name, array $ctx): array
         'public_forms.edit' => ['publicForm' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         'form_fill.show' => ['token' => str_repeat('c', 40)],
         'form_fill.confirm.show' => ['token' => str_repeat('c', 40), 'confirmation' => str_repeat('d', 48)],
+        // Fase 2 §2.13 (K-TSA): ULID sintético — flag `dossier_export` desligada responde 404.
+        'dossiers.show', 'dossiers.download' => ['dossierExport' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         default => [],
     };
 }

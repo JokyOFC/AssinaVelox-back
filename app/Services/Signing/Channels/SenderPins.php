@@ -8,6 +8,7 @@ use App\Models\Recipient;
 use App\Models\RecipientPin;
 use App\Models\SigningSession;
 use App\Models\User;
+use App\Services\Signing\Challenges;
 use App\Services\Signing\Exceptions\SigningRejectedException;
 use App\Services\Signing\SignerAudit;
 use App\Services\Signing\SignerContext;
@@ -230,7 +231,7 @@ final class SenderPins
      */
     public function verify(SignerContext $context, Request $request, string $pin): SigningSession
     {
-        if (! $context->isActive()) {
+        if (! $context->isActive() && ! Challenges::reopensCertificateStep($context)) {
             throw SigningRejectedException::conflict('not_signable', 'Este documento não está mais disponível para assinatura.');
         }
 
@@ -329,9 +330,20 @@ final class SenderPins
 
         if ($outcome['state'] === 'ok') {
             $this->closeGate($session, $context, $request);
-            $this->sessions->authenticate($session, $context, $request);
-
             $correlationId = SignerTokens::correlationId();
+
+            // Fase 2 §2.12: quem já aceitou e voltou para enviar o certificado — o PIN só
+            // reabre a janela de download; nenhuma sessão de assinatura é autenticada.
+            if (! $context->isActive()) {
+                SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengePinVerified, [
+                    'session_ulid' => $session->ulid,
+                    'purpose' => 'participant_certificate',
+                ], $correlationId);
+
+                return $session;
+            }
+
+            $this->sessions->authenticate($session, $context, $request);
 
             SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengePinVerified, [
                 'session_ulid' => $session->ulid,

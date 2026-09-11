@@ -818,9 +818,22 @@ final class ConsentText
      * O que a plataforma **afirma** sobre a conclusão, exibido junto ao aceite. Sem
      * certificado configurado, a frase é literalmente "aceite eletrônico com evidências".
      */
-    public static function completionNotice(?bool $withCertificate = null): string
+    public static function completionNotice(?bool $withCertificate = null, bool $participantCertificateOffered = false): string
     {
         $withCertificate ??= self::operatorCertificateActive();
+
+        // Fase 2 §2.12 (T1): com a assinatura pelo certificado do PRÓPRIO participante oferecida
+        // a esta pessoa, o resultado depende de ela enviar o certificado no prazo. A previsão
+        // é condicional — nunca "sem assinatura criptográfica" ao lado do cartão que a oferece.
+        if ($participantCertificateOffered) {
+            return ($withCertificate
+                ? 'Ao final, a AssinaVelox aplicará ao arquivo uma assinatura criptográfica com '
+                    .'certificado de sua própria titularidade (identifica a operadora, não é a sua assinatura pessoal). '
+                : 'Ao final, este documento será concluído como aceite eletrônico com evidências. ')
+                .'Se você enviar o seu certificado digital no prazo, o arquivo também receberá uma assinatura '
+                .'criptográfica feita com o seu próprio certificado, que se soma ao seu aceite. A integridade do '
+                .'arquivo é conferida pelo resumo SHA-256 publicado na página de verificação.';
+        }
 
         return $withCertificate
             ? 'Ao final, a AssinaVelox aplicará ao arquivo uma assinatura criptográfica com '

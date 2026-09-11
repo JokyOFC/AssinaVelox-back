@@ -69,7 +69,174 @@ def _cmd_sign(args):
         location=args.location,
         contact=args.contact,
         visible=args.visible,
+        # K-TSA (optional signature time stamp from the operator TSA).
+        tsa_pfx=getattr(args, "tsa_pfx", None),
+        tsa_pass_env=getattr(args, "tsa_pass_env", None),
+        tsa_serial=getattr(args, "tsa_serial", None),
+        tsa_policy_oid=getattr(args, "tsa_policy_oid", None),
+        tsa_accuracy_ms=getattr(args, "tsa_accuracy_ms", 1000),
     )
+
+
+def _cmd_tsa_issue(args):
+    from pdftool.tsa import issue
+
+    return issue(
+        args.output,
+        args.tsa_pfx,
+        args.pass_env,
+        args.policy_oid,
+        serial=args.serial,
+        serial_file=args.serial_file,
+        request_path=args.request,
+        digest_hex=args.digest,
+        hash_algorithm=args.hash_alg,
+        nonce=args.nonce,
+        cert_req=not args.no_cert_req,
+        accuracy_ms=args.accuracy_ms,
+        token_out=args.token_out,
+    )
+
+
+def _cmd_tsa_verify(args):
+    from pdftool.tsa import verify
+
+    return verify(
+        args.token,
+        digest_hex=args.digest,
+        data_path=args.data,
+        hash_algorithm=args.hash_alg,
+        trust_paths=args.trust,
+        tsa_cert_paths=args.tsa_cert,
+        expected_nonce=args.nonce,
+        expected_policy=args.policy_oid,
+    )
+
+
+def _cmd_tsa_gen_test(args):
+    from pdftool.tsa import generate_test_tsa
+
+    return generate_test_tsa(
+        args.out_pfx,
+        args.pass_env,
+        args.out_root_pem,
+        out_chain_pem=args.out_chain_pem,
+        subject=args.subject,
+        days=args.days,
+        key_type=args.key,
+    )
+
+
+def _add_tsa_commands(sub) -> None:
+    """K-TSA: RFC 3161 operator TSA (not ICP-Brasil). Registered additively."""
+    p = sub.add_parser("tsa-issue", help="issue an RFC 3161 TimeStampResp with the OPERATOR TSA key (not ICP-Brasil)")
+    p.add_argument("--tsa-pfx", dest="tsa_pfx", type=_path, required=True, help="PKCS#12 with the TSA key + certificate (+ chain)")
+    p.add_argument("--pass-env", dest="pass_env", required=True, help="NAME of the environment variable holding the PKCS#12 passphrase")
+    p.add_argument("--policy-oid", dest="policy_oid", required=True, help="TSA policy OID written in TSTInfo.policy")
+    p.add_argument("--serial", type=int, default=None, help="serial allocated by the caller (database sequence)")
+    p.add_argument("--serial-file", dest="serial_file", type=_path, default=None, help="standalone mode: locked counter file")
+    p.add_argument("--request", type=_path, default=None, help="DER TimeStampReq (application/timestamp-query body)")
+    p.add_argument("--digest", default=None, help="hex digest to stamp (instead of --request)")
+    p.add_argument("--hash-alg", dest="hash_alg", type=str.lower, default="sha256", choices=["sha256", "sha384", "sha512"])
+    p.add_argument("--nonce", type=int, default=None, help="nonce for --digest mode")
+    p.add_argument("--no-cert-req", dest="no_cert_req", action="store_true", help="--digest mode: do not embed the TSA certificate")
+    p.add_argument("--accuracy-ms", dest="accuracy_ms", type=int, default=1000)
+    p.add_argument("--out", dest="output", type=_path, required=True, help="output TimeStampResp (DER)")
+    p.add_argument("--token-out", dest="token_out", type=_path, default=None, help="also write the bare TimeStampToken (DER)")
+    p.set_defaults(func=_cmd_tsa_issue)
+
+    p = sub.add_parser("tsa-verify", help="verify an RFC 3161 token against a digest and a TSA trust anchor")
+    p.add_argument("--token", type=_path, required=True, help="TimeStampResp (.tsr) or TimeStampToken (DER)")
+    p.add_argument("--digest", default=None, help="expected hex digest")
+    p.add_argument("--data", type=_path, default=None, help="file whose digest is expected (instead of --digest)")
+    p.add_argument("--hash-alg", dest="hash_alg", type=str.lower, default=None, choices=["sha256", "sha384", "sha512"])
+    p.add_argument("--trust", action="append", type=_path, default=[], help="trusted TSA root (PEM/DER); repeatable")
+    p.add_argument("--tsa-cert", dest="tsa_cert", action="append", type=_path, default=[], help="TSA/intermediate certificate when not embedded")
+    p.add_argument("--nonce", type=int, default=None, help="expected nonce")
+    p.add_argument("--policy-oid", dest="policy_oid", default=None, help="expected policy OID")
+    p.set_defaults(func=_cmd_tsa_verify)
+
+    p = sub.add_parser("tsa-gen-test", help="generate a TEST operator TSA (internal root + timeStamping cert) - never for production")
+    p.add_argument("--out-pfx", dest="out_pfx", type=_path, required=True)
+    p.add_argument("--pass-env", dest="pass_env", required=True, help="NAME of the environment variable holding the passphrase")
+    p.add_argument("--out-root-pem", dest="out_root_pem", type=_path, required=True, help="internal TEST root (trust anchor for tsa-verify)")
+    p.add_argument("--out-chain-pem", dest="out_chain_pem", type=_path, default=None, help="TSA certificate + root (PEM)")
+    p.add_argument("--subject", default="CN=AssinaVelox TSA TESTE,O=AssinaVelox,C=BR")
+    p.add_argument("--days", type=int, default=365)
+    p.add_argument("--key", default="rsa-3072", choices=["rsa-3072", "ec-p256"])
+    p.set_defaults(func=_cmd_tsa_gen_test)
+
+
+def _cmd_inspect_cert(args):
+    from pdftool.inspect_cert import inspect_certificate
+
+    return inspect_certificate(args.pfx, args.pass_env)
+
+
+def _cmd_participant_sign(args):
+    from pdftool.participant_sign import participant_sign
+
+    return participant_sign(
+        args.input,
+        args.output,
+        args.pfx,
+        args.pass_env,
+        args.field_name,
+        reason=args.reason,
+        location=args.location,
+        trust_paths=args.trust,
+        expect_fingerprint=args.expect_fingerprint,
+    )
+
+
+def _cmd_gen_test_participant_cert(args):
+    from pdftool.inspect_cert import generate_participant_test_cert
+
+    return generate_participant_test_cert(
+        args.out_pfx,
+        args.pass_env,
+        common_name=args.name,
+        cpf=args.cpf,
+        days=args.days,
+        valid_from_days=args.valid_from_days,
+        key_usage=args.key_usage,
+        no_key=args.no_key,
+        self_signed=args.self_signed,
+        out_ca_pem=args.out_ca_pem,
+    )
+
+
+def _add_participant_a1_commands(sub) -> None:
+    """K-A1: the participant's own A1 certificate (roadmap 2.12). Registered additively."""
+    p = sub.add_parser("inspect-cert", help="check a participant PKCS#12 and print public facts only (no key material)")
+    p.add_argument("--pfx", type=_path, required=True, help="PKCS#12 file with key + certificate")
+    p.add_argument("--pass-env", dest="pass_env", required=True, help="NAME of the environment variable holding the PKCS#12 passphrase")
+    p.set_defaults(func=_cmd_inspect_cert)
+
+    p = sub.add_parser("participant-sign", help="incremental PAdES B-B signature with the participant's own A1, then validate ALL signatures")
+    p.add_argument("--in", dest="input", type=_path, required=True)
+    p.add_argument("--out", dest="output", type=_path, required=True)
+    p.add_argument("--pfx", type=_path, required=True, help="participant PKCS#12 file")
+    p.add_argument("--pass-env", dest="pass_env", required=True, help="NAME of the environment variable holding the PKCS#12 passphrase")
+    p.add_argument("--field-name", dest="field_name", required=True, help="unique signature field name for this participant")
+    p.add_argument("--reason", default=None)
+    p.add_argument("--location", default=None)
+    p.add_argument("--trust", action="append", type=_path, default=[], help="trusted root certificate (PEM or DER); repeatable")
+    p.add_argument("--expect-fingerprint", dest="expect_fingerprint", default=None, help="SHA-256 fingerprint the certificate must have")
+    p.set_defaults(func=_cmd_participant_sign)
+
+    p = sub.add_parser("gen-test-participant-cert", help="TEST participant certificate issued by a throw-away TEST CA - not ICP-Brasil")
+    p.add_argument("--out-pfx", dest="out_pfx", type=_path, required=True)
+    p.add_argument("--pass-env", dest="pass_env", required=True, help="NAME of the environment variable holding the passphrase")
+    p.add_argument("--name", default="Participante", help="holder name (CN; 'TESTE' is always added)")
+    p.add_argument("--cpf", default=None, help="11-digit CPF written as ICP-Brasil otherName 2.16.76.1.3.1 and in the CN suffix")
+    p.add_argument("--days", type=int, default=30)
+    p.add_argument("--valid-from-days", dest="valid_from_days", type=int, default=0, help="shift notBefore by N days (negative = past)")
+    p.add_argument("--key-usage", dest="key_usage", default="signing", choices=["signing", "encipherment"])
+    p.add_argument("--no-key", dest="no_key", action="store_true", help="write the certificate WITHOUT its private key")
+    p.add_argument("--self-signed", dest="self_signed", action="store_true")
+    p.add_argument("--out-ca-pem", dest="out_ca_pem", type=_path, default=None, help="write the TEST CA (or the self-signed cert) as PEM")
+    p.set_defaults(func=_cmd_gen_test_participant_cert)
 
 
 def _cmd_validate(args):
@@ -137,6 +304,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--location", default=None)
     p.add_argument("--contact", default=None)
     p.add_argument("--visible", default=None, help='visible stamp: "<page>,<x>,<y>,<w>,<h>" (normalized, top-left origin)')
+    # K-TSA: optional signature time stamp from the operator TSA (declared profile stays B-B).
+    p.add_argument("--tsa-pfx", dest="tsa_pfx", type=_path, default=None, help="operator TSA PKCS#12 (adds a signature time stamp)")
+    p.add_argument("--tsa-pass-env", dest="tsa_pass_env", default=None, help="NAME of the env var with the TSA PKCS#12 passphrase")
+    p.add_argument("--tsa-serial", dest="tsa_serial", type=int, default=None, help="TSA serial allocated by the caller")
+    p.add_argument("--tsa-policy-oid", dest="tsa_policy_oid", default=None)
+    p.add_argument("--tsa-accuracy-ms", dest="tsa_accuracy_ms", type=int, default=1000)
     p.set_defaults(func=_cmd_sign)
 
     p = sub.add_parser("validate", help="validate every signature in a PDF")
@@ -161,6 +334,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("selftest", help="end-to-end smoke test in a temporary directory")
     p.add_argument("--keep", action="store_true", help="keep the temporary directory and report its path")
     p.set_defaults(func=_cmd_selftest)
+
+    _add_tsa_commands(sub)
+    _add_participant_a1_commands(sub)
     return parser
 
 

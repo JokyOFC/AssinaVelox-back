@@ -13,6 +13,8 @@ use App\Services\Envelopes\Sending\CancelEnvelope;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
 use App\Services\Envelopes\Sending\ResendInvitations;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\Retention\Exceptions\LegalHoldActiveException;
+use App\Services\Retention\LegalHolds;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +86,14 @@ class EnvelopeBulkController extends Controller
     private function move(Envelope $envelope, ?Folder $folder, ?User $user, string $correlationId): bool
     {
         if ($user?->can('move', $envelope) !== true) {
+            return false;
+        }
+
+        // Fase 2 §2.19 (integração I-2C): documento protegido pela pasta não sai dela; conta como
+        // não movido (a tentativa fica em `retention_events`), como os sem permissão.
+        try {
+            app(LegalHolds::class)->guardMove($envelope, $folder?->getKey(), 'bulk_move', $user);
+        } catch (LegalHoldActiveException) {
             return false;
         }
 

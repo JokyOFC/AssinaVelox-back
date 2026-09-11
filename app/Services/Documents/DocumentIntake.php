@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Documents\Exceptions\UploadRejectedException;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\PreparationGuard;
+use App\Services\Retention\LegalHolds;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -94,6 +95,12 @@ class DocumentIntake
         // permissão — deixasse o envelope sem documento algum e sem os campos que o
         // remetente já tinha posto.
         $previous = $multi ? null : $envelope->document()->first();
+
+        // Substituir apaga o documento anterior de vez: mesma guarda da remoção.
+        if ($previous !== null) {
+            app(LegalHolds::class)->guardEnvelope($envelope, 'document_replace', $actor);
+        }
+
         $previousVersions = $previous === null ? collect() : $previous->versions()->get();
         $previousPayload = $previous === null ? null : [
             'document_ulid' => $previous->ulid,
@@ -285,6 +292,11 @@ class DocumentIntake
         if ($document === null || (int) $document->envelope_id !== (int) $envelope->getKey()) {
             return false;
         }
+
+        // A remoção apaga DE VEZ o documento, as versões e os bytes: a preservação legal vence
+        // (retencao-e-preservacao.md §5.2 — regra única). Registra a tentativa com o autor e
+        // lança LegalHoldActiveException, que se renderiza como resposta de tela.
+        app(LegalHolds::class)->guardEnvelope($envelope, 'document_remove', $actor);
 
         $correlationId = (string) Str::ulid();
 

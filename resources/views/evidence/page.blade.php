@@ -341,6 +341,26 @@
 </table>
 
 <h2>5. Sobre a assinatura criptográfica deste arquivo</h2>
+{{-- Fase 2 §2.12 (K-A1): só quando há pedidos de assinatura com o certificado do participante. --}}
+@if (! empty($e['signature']['participant_mode']))
+    <div class="box">
+        <p>
+            <span class="strong">Assinaturas com o certificado digital dos próprios participantes.</span>
+            Um ou mais participantes optaram por assinar também com o próprio certificado digital A1. Quando
+            aplicadas, essas assinaturas são acrescentadas a este arquivo <span class="strong">depois</span> desta
+            página, como revisões incrementais no perfil PAdES-B-B, sem alterar o conteúdo aqui descrito. Cada uma
+            identifica o titular do certificado usado e é distinta do <span class="strong">aceite eletrônico</span>
+            registrado acima, que continua valendo para todos os participantes. Se um participante não concluir essa
+            etapa no prazo, o arquivo é finalizado sem a assinatura dele.
+        </p>
+        <p class="small">
+            A lista das assinaturas efetivamente aplicadas, com titular, emissor, validade e o resultado técnico da
+            validação de cada uma, é publicada na página de verificação {{ $e['verification']['url'] }}, sob o
+            código {{ $e['verification']['code'] }}. Esta plataforma não valida a cadeia desses certificados até
+            uma raiz da ICP-Brasil nem consulta a revogação deles.
+        </p>
+    </div>
+@endif
 @if ($e['signature']['signed'])
     <div class="box">
         <p>
@@ -400,6 +420,16 @@
             </p>
         </div>
     @endif
+@elseif (! empty($e['signature']['participant_mode']))
+    <div class="box">
+        <p>
+            A operadora não aplica assinatura criptográfica própria a este arquivo: as assinaturas criptográficas
+            dele são apenas as que os participantes acrescentarem com o próprio certificado, descritas acima. A
+            integridade do arquivo também pode ser conferida comparando o seu resumo SHA-256 com o resumo
+            <span class="strong">Final</span> publicado em {{ $e['verification']['url'] }} sob o código
+            {{ $e['verification']['code'] }}.
+        </p>
+    </div>
 @else
     <div class="box">
         <p>

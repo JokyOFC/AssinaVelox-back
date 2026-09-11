@@ -76,6 +76,13 @@ class OtpController extends Controller
         // sozinha autorize qualquer coisa.
         $this->grants->issue($context, $request);
 
+        if (! $context->isActive()) {
+            // Quem já aceitou e voltou para enviar o próprio certificado (Fase 2 §2.12).
+            return redirect()
+                ->route('sign.show', ['token' => $token])
+                ->with('success', 'Código confirmado. Agora você pode enviar o seu certificado digital.');
+        }
+
         return redirect()
             ->route('sign.show', ['token' => $token])
             // O código prova a posse do canal (e-mail, SMS ou WhatsApp), não a identidade
@@ -99,6 +106,8 @@ class OtpController extends Controller
 
         return redirect()
             ->route('sign.show', ['token' => $token])
-            ->with('success', 'PIN confirmado. Revise o documento e registre seu aceite.');
+            ->with('success', $context->isActive()
+                ? 'PIN confirmado. Revise o documento e registre seu aceite.'
+                : 'PIN confirmado. Agora você pode enviar o seu certificado digital.');
     }
 }

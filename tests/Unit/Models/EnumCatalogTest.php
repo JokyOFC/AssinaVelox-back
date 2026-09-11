@@ -107,9 +107,18 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
         'public_form.submission_rejected',
     ];
 
+    // Fase 2, onda C — assinatura com o certificado A1 do próprio participante (K-A1,
+    // docs/fase-2/a1-do-participante.md §8). Só acréscimos (roadmap T7).
+    $participantA1 = [
+        'participant_certificate.requested', 'participant_certificate.withdrawn',
+        'participant_certificate.submitted', 'participant_certificate.rejected',
+        'participant_signature.applied', 'participant_signature.failed', 'participant_signature.expired',
+        'envelope.awaiting_participant_signatures',
+    ];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms])
-        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms));
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1])
+        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1));
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

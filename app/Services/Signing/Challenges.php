@@ -10,6 +10,7 @@ use App\Models\AuthChallenge;
 use App\Models\DeliveryAttempt;
 use App\Notifications\Signing\SignerOtpNotification;
 use App\Rules\PhoneE164;
+use App\Services\Signing\Certificates\ParticipantCertificateService;
 use App\Services\Signing\Channels\ChannelAvailability;
 use App\Services\Signing\Channels\ChannelDelivery;
 use App\Services\Signing\Channels\ChannelMessages;
@@ -209,7 +210,7 @@ final class Challenges
      */
     private function assertCanSend(SignerContext $context, Request $request): void
     {
-        if (! $context->isActive()) {
+        if (! $context->isActive() && ! self::reopensCertificateStep($context)) {
             throw SigningRejectedException::conflict(
                 'not_signable',
                 'Este documento não está mais disponível para assinatura.',
@@ -275,7 +276,7 @@ final class Challenges
      */
     public function verify(SignerContext $context, Request $request, string $code): AuthChallenge
     {
-        if (! $context->isActive()) {
+        if (! $context->isActive() && ! self::reopensCertificateStep($context)) {
             throw SigningRejectedException::conflict(
                 'not_signable',
                 'Este documento não está mais disponível para assinatura.',
@@ -337,6 +338,19 @@ final class Challenges
                 'challenge_ulid' => $challenge->ulid,
                 'attempts_used' => $challenge->attempts,
                 'next_step' => 'sender_pin',
+            ], $correlationId);
+
+            return $challenge;
+        }
+
+        // Fase 2 §2.12: quem já aceitou e voltou para enviar o certificado. O código só reabre
+        // a janela de download (OtpController), nunca uma sessão de assinatura: nada de
+        // `authenticate` nem `session.started` para quem não vai assinar de novo.
+        if (! $context->isActive()) {
+            SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengeVerified, [
+                'challenge_ulid' => $challenge->ulid,
+                'attempts_used' => $challenge->attempts,
+                'purpose' => 'participant_certificate',
             ], $correlationId);
 
             return $challenge;
@@ -465,6 +479,16 @@ final class Challenges
             ->where('envelope_id', $context->envelope->getKey())
             ->whereNull('consumed_at')
             ->update(['consumed_at' => Carbon::now()]);
+    }
+
+    /**
+     * Fase 2 §2.12: quem já aceitou pode pedir/conferir um código só para reabrir a janela de
+     * download enquanto o envio do próprio certificado está aberto para ele (senão o cartão do
+     * certificado seria inalcançável depois dos 30 min da janela).
+     */
+    public static function reopensCertificateStep(SignerContext $context): bool
+    {
+        return app(ParticipantCertificateService::class)->awaitsReturningSigner($context);
     }
 
     public function ttlMinutes(): int

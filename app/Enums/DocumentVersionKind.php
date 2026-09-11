@@ -9,6 +9,10 @@ enum DocumentVersionKind: string
     case Consolidated = 'consolidated';
     case Evidence = 'evidence';
     case Final = 'final';
+    // Fase 2 §2.12 (K-A1): base congelada (consolidado + evidências) sobre a qual os
+    // participantes assinam com o próprio certificado, e cada revisão incremental assinada.
+    case PreSignature = 'pre_signature';
+    case SignedIncremental = 'signed_incremental';
 
     public function label(): string
     {
@@ -18,6 +22,8 @@ enum DocumentVersionKind: string
             self::Consolidated => 'Consolidado',
             self::Evidence => 'Página de evidências',
             self::Final => 'Final',
+            self::PreSignature => 'Base para assinaturas com certificado',
+            self::SignedIncremental => 'Revisão assinada por participante',
         };
     }
 }

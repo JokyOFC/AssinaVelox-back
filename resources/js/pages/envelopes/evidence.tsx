@@ -2,6 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Download, Eye, Info } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AvatarInitials, recipientTone } from '@/components/avatar-initials';
+import { DossierButton } from '@/components/dossier/dossier-buttons';
 import Heading from '@/components/heading';
 import { PageHeader } from '@/components/page-header';
 import { RecipientStatusBadge } from '@/components/status/recipient-status-badge';
@@ -26,6 +27,8 @@ import {
 } from '@/components/verification/signature-statement';
 import { VerificationCodeBlock } from '@/components/verification/verification-code';
 import { VerificationSealCard } from '@/components/verification/verification-seal';
+import { ParticipantSignatureList } from '@/components/verification/crypto-signature-list';
+import { TimestampList } from '@/components/verification/timestamp-list';
 import {
     formatBytes,
     formatDateTime,
@@ -53,6 +56,8 @@ import type {
     SignatureKind,
     SignatureStatus,
     SignerAuthMethod,
+    EvidenceParticipantSignature,
+    EvidenceTimestamps,
 } from '@/types';
 
 /** Participante como `App\Services\Verification\EvidenceDossier::recipients` o publica. */
@@ -183,7 +188,7 @@ export interface EvidenceProps {
     };
     signature_status: SignatureStatus;
     signature?: {
-        state: 'pending' | 'none' | 'company_a1';
+        state: 'pending' | SignatureStatus;
         status: SignatureStatus;
         label: string;
         statement: string;
@@ -201,6 +206,13 @@ export interface EvidenceProps {
     documents?: EvidenceDocument[];
     /** Fase 2 §2.10: nota do servidor sobre as fotos (não houve verificação de identidade). */
     identity_capture_notice?: string | null;
+    /**
+     * Fase 2 §2.12 (`ParticipantSignatureViews::evidenceProps`): só quando o envelope tem
+     * pedidos de assinatura com o certificado do próprio participante.
+     */
+    participant_signatures?: EvidenceParticipantSignature[];
+    /** Fase 2 §2.13 (`TimestampEvidence::forEnvelope`): carimbos do envelope, quando houver. */
+    timestamps?: EvidenceTimestamps | null;
 }
 
 /** Texto usado se o servidor não mandar `identity_capture_notice` (docs/fase-2/identidade.md §5.5). */
@@ -230,6 +242,8 @@ export default function EnvelopeEvidence({
     verify_url,
     documents = [],
     identity_capture_notice = null,
+    participant_signatures = [],
+    timestamps = null,
 }: EvidenceProps) {
     const multi = documents.length > 1;
     const items = hashes.items ?? [];
@@ -372,12 +386,19 @@ export default function EnvelopeEvidence({
                 title="Evidências do aceite eletrônico"
                 subtitle={`${envelope.display_code} · ${envelope.title} · ${organization.name}`}
                 actions={
-                    <Button asChild disabled={!envelope.downloads.evidence}>
-                        <a href={envelope.downloads.evidence ?? '#'}>
-                            <Download className="size-[15px]" />
-                            Baixar relatório (PDF)
-                        </a>
-                    </Button>
+                    <>
+                        {/* Fase 2 §2.13: só com a flag `dossier_export` e o documento concluído. */}
+                        <DossierButton
+                            envelopeId={envelope.id}
+                            status={envelope.status}
+                        />
+                        <Button asChild disabled={!envelope.downloads.evidence}>
+                            <a href={envelope.downloads.evidence ?? '#'}>
+                                <Download className="size-[15px]" />
+                                Baixar relatório (PDF)
+                            </a>
+                        </Button>
+                    </>
                 }
             />
 
@@ -833,10 +854,22 @@ export default function EnvelopeEvidence({
                              * resumo continua dentro da declaração.
                              */
                         />
+                        {/* Fase 2 §2.12: assinaturas com o certificado do próprio participante. */}
+                        <ParticipantSignatureList
+                            signatures={participant_signatures}
+                            profile={signature?.profile ?? policy}
+                            revocationLabel={
+                                validation?.available
+                                    ? validation.revocation_label
+                                    : null
+                            }
+                        />
                         {certificate && (
                             <div className="border-border rounded-lg border p-3.5">
                                 <p className="mb-2 text-[12.5px] font-semibold">
-                                    Certificado da operadora
+                                    {signature_status === 'mixed'
+                                        ? 'Certificado da operadora (assinou por último)'
+                                        : 'Certificado da operadora'}
                                 </p>
                                 <CertificateDetails certificate={certificate} />
                             </div>
@@ -850,6 +883,20 @@ export default function EnvelopeEvidence({
                             </div>
                         )}
                     </section>
+
+                    {timestamps && timestamps.items.length > 0 && (
+                        <section className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-5">
+                            <Heading
+                                variant="small"
+                                title="Carimbo do tempo"
+                                description="Registrado pela operadora sobre os resumos indicados. Não muda o perfil da assinatura."
+                            />
+                            <TimestampList
+                                items={timestamps.items}
+                                notice={timestamps.notice}
+                            />
+                        </section>
+                    )}
 
                     <section className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-5">
                         <Heading

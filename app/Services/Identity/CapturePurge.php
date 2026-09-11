@@ -5,9 +5,12 @@ namespace App\Services\Identity;
 use App\Enums\AuditEventType;
 use App\Models\Envelope;
 use App\Services\Identity\Models\IdentityCapture;
+use App\Services\Retention\HoldSnapshot;
+use App\Services\Retention\LegalHolds;
 use App\Services\Signing\SignerAudit;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -29,12 +32,16 @@ use Illuminate\Support\Facades\Storage;
  */
 final class CapturePurge
 {
+    /** @var array<int, HoldSnapshot> bloqueios ativos por organização, carregados uma vez por execução */
+    private array $holdSnapshots = [];
+
     /**
      * @return array{expired: int, orphans: int}
      */
     public function run(?CarbonInterface $now = null): array
     {
         $now ??= Carbon::now();
+        $this->holdSnapshots = [];
         $expired = 0;
         $orphans = 0;
         $perEnvelope = [];
@@ -49,6 +56,10 @@ final class CapturePurge
                 ->orderBy('id')
                 ->chunkById(200, function ($captures) use ($now, &$expired, &$perEnvelope): void {
                     foreach ($captures as $capture) {
+                        if ($this->preserved($capture, $now)) {
+                            continue;
+                        }
+
                         $this->deleteFile($capture);
                         $capture->forceFill(['storage_path' => null, 'purged_at' => $now])->save();
                         $expired++;
@@ -63,8 +74,12 @@ final class CapturePurge
             ->whereNull('signature_acceptance_id')
             ->where('captured_at', '<', $now->copy()->subHours($orphanHours))
             ->orderBy('id')
-            ->chunkById(200, function ($captures) use (&$orphans, &$perEnvelope): void {
+            ->chunkById(200, function ($captures) use ($now, &$orphans, &$perEnvelope): void {
                 foreach ($captures as $capture) {
+                    if ($this->preserved($capture, $now)) {
+                        continue;
+                    }
+
                     $this->deleteFile($capture);
                     $capture->delete();
                     $orphans++;
@@ -75,6 +90,26 @@ final class CapturePurge
         $this->audit($perEnvelope);
 
         return ['expired' => $expired, 'orphans' => $orphans];
+    }
+
+    /**
+     * Fase 2 §2.19 (integração I-2C): a preservação legal vence também esta retenção global das
+     * fotos (docs/fase-2/retencao-e-preservacao.md §5.5). Sem bloqueio ativo — o caso de toda
+     * organização sem a flag `retention_policies` —, nada muda.
+     */
+    private function preserved(IdentityCapture $capture, CarbonInterface $now): bool
+    {
+        $organizationId = (int) $capture->organization_id;
+        $this->holdSnapshots[$organizationId] ??= app(LegalHolds::class)->snapshot($organizationId, $now);
+        $snapshot = $this->holdSnapshots[$organizationId];
+
+        if ($snapshot->isEmpty()) {
+            return false;
+        }
+
+        $folderId = DB::table('envelopes')->where('id', $capture->envelope_id)->value('folder_id');
+
+        return $snapshot->covering((int) $capture->envelope_id, $folderId !== null ? (int) $folderId : null) !== null;
     }
 
     public function forEnvelope(Envelope $envelope, ?CarbonInterface $now = null): int

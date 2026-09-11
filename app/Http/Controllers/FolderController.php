@@ -6,6 +6,7 @@ use App\Http\Requests\Folders\StoreFolderRequest;
 use App\Http\Requests\Folders\UpdateFolderRequest;
 use App\Models\Envelope;
 use App\Models\Folder;
+use App\Services\Retention\LegalHolds;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,10 @@ class FolderController extends Controller
         Gate::authorize('delete', $folder);
 
         $name = $folder->name;
+
+        // Fase 2 §2.19 (integração I-2C): excluir uma pasta preservada tiraria a proteção dos
+        // documentos. Sem bloqueio, nada muda (LegalHoldActiveException volta com a mensagem).
+        app(LegalHolds::class)->guardFolderDeletion($folder, 'folder_delete', $request->user());
 
         DB::transaction(function () use ($folder): void {
             Envelope::query()->where('folder_id', $folder->getKey())->update(['folder_id' => null]);

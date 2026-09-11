@@ -33,6 +33,7 @@ use App\Models\Plan;
 use App\Models\PlanConsumption;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
+use App\Models\RetentionPolicy;
 use App\Models\Role;
 use App\Models\SignatureAcceptance;
 use App\Models\SigningField;
@@ -46,17 +47,23 @@ use App\Models\VerificationRecord;
 use App\Services\Branding\BrandingManager;
 use App\Services\PublicForms\PublicFormManager;
 use App\Services\PublicForms\PublicFormSchema;
+use App\Services\Retention\LegalHolds;
+use App\Services\Retention\LegalHoldScope;
+use App\Services\Signing\Certificates\ParticipantCertificateTool;
 use App\Services\Signing\Channels\SenderPins;
 use App\Services\Tags\TagColor;
 use App\Services\Tags\TagManager;
 use App\Services\Templates\TemplateManager;
+use App\Services\Timestamp\TsaToolRunner;
 use App\Support\CurrentOrganization;
 use App\Support\PermissionsSystemRoles;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Duas organizações de demonstração com dados fictícios coerentes. Só roda em local/testing.
@@ -89,7 +96,23 @@ class DemoOrganizationSeeder extends Seeder
         // fora: a consulta de CPF não tem serviço configurado e a de CNPJ acessa a rede.
         'sms_whatsapp', 'pin_auth', 'sender_domains', 'branding', 'cpf_field',
         'identity_capture', 'in_person', 'batch_signing', 'public_forms',
+        // Onda C (docs/fase-2/onda-c-relatorio.md §6). `operator_tsa` e `pades_bt` são da
+        // plataforma (só o .env), não de plano.
+        'participant_a1', 'dossier_export', 'retention_policies',
     ];
+
+    /**
+     * Senha do certificado A1 de TESTE do participante gerado para a demonstração (onda C).
+     * Certificado de TESTE (AC descartável, CN com "TESTE"), nunca ICP-Brasil: a senha é um
+     * dado de demonstração como {@see self::PASSWORD}, só para o ambiente local.
+     */
+    public const DEMO_PARTICIPANT_PFX_PASSWORD = 'demo-A1-participante-TESTE';
+
+    /** Senha do PKCS#12 da TSA de TESTE gerada para a demonstração (onda C), só local. */
+    public const DEMO_TSA_PASSWORD = 'demo-TSA-operadora-TESTE';
+
+    /** Diretório (em storage/app/private) dos arquivos de teste da onda C. */
+    public const DEMO_WAVE_C_DIR = 'demo/onda-c';
 
     /** PIN de demonstração do participante "PIN" (onda B). Só para o ambiente local. */
     public const DEMO_PIN = '48291573';
@@ -129,6 +152,99 @@ class DemoOrganizationSeeder extends Seeder
             $this->seedHorizonte($professional);
             $this->seedVega($free);
         });
+
+        // Onda C: arquivos de TESTE gerados pelo pdftool — fora da transação (regra da onda:
+        // nenhuma transação aberta durante chamada ao pdftool).
+        $this->seedWaveCTestFiles();
+    }
+
+    /**
+     * Fase 2, onda C (docs/fase-2/onda-c-relatorio.md §6) na Horizonte: política de retenção
+     * ativa (prazos iguais aos mínimos ou maiores — nada da demonstração vence) e um documento
+     * concluído PRESERVADO. As flags de plano da onda C ficam ligadas na Horizonte e desligadas
+     * na Vega; a interface só aparece com os interruptores globais `ASSINAVELOX_FEATURE_*`.
+     */
+    private function seedHorizonteWaveC(Organization $org, User $owner): void
+    {
+        $ownerMembership = Membership::query()->where('organization_id', $org->id)->where('user_id', $owner->id)->firstOrFail();
+
+        CurrentOrganization::instance()->runAs($org, function () use ($org, $owner): void {
+            $policy = RetentionPolicy::query()->firstOrNew(['organization_id' => $org->id]);
+            $policy->forceFill([
+                'organization_id' => $org->id,
+                'is_active' => true,
+                'completed_days' => 1825,
+                'terminal_days' => 365,
+                'draft_days' => 90,
+                'identity_capture_days' => 30,
+                'dossier_days' => 7,
+                'audit_trail_days' => null,
+                'updated_by_user_id' => $owner->id,
+            ])->save();
+
+            $preserved = Envelope::query()
+                ->where('organization_id', $org->id)
+                ->where('status', EnvelopeStatus::Completed)
+                ->orderBy('id')
+                ->first();
+
+            if ($preserved !== null) {
+                app(LegalHolds::class)->place(
+                    $org,
+                    $owner,
+                    LegalHoldScope::Envelope,
+                    'Demonstração: notificação extrajudicial em andamento — preservar até o fim da negociação (pedido do jurídico).',
+                    envelope: $preserved,
+                );
+            }
+        }, $ownerMembership);
+    }
+
+    /**
+     * Certificado A1 de TESTE de participante (para enviar na página pública) e uma TSA de
+     * TESTE da operadora, em storage/app/private/{@see self::DEMO_WAVE_C_DIR}. Sem o pdftool
+     * (venv ausente), só avisa: o resto da demonstração não depende disso.
+     */
+    private function seedWaveCTestFiles(): void
+    {
+        // Os testes que rodam este seeder (SeedersTest e os de revisão) não precisam dos arquivos
+        // e não devem chamar o pdftool nem escrever no storage real.
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
+        $directory = storage_path('app/private/'.self::DEMO_WAVE_C_DIR);
+        File::ensureDirectoryExists($directory.DIRECTORY_SEPARATOR.'tsa', 0700);
+
+        try {
+            app(ParticipantCertificateTool::class)->generateTestCertificate(
+                $directory.DIRECTORY_SEPARATOR.'participante-teste.pfx',
+                self::DEMO_PARTICIPANT_PFX_PASSWORD,
+                'Ana Beatriz Rocha',
+                days: 365,
+                outCaPem: $directory.DIRECTORY_SEPARATOR.'participante-teste-ac.pem',
+            );
+
+            $passEnv = 'ASSINAVELOX_DEMO_TSA_PASSWORD';
+            putenv($passEnv.'='.self::DEMO_TSA_PASSWORD);
+
+            try {
+                app(TsaToolRunner::class)->run('tsa-gen-test', [
+                    '--out-pfx', $directory.DIRECTORY_SEPARATOR.'tsa'.DIRECTORY_SEPARATOR.'tsa.pfx',
+                    '--pass-env', $passEnv,
+                    '--out-root-pem', $directory.DIRECTORY_SEPARATOR.'tsa'.DIRECTORY_SEPARATOR.'root.pem',
+                    '--out-chain-pem', $directory.DIRECTORY_SEPARATOR.'tsa'.DIRECTORY_SEPARATOR.'chain.pem',
+                    '--days', '365',
+                    '--key', 'ec-p256',
+                ], [$passEnv]);
+            } finally {
+                putenv($passEnv);
+            }
+
+            $this->command->info('Onda C: certificado A1 de TESTE do participante e TSA de TESTE em storage/app/private/'.self::DEMO_WAVE_C_DIR.' (senhas: constantes DEMO_* do DemoOrganizationSeeder; ver docs/fase-2/onda-c-relatorio.md §6).');
+        } catch (Throwable $exception) {
+            $this->command->warn('Onda C: arquivos de TESTE não gerados ('.class_basename($exception).'). O pdftool precisa do venv em tools/pdftool/.venv.');
+        }
     }
 
     // -- Organização 1: Imobiliária Horizonte (Profissional sandbox) ---------------------
@@ -208,6 +324,7 @@ class DemoOrganizationSeeder extends Seeder
 
         $this->seedHorizontePhase2($org, $owner, $admin, $locacoes, $vendas);
         $this->seedHorizonteWaveB($org, $owner);
+        $this->seedHorizonteWaveC($org, $owner);
     }
 
     /**

@@ -26,6 +26,7 @@ import { PageHeader } from '@/components/page-header';
 import { RailNavButton, UnderlineTabs } from '@/components/segmented-control';
 import { EnvelopeStatusBadge } from '@/components/status/envelope-status-badge';
 import { TablePagination } from '@/components/table-pagination';
+import { BulkDossierButton } from '@/components/dossier/dossier-buttons';
 import { BulkTagDialog } from '@/components/tags/bulk-tag-dialog';
 import { TagChipList, type TagOption } from '@/components/tags/tag-chip';
 import { Button } from '@/components/ui/button';
@@ -570,6 +571,11 @@ export default function EnvelopesIndex({
                         >
                             <RefreshCw className="size-3.5" /> Reenviar convites
                         </Button>
+                        {/* Fase 2 §2.13 (Q12): só com a flag `dossier_export`. */}
+                        <BulkDossierButton
+                            ids={[...selected]}
+                            disabled={busy}
+                        />
                         {tagsEnabled && (
                             <Button
                                 variant="outline"

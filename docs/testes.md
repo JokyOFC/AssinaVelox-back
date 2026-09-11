@@ -314,6 +314,39 @@ Ou seja: as duas limitações são do servidor in-process do plugin, e só dele.
 continua sem automação é a **verificação** dessas duas rotas dentro da suíte de
 navegador, não o comportamento delas.
 
+### 6-C. Falhar rápido em vez de travar (integração I-2C)
+
+A suíte travou de forma intermitente em execuções longas encadeadas. A causa foi reproduzida
+com sondas e tem duas partes, ambas no plugin `pestphp/pest-plugin-browser` 4.3:
+
+1. **Espera sem teto no cliente.** `Pest\Browser\Playwright\Client::execute()` lê as respostas
+   do Playwright num `while (true)`. Se a resposta não chega, o teste espera para sempre. Se o
+   WebSocket fecha (servidor do Playwright ou navegador morreu), `receive()` devolve `null` na
+   hora e o laço vira espera ativa infinita, a 100% de CPU.
+2. **Servidor do Playwright órfão.** Quando o processo PHP da suíte morre de forma anormal
+   (teto de tempo, erro fatal, memória, `taskkill`), o `Plugin::terminate()` não roda. O
+   `cmd → node → navegador` do `playwright run-server` fica vivo **segurando o stdout herdado**,
+   e quem esperava a saída (terminal, script encadeado, CI) parece travado. A sonda reproduziu:
+   o PHP morreu em 35 s, mas o comando só voltou em 376–495 s, quando o órfão foi morto à mão.
+   Um `register_shutdown_function` não resolve: no desligamento o laço de eventos do Revolt
+   volta a rodar, o `hard_timeout` de 2 s do PHP aborta o processo e os ganchos seguintes não
+   rodam (também testado).
+
+O que `tests/BrowserTestCase.php` faz agora, sem tocar no `vendor`:
+
+| Camada                                  | Como                                                                                                                                                      | Efeito                                                                                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Teto por chamada (navegação e asserção) | `Playwright::setTimeout(20_000)`, enviado ao Playwright em toda chamada (`goto`, cliques, esperas)                                                        | nenhuma navegação passa de 20 s                                                                                                                                     |
+| Vigia por teste                         | temporizador do Revolt (`BROWSER_TEST_TIMEOUT`, padrão 90 s) que interrompe a espera com uma exceção que diz o teste                                      | o teste **falha** e a suíte segue (sonda: falhou em 5 s com o teto em 5)                                                                                            |
+| Teto de processo                        | `set_time_limit(teto + 30)`, renovado a cada teste; 120 s para limpeza e encerramento                                                                     | a espera ativa, em que o vigia não roda, termina com erro fatal                                                                                                     |
+| Guarda contra órfão                     | `tests/Browser/Support/playwright-orphan-guard.php`, disparada uma vez por processo com o PID do processo de teste e o do servidor do Playwright          | se o processo de teste sumir com o servidor vivo, e só se o PID for mesmo o `playwright run-server`, encerra essa árvore (sonda: comando voltou em 38 s, sem órfão) |
+| Limpeza entre testes                    | o `afterEach` do plugin (flush do servidor HTTP e reset dos contextos); o `tearDown` desarma o vigia e solta o relógio congelado (`Carbon::setTestNow()`) | nada de um teste vaza para o seguinte                                                                                                                               |
+
+Nenhum teste foi desabilitado. A guarda nunca mata `node` ou navegador por nome: confere o
+PID e a linha de comando antes. O PID vem de uma propriedade interna do plugin, lida por
+reflexão; se uma atualização mudar essa estrutura, a guarda simplesmente não é disparada, e as
+outras camadas continuam valendo. Teto maior para depurar: `BROWSER_TEST_TIMEOUT=300`.
+
 ### O alcance de `assertNoJavascriptErrors`
 
 Vale saber o que essa asserção **não** cobre, para não confiar demais nela. O

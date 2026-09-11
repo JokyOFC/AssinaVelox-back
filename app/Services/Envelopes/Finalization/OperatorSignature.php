@@ -145,11 +145,17 @@ class OperatorSignature
     /**
      * Assina `$input` em `$output` e valida o resultado.
      *
+     * `$assertion` (Fase 2 §2.12) substitui {@see self::assertPublishable()} quando o arquivo
+     * já traz assinaturas de participantes: numa cadeia de revisões, as assinaturas anteriores
+     * cobrem a própria revisão e `all_covering` é falso por construção — vale a análise da
+     * cadeia (`IncrementalChain`). Sem `$assertion`, o comportamento é o da Fase 1.
+     *
+     * @param  (\Closure(ValidationResult): void)|null  $assertion
      * @return array{status: SignatureStatus, profile: string|null, result: SignResult, validation: ValidationResult, certificate: CertificateReference|null}
      *
      * @throws FinalizationException
      */
-    public function signAndValidate(string $input, string $output, string $correlationId): array
+    public function signAndValidate(string $input, string $output, string $correlationId, ?\Closure $assertion = null): array
     {
         try {
             $result = $this->signer->sign(new SignRequest(
@@ -171,7 +177,11 @@ class OperatorSignature
 
         // A validação é obrigatória: um arquivo "assinado" que o próprio validador não
         // consegue verificar não pode ser publicado como assinado.
-        self::assertPublishable($validation);
+        if ($assertion !== null) {
+            $assertion($validation);
+        } else {
+            self::assertPublishable($validation);
+        }
 
         return [
             'status' => SignatureStatus::CompanyA1,

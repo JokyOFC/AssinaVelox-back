@@ -7,7 +7,12 @@ import {
     PenLine,
     ShieldCheck,
 } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SignerBrand } from '@/components/branding/types';
+import {
+    CaptureStepCard,
+    CaptureStepPreview,
+} from '@/components/identity/capture-step';
 import { DocumentSwitcher } from '@/components/pdf/document-switcher';
 import type { PdfDocumentStatus } from '@/components/pdf/use-pdf-document';
 import { ConsentBox, defaultConsentLabel } from '@/components/sign/consent-box';
@@ -42,19 +47,27 @@ import type { StepperStep } from '@/components/stepper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { formatDateMedium, formatDateTime, plural } from '@/lib/format';
+import {
+    formatDateMedium,
+    formatDateTime,
+    isValidCpf,
+    plural,
+} from '@/lib/format';
+import { channelPhraseLabels } from '@/lib/labels';
 import {
     complete as signComplete,
     document as signDocument,
 } from '@/routes/sign';
 import type {
     AcceptanceAction,
-    AuthMethod,
     EnvelopeStatus,
-    FieldType,
+    IdentityCaptureStep,
     ParticipantRole,
     RecipientStatus,
     SignatureKind,
+    SignerAuth,
+    SignerAuthMethod,
+    SigningFieldType,
     SigningOrder,
 } from '@/types';
 
@@ -122,8 +135,10 @@ export interface SignShowProps {
     sender: {
         organization_name: string;
         organization_initials: string;
-        logo_url: null;
+        logo_url: string | null;
         user_name: string;
+        /** Fase 2 §2.8 (`BrandingPresenter::forSigner`): flag `branding` + marca salva. */
+        brand?: SignerBrand | null;
     };
     /** null apenas quando `screen === 'invalid'` (link desconhecido). */
     envelope: {
@@ -178,7 +193,7 @@ export interface SignShowProps {
     documents?: SignerDocumentItem[];
     my_fields: {
         id: string;
-        type: FieldType;
+        type: SigningFieldType;
         page: number | 'all';
         x: number;
         y: number;
@@ -193,7 +208,7 @@ export interface SignShowProps {
     other_fields: {
         recipient_name: string;
         role: string | null;
-        type: FieldType;
+        type: SigningFieldType;
         page: number;
         x: number;
         y: number;
@@ -232,7 +247,25 @@ export interface SignShowProps {
     legal: { terms_url: string; privacy_url: string };
     receipt: SignerReceipt | null;
     refusal: { refused_at: string | null; reason: string } | null;
-    auth_methods?: AuthMethod[];
+    /** Ex.: `['sms_otp', 'sender_pin']` (`SignerAuthProps::authMethods`). */
+    auth_methods?: SignerAuthMethod[];
+    /**
+     * Fase 2 §2.9 (`SignerAuthProps::for`): canal do código, destino mascarado, simulador e a
+     * etapa do PIN. Ausente = código por e-mail (Fase 1).
+     */
+    signer_auth?: SignerAuth | null;
+    /**
+     * CUIDADO: `auth` é também a prop compartilhada `{ user }` do `HandleInertiaRequests`
+     * (o Inertia mescla as compartilhadas nas da página). Aqui ela só vale como
+     * `SignerAuth` se tiver a forma certa (`signerAuthOf`); o nome preferido do contrato
+     * é `signer_auth`, que não colide.
+     */
+    auth?: unknown;
+    /**
+     * Fase 2 §2.10 (`CaptureStep::props`): fotos pedidas pelo remetente antes do aceite.
+     * `null` quando não se aplica.
+     */
+    identity_capture?: IdentityCaptureStep | null;
     limits?: {
         otp_length?: number;
         otp_ttl_minutes?: number;
@@ -309,6 +342,26 @@ function toBase64(dataUrl: string): string {
 type PlacedField = SignerField & { documentId: string | null };
 type PlacedOther = OtherField & { documentId: string | null };
 
+/**
+ * `SignerAuth` só quando o valor tem a forma do contrato (`SignerAuthProps::for`). O `auth`
+ * compartilhado (`{ user: null }` na página pública) cai em `null`, e a tela fica a da
+ * Fase 1. Sem esta checagem, o cartão do código achava que o canal estava indisponível e
+ * escondia o botão "Receber código por e-mail".
+ */
+function signerAuthOf(value: unknown): SignerAuth | null {
+    if (typeof value !== 'object' || value === null) {
+        return null;
+    }
+
+    const candidate = value as Partial<SignerAuth>;
+
+    return typeof candidate.method === 'string' &&
+        typeof candidate.channel === 'string' &&
+        typeof candidate.destination === 'string'
+        ? (candidate as SignerAuth)
+        : null;
+}
+
 function fileLabel(item: { position: number; name: string | null }): string {
     return `${item.position}. ${item.name?.trim() || `Arquivo ${item.position}`}`;
 }
@@ -352,9 +405,30 @@ export default function SignShow(props: SignShowProps) {
         limits,
         action = null,
         copy = null,
+        identity_capture = null,
     } = props;
 
     const errors = usePage().props.errors;
+    // Fase 2 §2.9: nunca confundir com o `auth` compartilhado (`{ user }`).
+    const auth = signerAuthOf(props.signer_auth ?? props.auth);
+
+    /*
+     * Fase 2 §2.10: a etapa de captura é atualizada pela resposta de cada envio de foto
+     * (JSON), sem recarregar a página. Uma resposta nova do servidor substitui a local.
+     */
+    const [captureStep, setCaptureStep] = useState<IdentityCaptureStep | null>(
+        identity_capture,
+    );
+
+    useEffect(() => {
+        setCaptureStep(identity_capture);
+    }, [identity_capture]);
+
+    const stampOwner = {
+        brand: sender.brand ?? null,
+        organizationName: sender.organization_name,
+        organizationInitials: sender.organization_initials,
+    };
 
     const docs = useMemo(() => props.documents ?? [], [props.documents]);
     const multi = docs.length > 1;
@@ -499,11 +573,25 @@ export default function SignShow(props: SignShowProps) {
         !approving && uniqueFields.some((f) => f.type === 'signature');
     const needsInitials =
         !approving && uniqueFields.some((f) => f.type === 'initials');
+    // O carimbo visual (§2.8) é desenhado pelo servidor: não é preenchido por ninguém.
     const inputFields = uniqueFields.filter(
-        (field) => field.type !== 'signature' && field.type !== 'initials',
+        (field) =>
+            field.type !== 'signature' &&
+            field.type !== 'initials' &&
+            field.type !== 'stamp',
     );
 
     const isFilled = (field: SignerField): boolean => {
+        if (field.type === 'stamp') {
+            return true;
+        }
+
+        if (field.type === 'cpf') {
+            const value = values[field.id];
+
+            return typeof value === 'string' && isValidCpf(value);
+        }
+
         if (field.type === 'signature') {
             return signature !== null;
         }
@@ -629,10 +717,26 @@ export default function SignShow(props: SignShowProps) {
         ? missingDocs.length === 0
         : documentDelivered || documentStatus === 'ready';
 
+    // CPF opcional digitado errado também impede o envio (o servidor recusaria, §2.11).
+    const cpfInvalid = uniqueFields.some((field) => {
+        const value = values[field.id];
+
+        return (
+            field.type === 'cpf' &&
+            typeof value === 'string' &&
+            value.trim() !== '' &&
+            !isValidCpf(value)
+        );
+    });
+    // Fotos exigidas (§2.10): o servidor recusa o aceite sem elas (`identity_capture_missing`).
+    const captureReady = captureStep === null || captureStep.complete;
+
     const canSubmit =
         accepted &&
         documentPresented &&
         pending.length === 0 &&
+        !cpfInvalid &&
+        captureReady &&
         (!needsSignature || signature !== null) &&
         (!needsInitials || initials !== null) &&
         !submitting;
@@ -858,6 +962,7 @@ export default function SignShow(props: SignShowProps) {
                                 page={page}
                                 onPageChange={setPage}
                                 readOnly
+                                stampOwner={stampOwner}
                             />
                         </div>
                     )}
@@ -907,6 +1012,14 @@ export default function SignShow(props: SignShowProps) {
                                       ? 'Confirme sua identidade para ver o documento'
                                       : undefined
                             }
+                            auth={auth}
+                            extra={
+                                identity_capture ? (
+                                    <CaptureStepPreview
+                                        step={identity_capture}
+                                    />
+                                ) : undefined
+                            }
                         />
                     </aside>
 
@@ -915,6 +1028,7 @@ export default function SignShow(props: SignShowProps) {
                             title={envelope.title}
                             pages={envelope.pages}
                             displayCode={envelope.display_code}
+                            channel={auth?.channel ?? 'email'}
                         />
                     </div>
                 </div>
@@ -1021,7 +1135,7 @@ export default function SignShow(props: SignShowProps) {
                             <div>
                                 <Badge variant="success">
                                     <Check className="size-3 stroke-[3]" />
-                                    Identidade confirmada
+                                    Código confirmado
                                 </Badge>
                                 <h1 className="mt-3 text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
                                     Cópia para acompanhamento
@@ -1133,6 +1247,7 @@ export default function SignShow(props: SignShowProps) {
                             nextPending={nextPending}
                             onGoToNextPending={goToNextPending}
                             onStatusChange={onDocumentStatus}
+                            stampOwner={stampOwner}
                         />
                     ) : (
                         <LockedDocument
@@ -1148,7 +1263,7 @@ export default function SignShow(props: SignShowProps) {
                         <div>
                             <Badge variant="success">
                                 <Check className="size-3 stroke-[3]" />
-                                Identidade confirmada
+                                Código confirmado
                             </Badge>
                             <h1 className="mt-3 text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
                                 {approving
@@ -1238,6 +1353,14 @@ export default function SignShow(props: SignShowProps) {
                             />
                         )}
 
+                        {captureStep && (
+                            <CaptureStepCard
+                                step={captureStep}
+                                onChange={setCaptureStep}
+                                className="border-border border-t pt-4"
+                            />
+                        )}
+
                         <PrivacyNotice
                             notice={notice}
                             privacyUrl={legal.privacy_url}
@@ -1288,6 +1411,23 @@ export default function SignShow(props: SignShowProps) {
                                     'campos obrigatórios',
                                 )}{' '}
                                 — use “Próximo campo” na barra do documento.
+                            </p>
+                        )}
+                        {cpfInvalid && (
+                            <p className="text-warning text-[12.5px]">
+                                Confira o CPF informado: os dígitos não
+                                conferem.
+                            </p>
+                        )}
+                        {!captureReady && captureStep && (
+                            <p className="text-warning text-[12.5px]">
+                                Antes de {approving ? 'aprovar' : 'assinar'},
+                                envie:{' '}
+                                {captureStep.items
+                                    .filter((item) => !item.captured)
+                                    .map((item) => item.label.toLowerCase())
+                                    .join(', ')}
+                                .
                             </p>
                         )}
                         {(localError ||
@@ -1360,10 +1500,13 @@ function LockedDocument({
     title,
     pages,
     displayCode,
+    channel = 'email',
 }: {
     title: string;
     pages: number;
     displayCode: string;
+    /** Fase 2 §2.9: por onde o código chega (o texto do e-mail é o da Fase 1). */
+    channel?: SignerAuth['channel'];
 }) {
     return (
         <div className="border-border bg-card shadow-card flex flex-col items-center gap-3 rounded-xl border p-8 text-center">
@@ -1375,8 +1518,10 @@ function LockedDocument({
                 {displayCode} · {plural(pages, 'página')}
             </p>
             <p className="text-text-secondary max-w-[380px] text-[13px] leading-[1.55]">
-                O documento é exibido depois que você confirmar o código enviado
-                ao seu e-mail. Ele nunca fica acessível por um endereço público.
+                {channel === 'email'
+                    ? 'O documento é exibido depois que você confirmar o código enviado ao seu e-mail.'
+                    : `O documento é exibido depois que você confirmar o código enviado por ${channelPhraseLabels[channel]} ao seu celular.`}{' '}
+                Ele nunca fica acessível por um endereço público.
             </p>
         </div>
     );

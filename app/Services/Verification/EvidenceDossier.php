@@ -3,6 +3,7 @@
 namespace App\Services\Verification;
 
 use App\Enums\AuditEventType;
+use App\Enums\DeliveryChannel;
 use App\Enums\DocumentVersionKind;
 use App\Enums\EnvelopeStatus;
 use App\Models\AcceptanceDocument;
@@ -11,6 +12,11 @@ use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Services\Documents\EnvelopeDocuments;
+use App\Services\Identity\CaptureEvidence;
+use App\Services\InPerson\InPersonEvidence;
+use App\Services\Signing\Channels\ChannelInvitations;
+use App\Services\Signing\Channels\SenderPins;
+use App\Services\Signing\Channels\SimulatedChannelEvidence;
 use App\Support\IpDisplay;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -42,8 +48,14 @@ final class EvidenceDossier
     {
         $firstByType = $this->firstEventPerRecipient($events);
 
+        // Fase 2, onda B (aditivos): fotos da captura simples (C-ID), aceite presencial
+        // (C-PRES) e canal/PIN (C-CAN). Sem nada disso, as chaves ficam vazias/nulas.
+        $captures = app(CaptureEvidence::class)->forEnvelope($envelope)['recipients'];
+        $inPerson = collect(InPersonEvidence::forEnvelope($envelope))->keyBy('recipient_id');
+        $pins = app(SenderPins::class);
+
         return array_values($envelope->recipients
-            ->map(function (Recipient $recipient) use ($envelope, $firstByType): array {
+            ->map(function (Recipient $recipient) use ($envelope, $firstByType, $captures, $inPerson, $pins): array {
                 $acceptance = $recipient->acceptance;
                 $key = (int) $recipient->getKey();
 
@@ -60,7 +72,21 @@ final class EvidenceDossier
                         : null,
                     'status' => $recipient->status->value,
                     'status_label' => $recipient->status->label(),
-                    'auth_methods' => [$recipient->auth_method->value],
+                    // Fase 2 §2.9: o método do código (e-mail, SMS ou WhatsApp) e, com PIN,
+                    // `sender_pin`. Participante da Fase 1: `['email_otp']`.
+                    'auth_methods' => $pins->requiredFor($recipient)
+                        ? [($acceptance->auth_method ?? $recipient->auth_method)->value, 'sender_pin']
+                        : [($acceptance->auth_method ?? $recipient->auth_method)->value],
+                    'auth_method_label' => ($acceptance->auth_method ?? $recipient->auth_method)->label(),
+                    // Revisão da onda B: com o simulador de SMS/WhatsApp nada foi transmitido —
+                    // a evidência diz isso em vez de afirmar a posse de um celular.
+                    'auth_method_simulated' => $simulated = SimulatedChannelEvidence::wasSimulated($recipient),
+                    'auth_method_note' => $simulated ? SimulatedChannelEvidence::NOTE : null,
+                    'delivery_channel' => (ChannelInvitations::channelOf($recipient) ?? DeliveryChannel::Email)->value,
+                    // Fase 2 §2.10: "imagem capturada pelo participante" — nunca verificação.
+                    'identity_captures' => $captures[$recipient->ulid] ?? [],
+                    // Fase 2 §2.6: aceite registrado no dispositivo presencial.
+                    'in_person' => $inPerson->get($recipient->ulid),
                     'signature_kind' => $acceptance?->signature_kind?->value,
                     // Sem rota autorizada para a imagem da representação visual na Fase 1: o
                     // relatório em PDF a embute; a tela não expõe o caminho no disco privado.

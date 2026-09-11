@@ -1,5 +1,10 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import type { FormEvent } from 'react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { useRef, type FormEvent } from 'react';
+import {
+    CnpjLookupNotice,
+    isLookupableCnpj,
+    useCnpjLookup,
+} from '@/components/identity/cnpj-lookup';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -11,6 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { formatCpfCnpj } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { login } from '@/routes';
+import { lookup as cnpjLookupRoute } from '@/routes/cnpj';
 import { privacy, terms } from '@/routes/legal';
 import { store } from '@/routes/register';
 
@@ -54,6 +60,58 @@ export default function Register({ invitation = null }: Props) {
     });
 
     const strength = passwordStrength(form.data.password);
+
+    /*
+     * Fase 2 §2.11 (interruptor global `cnpj_lookup`): ao completar um CNPJ válido, sugere
+     * o nome da empresa — só se o campo estiver vazio ou ainda com a sugestão anterior.
+     * Nunca bloqueia o cadastro; sem a flag nada muda (nenhuma chamada é feita).
+     */
+    const cnpjEnabled = usePage().props.features?.cnpj_lookup === true;
+    const cnpjLookup = useCnpjLookup(cnpjLookupRoute.url());
+    const looked = useRef<string | null>(null);
+    const suggested = useRef<string | null>(null);
+
+    const onTaxIdChange = (raw: string) => {
+        const value = formatCpfCnpj(raw);
+        form.setData('organization_tax_id', value);
+
+        if (!cnpjEnabled || !isLookupableCnpj(value)) {
+            return;
+        }
+
+        if (looked.current === value) {
+            return;
+        }
+
+        looked.current = value;
+
+        void cnpjLookup.lookup(value).then((result) => {
+            const name =
+                result?.status === 'found'
+                    ? (result.suggestions?.name ??
+                      result.suggestions?.legal_name ??
+                      null)
+                    : null;
+
+            if (!name) {
+                return;
+            }
+
+            form.setData((current) => {
+                const untouched =
+                    current.organization_name.trim() === '' ||
+                    current.organization_name === suggested.current;
+
+                if (!untouched) {
+                    return current;
+                }
+
+                suggested.current = name;
+
+                return { ...current, organization_name: name };
+            });
+        });
+    };
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -140,18 +198,19 @@ export default function Register({ invitation = null }: Props) {
                                 placeholder="00.000.000/0000-00"
                                 className="tabular h-10"
                                 value={form.data.organization_tax_id}
-                                onChange={(e) =>
-                                    form.setData(
-                                        'organization_tax_id',
-                                        formatCpfCnpj(e.target.value),
-                                    )
-                                }
+                                onChange={(e) => onTaxIdChange(e.target.value)}
                                 aria-invalid={!!form.errors.organization_tax_id}
                             />
                             <InputError
                                 message={form.errors.organization_tax_id}
                             />
                         </div>
+                        {cnpjEnabled && (
+                            <CnpjLookupNotice
+                                state={cnpjLookup.state}
+                                className="sm:col-span-2"
+                            />
+                        )}
                     </div>
                 )}
 

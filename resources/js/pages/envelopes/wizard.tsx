@@ -12,6 +12,11 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { remindersUrl } from '@/components/envelopes/phase2-routes';
+import {
+    authMethodOf,
+    needsPhone,
+} from '@/components/envelopes/recipient-channel-fields';
+import { checkPhone } from '@/components/identity/phone';
 import { ScheduleSendCard } from '@/components/envelopes/schedule-send-card';
 import { useWizardAutosave } from '@/components/envelopes/use-wizard-autosave';
 import {
@@ -31,6 +36,7 @@ import { Stepper } from '@/components/stepper';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_ZOOM } from '@/components/pdf/pdf-zoom-controls';
 import { formatTime } from '@/lib/format';
+import { authMethodLabels, inviteChannelLabels } from '@/lib/labels';
 import {
     destroy as envelopeDestroy,
     edit as envelopeEdit,
@@ -44,7 +50,7 @@ import {
 } from '@/routes/envelopes/document';
 import { sync as fieldsSync } from '@/routes/envelopes/fields';
 import { sync as recipientsSync } from '@/routes/envelopes/recipients';
-import type { FieldType, SigningOrder } from '@/types/enums';
+import type { CaptureKind, FieldType, SigningOrder } from '@/types/enums';
 import type {
     DomainFeatures,
     EnvelopeDocument,
@@ -52,6 +58,7 @@ import type {
     FolderRef,
     ParticipantRoleOption,
     ReminderSettings,
+    WizardChannels,
     WizardField,
     WizardRecipient,
 } from '@/types/models';
@@ -88,6 +95,16 @@ export interface WizardProps {
      * `EnvelopeController::edit` — ausente, a interface fica a da Fase 1.
      */
     reminders?: EnvelopeReminders | null;
+    /**
+     * Fase 2 §2.9 (`ChannelAvailability::wizardProps`, docs/fase-2/canais-e-pin.md §9.1).
+     * Ausente ou `enabled = false` (e PIN desligado) = passo 2 da Fase 1.
+     */
+    channels?: WizardChannels | null;
+    /**
+     * Fase 2 §2.10 (`IdentityCaptures::requirementsForEnvelope`): fotos exigidas por
+     * participante, `{ [recipientUlid]: kinds[] }`. Só usada com `features.identity_capture`.
+     */
+    capture_requirements?: Record<string, CaptureKind[]> | null;
     recipients: WizardRecipient[];
     fields: WizardField[];
     folders: FolderRef[];
@@ -177,6 +194,43 @@ function recipientIsComplete(recipient: WizardRecipient): boolean {
     );
 }
 
+/**
+ * Fase 2 §2.9: com SMS/WhatsApp (convite ou código), o celular precisa estar completo antes
+ * de gravar — senão cada tecla viraria um 422 do servidor. Número pela metade num
+ * participante só por e-mail também não é enviado (`phonePayload`).
+ */
+function phoneIsReady(
+    recipient: WizardRecipient,
+    channelsOn: boolean,
+): boolean {
+    if (!channelsOn) {
+        return true;
+    }
+
+    const state = checkPhone(recipient.phone);
+
+    return needsPhone(recipient) ? state === 'ok' : state !== 'invalid';
+}
+
+/** `phone` só viaja completo ou vazio (vazio apaga o que estava gravado). */
+function phonePayload(recipient: WizardRecipient): { phone?: string } {
+    const state = checkPhone(recipient.phone);
+
+    if (state === 'ok') {
+        return { phone: recipient.phone ?? '' };
+    }
+
+    return state === 'empty' ? { phone: '' } : {};
+}
+
+/** Campos de canal que o cliente conhece e o servidor ainda pode não devolver. */
+type ChannelKeys = Partial<
+    Pick<
+        WizardRecipient,
+        'phone' | 'channel' | 'auth_method' | 'auth_method_label' | 'has_pin'
+    >
+>;
+
 function isProcessing(document: EnvelopeDocument): boolean {
     return (
         document.processing.status === 'uploaded' ||
@@ -204,6 +258,8 @@ export default function EnvelopeWizard({
     domain_features,
     participant_roles,
     reminders,
+    channels = null,
+    capture_requirements = null,
     recipients: serverRecipients,
     fields: serverFields,
     folders,
@@ -225,6 +281,13 @@ export default function EnvelopeWizard({
     const remindersAvailable = reminders?.available === true;
     const templatesEnabled = features?.templates === true;
     const maxDocuments = multiDocument ? (limits.max_documents ?? 1) : 1;
+    // Fase 2, onda B: com as flags desligadas o payload do sync é o de antes.
+    const channelsEnabled = channels?.enabled === true;
+    const pinEnabled = channels?.pin.enabled === true;
+    const captureEnabled = features?.identity_capture === true;
+    const [captureRequirements, setCaptureRequirements] = useState<
+        Record<string, CaptureKind[]>
+    >(capture_requirements ?? {});
 
     const [metadata, setMetadata] = useState<WizardMetadata>({
         title: envelope.title,
@@ -342,11 +405,28 @@ export default function EnvelopeWizard({
         next: WizardRecipient[],
         order: SigningOrder = signingOrder,
     ): void => {
-        if (next.length === 0 || !next.every(recipientIsComplete)) {
+        if (
+            next.length === 0 ||
+            !next.every(recipientIsComplete) ||
+            !next.every((recipient) => phoneIsReady(recipient, channelsEnabled))
+        ) {
             return;
         }
 
         const sent = signatureOf(next);
+        // PINs que viajam nesta gravação (por e-mail, a chave que liga as linhas na volta).
+        const sentPins = new Map<string, { pin?: string; remove: boolean }>();
+
+        if (pinEnabled) {
+            for (const recipient of next) {
+                if (recipient.pin || recipient.remove_pin) {
+                    sentPins.set(normalizeEmail(recipient.email), {
+                        pin: recipient.pin,
+                        remove: recipient.remove_pin === true,
+                    });
+                }
+            }
+        }
 
         autosave.schedule('recipients', (done) => {
             router.put(
@@ -364,6 +444,21 @@ export default function EnvelopeWizard({
                         ...(participantRoles
                             ? { participant_role: roleOf(recipient) }
                             : {}),
+                        // Fase 2 §2.9: só com `sms_whatsapp`; ausente, o servidor mantém.
+                        ...(channelsEnabled
+                            ? {
+                                  channel: recipient.channel ?? 'email',
+                                  auth_method: authMethodOf(recipient),
+                                  ...phonePayload(recipient),
+                              }
+                            : {}),
+                        // PIN só com `pin_auth`, e só quando há um novo (uma única vez).
+                        ...(pinEnabled && recipient.pin
+                            ? { pin: recipient.pin }
+                            : {}),
+                        ...(pinEnabled && recipient.remove_pin
+                            ? { remove_pin: true }
+                            : {}),
                     })),
                 },
                 {
@@ -379,8 +474,36 @@ export default function EnvelopeWizard({
                         // junto, senão apontariam para um id inexistente.
                         if (Array.isArray(fresh)) {
                             setRecipients((current) => {
+                                // O PIN enviado agora não viaja de novo: sai do estado
+                                // local, e a tela passa a saber só que ele existe.
+                                const settle = (
+                                    row: WizardRecipient,
+                                ): WizardRecipient => {
+                                    const shipped = sentPins.get(
+                                        normalizeEmail(row.email),
+                                    );
+
+                                    if (!shipped) {
+                                        return row;
+                                    }
+
+                                    const typedAfter =
+                                        row.pin !== undefined &&
+                                        row.pin !== shipped.pin;
+
+                                    // A gravação deu certo: o que foi enviado agora vale.
+                                    return {
+                                        ...row,
+                                        has_pin: !shipped.remove,
+                                        pin: typedAfter ? row.pin : undefined,
+                                        remove_pin: typedAfter
+                                            ? row.remove_pin
+                                            : false,
+                                    };
+                                };
+
                                 if (signatureOf(current) !== sent) {
-                                    return current;
+                                    return current.map(settle);
                                 }
 
                                 const remap = new Map<string, string>();
@@ -418,7 +541,48 @@ export default function EnvelopeWizard({
                                     );
                                 }
 
-                                return fresh;
+                                if (!channelsEnabled && !pinEnabled) {
+                                    return fresh;
+                                }
+
+                                // Enquanto o `RecipientWizardResource` não devolver os campos
+                                // de canal (`has_pin` é o sinal), o que o cliente sabe vale.
+                                return fresh.map((row) => {
+                                    const local = current.find(
+                                        (item) =>
+                                            normalizeEmail(item.email) ===
+                                            normalizeEmail(row.email),
+                                    );
+
+                                    if (!local) {
+                                        return row;
+                                    }
+
+                                    const shipped = sentPins.get(
+                                        normalizeEmail(row.email),
+                                    );
+                                    const known: ChannelKeys =
+                                        'has_pin' in row
+                                            ? {}
+                                            : {
+                                                  phone: local.phone,
+                                                  channel: local.channel,
+                                                  auth_method:
+                                                      local.auth_method,
+                                                  auth_method_label:
+                                                      local.auth_method_label,
+                                                  has_pin: shipped
+                                                      ? !shipped.remove
+                                                      : local.has_pin,
+                                              };
+
+                                    return settle({
+                                        ...row,
+                                        ...known,
+                                        pin: local.pin,
+                                        remove_pin: local.remove_pin,
+                                    });
+                                });
                             });
                         }
 
@@ -778,6 +942,17 @@ export default function EnvelopeWizard({
         ...(recipients.some((recipient) => !recipientIsComplete(recipient))
             ? ['Informe nome e e-mail de todos os signatários.']
             : []),
+        ...(recipients.some(
+            (recipient) => !phoneIsReady(recipient, channelsEnabled),
+        )
+            ? [
+                  'Informe um celular válido (com DDD) de quem recebe por SMS ou WhatsApp.',
+              ]
+            : []),
+        ...(pinEnabled &&
+        recipients.some((recipient) => recipient.pin || recipient.remove_pin)
+            ? ['Aguarde o PIN ser salvo antes de enviar.']
+            : []),
         ...(new Set(
             recipients.map((recipient) => normalizeEmail(recipient.email)),
         ).size !== recipients.length
@@ -957,6 +1132,16 @@ export default function EnvelopeWizard({
                         errors={errors}
                         participantRoles={participantRoles}
                         roleOptions={participant_roles}
+                        envelopeId={envelope.id}
+                        channels={channels}
+                        captureEnabled={captureEnabled}
+                        captureRequirements={captureRequirements}
+                        onCaptureRequirementChange={(recipientId, kinds) =>
+                            setCaptureRequirements((current) => ({
+                                ...current,
+                                [recipientId]: kinds,
+                            }))
+                        }
                     />
                 )}
 
@@ -1022,6 +1207,23 @@ export default function EnvelopeWizard({
                         disabled={sending}
                         reminderSettings={
                             remindersAvailable ? reminderSettings : null
+                        }
+                        describeAuth={
+                            channelsEnabled || pinEnabled
+                                ? (recipient) =>
+                                      [
+                                          inviteChannelLabels[
+                                              recipient.channel ?? 'email'
+                                          ],
+                                          `${authMethodLabels[authMethodOf(recipient)].toLowerCase()}${
+                                              (recipient.has_pin ||
+                                                  recipient.pin) &&
+                                              !recipient.remove_pin
+                                                  ? ' + PIN'
+                                                  : ''
+                                          }`,
+                                      ].join(' · ')
+                                : undefined
                         }
                         scheduleSlot={
                             remindersAvailable && reminders ? (

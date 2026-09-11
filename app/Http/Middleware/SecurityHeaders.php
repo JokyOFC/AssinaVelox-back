@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Identity\CameraPermission;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Vite;
@@ -50,6 +51,12 @@ class SecurityHeaders
         // Negação explícita de APIs sensíveis do navegador.
         $this->setIfConfigured($headers, 'Permissions-Policy', 'permissions_policy');
 
+        // Fase 2 §2.10 (C-ID): a câmera sai de `camera=()` para `camera=(self)` SÓ nas rotas
+        // públicas de captura — página do participante com foto exigida e o envio da foto.
+        if ($headers->has('Permissions-Policy') && CameraPermission::allows($request)) {
+            $headers->set('Permissions-Policy', CameraPermission::apply((string) $headers->get('Permissions-Policy')));
+        }
+
         // Flash/Acrobat legados: nenhum crossdomain.xml nosso é válido.
         $headers->set('X-Permitted-Cross-Domain-Policies', 'none');
 
@@ -90,7 +97,9 @@ class SecurityHeaders
 
     protected function isPublicSensitivePath(Request $request): bool
     {
-        return $request->is('assinar', 'assinar/*', 'verificar', 'verificar/*');
+        // Fase 2, onda B: dispositivo presencial (C-PRES) e formulário público (C-FORM) também
+        // carregam segredo na sessão ou token na URL.
+        return $request->is('assinar', 'assinar/*', 'verificar', 'verificar/*', 'presencial', 'presencial/*', 'formulario/*');
     }
 
     protected function policy(string $nonce): string

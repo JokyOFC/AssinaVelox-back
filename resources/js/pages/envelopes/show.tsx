@@ -8,6 +8,8 @@ import {
     ExternalLink,
     FileText,
     Mail,
+    MessageCircle,
+    MessageSquare,
     MoreHorizontal,
     Pencil,
     RefreshCw,
@@ -17,6 +19,8 @@ import {
 import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { AvatarInitials, recipientTone } from '@/components/avatar-initials';
+import { SendBatchLinkButton } from '@/components/batch/send-batch-link-button';
+import { StartInPersonLink } from '@/components/in-person/start-in-person-link';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import {
     FieldLayer,
@@ -57,6 +61,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -321,6 +332,13 @@ export default function EnvelopeShow({
                     // secundário e a ação primária (azul) é "Lembrar pendentes"
                     // (ou "Continuar edição" enquanto o documento é rascunho).
                     <>
+                        {/* Fase 2 §2.6: só com a flag `in_person` (o componente decide). */}
+                        {envelope.status === 'in_progress' && (
+                            <StartInPersonLink
+                                envelopeId={envelope.id}
+                                size="default"
+                            />
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -1247,19 +1265,53 @@ function RecipientCard({
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <span className="bg-muted text-text-secondary inline-flex items-center gap-[5px] rounded-md px-[7px] py-0.5 text-[11.5px] font-semibold">
-                            <Mail className="size-3" />
-                            {deliveryChannelLabels[recipient.channel]}
+                            {recipient.channel === 'sms' ? (
+                                <MessageSquare className="size-3" />
+                            ) : recipient.channel === 'whatsapp' ? (
+                                <MessageCircle className="size-3" />
+                            ) : (
+                                <Mail className="size-3" />
+                            )}
+                            {/* Fase 2 §2.9: o convite sai sempre por e-mail; SMS/WhatsApp somam um aviso. */}
+                            {recipient.channel === 'email'
+                                ? deliveryChannelLabels.email
+                                : `E-mail + ${deliveryChannelLabels[recipient.channel]}`}
                         </span>
-                        {recipient.auth_methods.map((method) => (
-                            <span
-                                key={method}
-                                className="bg-muted text-text-secondary inline-flex items-center gap-[5px] rounded-md px-[7px] py-0.5 text-[11.5px] font-semibold"
-                            >
-                                <ShieldCheck className="size-3" />
-                                {authMethodLabels[method]}
-                            </span>
-                        ))}
+                        {recipient.auth_methods.map((method) => {
+                            const pinStuck =
+                                method === 'sender_pin' &&
+                                (recipient.pin_state === 'blocked' ||
+                                    recipient.pin_state === 'locked');
+
+                            return (
+                                <span
+                                    key={method}
+                                    className={cn(
+                                        'inline-flex items-center gap-[5px] rounded-md px-[7px] py-0.5 text-[11.5px] font-semibold',
+                                        pinStuck
+                                            ? 'bg-warning-bg text-warning'
+                                            : 'bg-muted text-text-secondary',
+                                    )}
+                                >
+                                    <ShieldCheck className="size-3" />
+                                    {authMethodLabels[method]}
+                                    {pinStuck &&
+                                        (recipient.pin_state === 'blocked'
+                                            ? ' · bloqueado'
+                                            : ' · bloqueado por alguns minutos')}
+                                </span>
+                            );
+                        })}
                     </div>
+                    {recipient.pin_state === 'blocked' && (
+                        <p className="border-warning-border bg-warning-bg text-warning mt-2 rounded-[10px] border p-2.5 text-[12px] leading-[1.45]">
+                            O PIN foi bloqueado depois de várias tentativas
+                            incorretas e o participante não consegue mais abrir
+                            o documento.
+                            {recipient.can_edit &&
+                                ' Use “Editar” para definir um PIN novo e combine-o com ele por fora do sistema.'}
+                        </p>
+                    )}
                 </div>
                 <RecipientStatusBadge
                     status={recipient.status}
@@ -1293,6 +1345,15 @@ function RecipientCard({
                                 : 'Reenviar'}
                         </Button>
                     )}
+                    {/* Fase 2 §2.7: só com a flag `batch_signing` (o componente decide). */}
+                    {remindable && !viewer && (
+                        <SendBatchLinkButton
+                            envelopeId={envelope.id}
+                            recipientId={recipient.id}
+                            recipientName={recipient.name}
+                            size="xs"
+                        />
+                    )}
                     {awaitingTurn && (
                         <Button
                             variant="outline-sm"
@@ -1320,6 +1381,10 @@ function RecipientCard({
     );
 }
 
+type CodeMethod = Exclude<Recipient['auth_methods'][number], 'sender_pin'>;
+
+const CODE_METHODS: CodeMethod[] = ['email_otp', 'sms_otp', 'whatsapp_otp'];
+
 /**
  * Edição de um signatário pendente (ROUTES 2.7).
  *
@@ -1335,10 +1400,48 @@ function RecipientEditDialog({
     recipient: Recipient;
     onClose: () => void;
 }) {
-    const { data, setData, patch, processing, errors } = useForm({
+    // Revisão da onda B: depois do envio o remetente também corrige o celular,
+    // troca o método do código e define um PIN novo (o PIN bloqueado manda o
+    // participante "falar com quem enviou"). O servidor confere tudo de novo.
+    const features = usePage().props.features;
+    const hasPin = recipient.auth_methods.includes('sender_pin');
+    const currentMethod: CodeMethod =
+        recipient.auth_method ??
+        (recipient.auth_methods.find((method) => method !== 'sender_pin') as
+            | CodeMethod
+            | undefined) ??
+        'email_otp';
+    const methodOptions = CODE_METHODS.filter(
+        (method) =>
+            method === 'email_otp' ||
+            method === currentMethod ||
+            Boolean(features?.sms_whatsapp),
+    );
+    const showChannel = methodOptions.length > 1;
+    const showPin = hasPin && Boolean(features?.pin_auth);
+
+    const { data, setData, transform, patch, processing, errors } = useForm({
         name: recipient.name,
         email: recipient.email,
+        auth_method: currentMethod as string,
+        phone: '',
+        pin: '',
     });
+
+    // Só vai ao servidor o que mudou: sem canal/PIN, o PATCH é o da Fase 1.
+    transform((values) => ({
+        name: values.name,
+        email: values.email,
+        ...(values.auth_method !== currentMethod
+            ? { auth_method: values.auth_method }
+            : {}),
+        ...(values.phone.trim() !== '' ? { phone: values.phone.trim() } : {}),
+        ...(values.pin.trim() !== '' ? { pin: values.pin.trim() } : {}),
+    }));
+
+    const needsPhone = data.auth_method !== 'email_otp';
+    const channelChanged =
+        data.auth_method !== currentMethod || data.phone.trim() !== '';
 
     const emailChanged =
         data.email.trim().toLowerCase() !== recipient.email.toLowerCase();
@@ -1387,6 +1490,104 @@ function RecipientEditDialog({
                             </p>
                         )}
                     </div>
+                    {showChannel && (
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="recipient-auth-method">
+                                Código de confirmação
+                            </Label>
+                            <Select
+                                value={data.auth_method}
+                                onValueChange={(value) =>
+                                    setData('auth_method', value)
+                                }
+                            >
+                                <SelectTrigger
+                                    id="recipient-auth-method"
+                                    aria-invalid={Boolean(errors.auth_method)}
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {methodOptions.map((method) => (
+                                        <SelectItem key={method} value={method}>
+                                            {authMethodLabels[method]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {errors.auth_method && (
+                                <p className="text-danger text-[12.5px]">
+                                    {errors.auth_method}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {needsPhone && (
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="recipient-phone">
+                                Celular (com DDD)
+                            </Label>
+                            <Input
+                                id="recipient-phone"
+                                type="tel"
+                                inputMode="tel"
+                                autoComplete="off"
+                                value={data.phone}
+                                placeholder={
+                                    recipient.phone_masked
+                                        ? `Atual: ${recipient.phone_masked} — digite outro para corrigir`
+                                        : '+55 11 91234-5678'
+                                }
+                                aria-invalid={Boolean(errors.phone)}
+                                onChange={(event) =>
+                                    setData('phone', event.target.value)
+                                }
+                            />
+                            {errors.phone && (
+                                <p className="text-danger text-[12.5px]">
+                                    {errors.phone}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {showPin && (
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="recipient-pin">PIN novo</Label>
+                            <Input
+                                id="recipient-pin"
+                                inputMode="numeric"
+                                autoComplete="off"
+                                maxLength={8}
+                                value={data.pin}
+                                placeholder="Deixe em branco para manter o atual"
+                                aria-invalid={Boolean(errors.pin)}
+                                onChange={(event) =>
+                                    setData(
+                                        'pin',
+                                        event.target.value.replace(/\D/g, ''),
+                                    )
+                                }
+                            />
+                            <p className="text-muted-foreground text-[12px] leading-[1.45]">
+                                {recipient.pin_state === 'blocked' ||
+                                recipient.pin_state === 'locked'
+                                    ? 'O PIN atual está bloqueado. Um PIN novo zera as tentativas; combine-o com o participante por fora do sistema.'
+                                    : 'Um PIN novo substitui o atual e zera as tentativas. Combine-o com o participante por fora do sistema.'}
+                            </p>
+                            {errors.pin && (
+                                <p className="text-danger text-[12.5px]">
+                                    {errors.pin}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {channelChanged && (
+                        <p className="border-warning-border bg-warning-bg text-warning rounded-[10px] border p-2.5 text-[12.5px] leading-[1.45]">
+                            Os códigos já enviados e as sessões abertas deste
+                            participante serão encerrados. Ao abrir o link de
+                            novo, ele pede um código novo.
+                        </p>
+                    )}
                     {emailChanged && (
                         <p className="border-warning-border bg-warning-bg text-warning rounded-[10px] border p-2.5 text-[12.5px] leading-[1.45]">
                             O link enviado ao endereço anterior será revogado

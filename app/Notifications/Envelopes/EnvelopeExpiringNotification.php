@@ -7,6 +7,7 @@ use App\Integrations\Email\DeliveryContext;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
+use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
@@ -25,7 +26,7 @@ use Illuminate\Notifications\Notification;
  */
 class EnvelopeExpiringNotification extends Notification implements ShouldQueue, TracksDelivery
 {
-    use Queueable;
+    use AppliesOrganizationBranding, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -60,7 +61,7 @@ class EnvelopeExpiringNotification extends Notification implements ShouldQueue, 
             ?->setTimezone($this->envelope->organization->timezone)
             ->format('d/m/Y \à\s H:i');
 
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('Seu prazo para assinar '.$this->envelope->title.' está acabando')
             ->greeting('Olá!')
             ->line('O documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') ainda aguarda a sua assinatura.')
@@ -70,5 +71,7 @@ class EnvelopeExpiringNotification extends Notification implements ShouldQueue, 
             ->action('Assinar agora', $this->signingUrl)
             ->line('Este link é pessoal — não encaminhe este e-mail.')
             ->salutation('Atenciosamente, AssinaVelox');
+
+        return $this->applyOrganizationBranding($message, $this->envelope->organization);
     }
 }

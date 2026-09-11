@@ -13,7 +13,12 @@ use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\SignatureAcceptance;
+use App\Services\Branding\BrandingPresenter;
+use App\Services\Branding\Stamp\StampEvidence;
 use App\Services\Envelopes\Finalization\Support\QrCode;
+use App\Services\InPerson\InPersonEvidence;
+use App\Services\Signing\Channels\SenderPins;
+use App\Services\Signing\Channels\SimulatedChannelEvidence;
 use App\Services\Signing\ConsentText;
 use App\Support\IpDisplay;
 use Carbon\CarbonInterface;
@@ -130,6 +135,10 @@ class EvidenceData
             'document' => $documents === [] ? null : $this->currentDocument($documents, $position),
             'viewers' => $this->viewers($envelope),
             'has_roles' => $envelope->recipients()->where('role', '!=', RecipientRole::Signer->value)->exists(),
+            // Fase 2 §2.8 (C-BRAND): logo da organização remetente no cabeçalho (flag
+            // `branding` + logo salvo) e a linha do carimbo visual. Null = página da Fase 1.
+            'branding' => app(BrandingPresenter::class)->forEvidence($organization),
+            'stamp' => StampEvidence::forEnvelope($envelope, (int) $sentVersion->getKey()),
         ];
     }
 
@@ -217,6 +226,8 @@ class EvidenceData
     private function participants(Envelope $envelope, string $timezone): array
     {
         $organization = $envelope->organization;
+        $pins = app(SenderPins::class);
+        $inPerson = collect(InPersonEvidence::forEnvelope($envelope))->keyBy('recipient_id')->all();
 
         $rows = [];
 
@@ -239,7 +250,14 @@ class EvidenceData
                 'status' => $recipient->status->value,
                 'status_label' => $recipient->status->label(),
                 'order_index' => (int) $recipient->order_index,
-                'auth_method' => $recipient->auth_method->label(),
+                // Fase 2 §2.9 (C-CAN): o canal do código que o participante confirmou, + PIN do
+                // remetente quando houve. Fase 1: "Código por e-mail", como antes.
+                'auth_method' => ($acceptance->auth_method ?? $recipient->auth_method)->label()
+                    // Revisão da onda B: código "enviado" pelo simulador não chegou a celular nenhum.
+                    .(SimulatedChannelEvidence::wasSimulated($recipient) ? SimulatedChannelEvidence::LABEL_SUFFIX : '')
+                    .($pins->requiredFor($recipient) ? ' + PIN do remetente' : ''),
+                // Fase 2 §2.6 (C-PRES): aceite registrado no dispositivo presencial.
+                'in_person_label' => $inPerson[$recipient->ulid]['label'] ?? null,
                 'signed_at' => $this->local($acceptance->accepted_at ?? $recipient->signed_at, $timezone),
                 'signed_at_utc' => $acceptance?->accepted_at->copy()->utc()->format('d/m/Y H:i:s'),
                 'refused_at' => $this->local($recipient->refused_at, $timezone),

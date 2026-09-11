@@ -1,9 +1,14 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import { AvatarInitials } from '@/components/avatar-initials';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useConfirmsPassword } from '@/components/confirms-password';
 import Heading from '@/components/heading';
+import {
+    CnpjLookupButton,
+    CnpjLookupNotice,
+    useCnpjLookup,
+} from '@/components/identity/cnpj-lookup';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,8 +17,12 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { formatCpfCnpj, formatDate } from '@/lib/format';
-import { general as settingsGeneral } from '@/routes/settings';
 import {
+    branding as settingsBranding,
+    general as settingsGeneral,
+} from '@/routes/settings';
+import {
+    cnpj as organizationCnpj,
     destroy as requestDeletion,
     update as updateOrganization,
 } from '@/routes/settings/organization';
@@ -87,6 +96,50 @@ export default function SettingsGeneral({
         tax_id: organization.tax_id ?? '',
         contact_email: organization.contact_email ?? '',
     });
+
+    /*
+     * Fase 2 §2.11 (flag `cnpj_lookup`): "Preencher pelo CNPJ" sugere razão social e nome.
+     * Nunca bloqueia: sem a flag o botão não aparece, e qualquer desfecho da consulta deixa
+     * os campos livres para preencher à mão. Campo já preenchido com outro valor não é
+     * sobrescrito — a sugestão aparece com "Usar".
+     */
+    const { features } = usePage().props;
+    const cnpjEnabled = features?.cnpj_lookup === true;
+    const brandingEnabled = features?.branding === true;
+    const cnpjLookup = useCnpjLookup(organizationCnpj.url());
+    const [suggestion, setSuggestion] = useState<{
+        legal_name: string | null;
+        name: string | null;
+    } | null>(null);
+
+    const lookupCnpj = async () => {
+        setSuggestion(null);
+        const result = await cnpjLookup.lookup(company.data.tax_id);
+        const found = result?.status === 'found' ? result.suggestions : null;
+
+        if (!found) {
+            return;
+        }
+
+        const pending = { legal_name: null, name: null } as {
+            legal_name: string | null;
+            name: string | null;
+        };
+
+        if (found.legal_name) {
+            if (company.data.legal_name.trim() === '') {
+                company.setData('legal_name', found.legal_name);
+            } else if (company.data.legal_name.trim() !== found.legal_name) {
+                pending.legal_name = found.legal_name;
+            }
+        }
+
+        if (found.name && company.data.name.trim() !== found.name) {
+            pending.name = found.name;
+        }
+
+        setSuggestion(pending.legal_name || pending.name ? pending : null);
+    };
 
     const [requireTwoFactor, setRequireTwoFactor] = useState(
         security.require_two_factor,
@@ -196,7 +249,17 @@ export default function SettingsGeneral({
                         <InputError message={company.errors.name} />
                     </div>
                     <div className="grid gap-1.5">
-                        <Label htmlFor="tax_id">CNPJ ou CPF</Label>
+                        <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor="tax_id">CNPJ ou CPF</Label>
+                            {cnpjEnabled && (
+                                <CnpjLookupButton
+                                    value={company.data.tax_id}
+                                    state={cnpjLookup.state}
+                                    onLookup={() => void lookupCnpj()}
+                                    className="h-6"
+                                />
+                            )}
+                        </div>
                         <Input
                             id="tax_id"
                             inputMode="numeric"
@@ -229,31 +292,119 @@ export default function SettingsGeneral({
                     </div>
                 </div>
 
+                {cnpjEnabled && (
+                    <>
+                        <CnpjLookupNotice state={cnpjLookup.state} />
+                        {suggestion && (
+                            <div className="border-border bg-sidebar flex flex-col gap-1.5 rounded-[10px] border p-2.5 text-[12.5px]">
+                                <span className="text-text-secondary">
+                                    Os campos abaixo já estavam preenchidos e
+                                    não foram alterados. Quer usar os dados do
+                                    CNPJ?
+                                </span>
+                                {suggestion.legal_name && (
+                                    <span className="flex flex-wrap items-center gap-2">
+                                        <span className="min-w-0">
+                                            Razão social:{' '}
+                                            <b>{suggestion.legal_name}</b>
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="xs"
+                                            onClick={() => {
+                                                company.setData(
+                                                    'legal_name',
+                                                    suggestion.legal_name ?? '',
+                                                );
+                                                setSuggestion({
+                                                    ...suggestion,
+                                                    legal_name: null,
+                                                });
+                                            }}
+                                        >
+                                            Usar
+                                        </Button>
+                                    </span>
+                                )}
+                                {suggestion.name && (
+                                    <span className="flex flex-wrap items-center gap-2">
+                                        <span className="min-w-0">
+                                            Nome de exibição:{' '}
+                                            <b>{suggestion.name}</b>
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="xs"
+                                            onClick={() => {
+                                                company.setData(
+                                                    'name',
+                                                    suggestion.name ?? '',
+                                                );
+                                                setSuggestion({
+                                                    ...suggestion,
+                                                    name: null,
+                                                });
+                                            }}
+                                        >
+                                            Usar
+                                        </Button>
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+
                 <div className="border-border flex items-center gap-3.5 rounded-[10px] border p-3.5">
-                    <AvatarInitials
-                        initials={organization.initials}
-                        tone="organization"
-                        size="2xl"
-                    />
+                    {brandingEnabled && organization.logo_url ? (
+                        <img
+                            src={organization.logo_url}
+                            alt={`Logo de ${organization.name}`}
+                            className="border-border size-14 shrink-0 rounded-lg border object-contain p-1"
+                        />
+                    ) : (
+                        <AvatarInitials
+                            initials={organization.initials}
+                            tone="organization"
+                            size="2xl"
+                        />
+                    )}
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
                             Logo da empresa{' '}
-                            <Badge variant="phase">Fase 2</Badge>
+                            {!brandingEnabled && (
+                                <Badge variant="phase">Fase 2</Badge>
+                            )}
                         </div>
                         <div className="text-muted-foreground text-[12.5px] leading-[1.5]">
-                            PNG ou SVG, fundo transparente, mínimo 200×200.
+                            PNG ou JPEG, de preferência com fundo transparente.
                             Usado nos e-mails e na página de assinatura.
                         </div>
                     </div>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        disabled
-                        title="Disponível na Fase 2"
-                    >
-                        Enviar logo
-                    </Button>
+                    {brandingEnabled ? (
+                        <Button
+                            asChild
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                        >
+                            <Link href={settingsBranding()}>
+                                Gerenciar marca
+                            </Link>
+                        </Button>
+                    ) : (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            disabled
+                            title="Disponível na Fase 2"
+                        >
+                            Enviar logo
+                        </Button>
+                    )}
                 </div>
 
                 <div className="flex justify-end">

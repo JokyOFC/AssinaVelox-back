@@ -2,8 +2,11 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\FieldType;
 use App\Enums\RecipientStatus;
 use App\Models\SigningField;
+use App\Services\Identity\CpfNumber;
+use App\Services\Impersonation\ImpersonationManager;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -50,7 +53,7 @@ class SigningFieldResource extends JsonResource
             'page_width_pt' => $this->page_width_pt === null ? null : (float) $this->page_width_pt,
             'page_height_pt' => $this->page_height_pt === null ? null : (float) $this->page_height_pt,
             'page_rotation' => (int) $this->page_rotation,
-            'value' => $value?->value_text,
+            'value' => $this->displayValue($value?->value_text, $request),
             'signed' => $recipient?->status === RecipientStatus::Signed,
             // Fase 2 §2.3: arquivo onde o campo está (ULID de `documents`). `null` quando o
             // chamador não carregou `documentVersion.document`.
@@ -58,5 +61,26 @@ class SigningFieldResource extends JsonResource
                 ? $this->documentVersion?->document?->ulid
                 : null,
         ];
+    }
+
+    /**
+     * Valor preenchido pelo participante, como pode sair FORA do documento:
+     *
+     * - durante o "acessar como", nada: o suporte não vê conteúdo de documentos
+     *   (ReadOnlyRoutes; Termos §4.5) — e o valor de um campo é conteúdo;
+     * - CPF, só mascarado (docs/fase-2/identidade.md §2.1: "Fora do documento só sai
+     *   mascarado"). O CPF completo continua no PDF e no `fields_snapshot` do aceite.
+     */
+    private function displayValue(?string $text, Request $request): ?string
+    {
+        if ($text === null) {
+            return null;
+        }
+
+        if (ImpersonationManager::active($request)) {
+            return null;
+        }
+
+        return $this->type === FieldType::Cpf ? CpfNumber::mask($text) : $text;
     }
 }

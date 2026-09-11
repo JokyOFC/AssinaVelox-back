@@ -61,6 +61,7 @@ export function WizardStepReview({
     disabled,
     reminderSettings,
     scheduleSlot,
+    describeAuth,
 }: {
     document: EnvelopeDocument | null;
     documents?: EnvelopeDocument[];
@@ -91,6 +92,11 @@ export function WizardStepReview({
     reminderSettings?: ReminderSettings | null;
     /** Cartão de envio agendado (só com a flag `reminders`). */
     scheduleSlot?: ReactNode;
+    /**
+     * Fase 2 §2.9: resumo de convite e autenticação por participante ("E-mail + SMS ·
+     * código por SMS + PIN"). Ausente = o texto da Fase 1.
+     */
+    describeAuth?: (recipient: WizardRecipient) => string;
 }) {
     const multi = multiDocument && documents.length > 1;
     const firstDocumentId = documents[0]?.id ?? document?.id ?? null;
@@ -279,8 +285,11 @@ export function WizardStepReview({
                                         )}
                                     </span>
                                     <span className="text-text-secondary block truncate text-[12.5px]">
-                                        {recipient.email || '(sem e-mail)'} ·
-                                        e-mail com código de verificação ·{' '}
+                                        {recipient.email || '(sem e-mail)'} ·{' '}
+                                        {describeAuth
+                                            ? describeAuth(recipient)
+                                            : 'e-mail com código de verificação'}{' '}
+                                        ·{' '}
                                         {viewer
                                             ? 'recebe cópia para acompanhamento'
                                             : participantRole === 'approver'

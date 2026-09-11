@@ -4,7 +4,10 @@ import {
     FieldBox,
     type FieldBoxVariant,
 } from '@/components/envelopes/field-box';
-import { DEFAULT_FIELD_SIZE } from '@/components/envelopes/field-types';
+import {
+    defaultFieldSize,
+    isKnownFieldType,
+} from '@/components/envelopes/field-type-extras';
 import type { RecipientColor } from '@/components/envelopes/recipient-colors';
 import {
     GRID_STEP,
@@ -18,7 +21,7 @@ import {
     snapRect,
 } from '@/lib/geometry';
 import { cn } from '@/lib/utils';
-import type { FieldType } from '@/types/enums';
+import type { FieldType, SigningFieldType } from '@/types/enums';
 
 /**
  * Forma mínima de um campo para a camada. `WizardField` (editor) e os campos
@@ -27,7 +30,7 @@ import type { FieldType } from '@/types/enums';
 export interface LayerField {
     client_id: string;
     recipient_client_id: string;
-    type: FieldType;
+    type: SigningFieldType;
     page: number | 'all';
     x: number;
     y: number;
@@ -52,7 +55,14 @@ interface DragState {
     min: MinSize | undefined;
 }
 
-export interface FieldLayerProps<T extends LayerField = LayerField> {
+/**
+ * `D` = tipos que a paleta pode soltar sobre a página. O padrão (`FieldType`) é o do editor
+ * de modelos; o wizard usa `EditorFieldType`, que inclui o CPF (Fase 2 §2.11).
+ */
+export interface FieldLayerProps<
+    T extends LayerField = LayerField,
+    D extends string = FieldType,
+> {
     /** Campos já filtrados para a página exibida. */
     fields: T[];
     /** Dimensões renderizadas da página, em pixels CSS. */
@@ -66,7 +76,7 @@ export interface FieldLayerProps<T extends LayerField = LayerField> {
     onDelete: (clientId: string) => void;
     onDuplicate: (clientId: string) => void;
     /** Soltar um tipo da paleta sobre a página. */
-    onDropType?: (type: FieldType, rect: NormalizedRect) => void;
+    onDropType?: (type: D, rect: NormalizedRect) => void;
     colorOf: (field: T) => RecipientColor;
     tagOf: (field: T) => string;
     hintOf?: (field: T) => string | null;
@@ -94,7 +104,7 @@ export interface FieldLayerProps<T extends LayerField = LayerField> {
  * redimensionam; `Ctrl`/`⌘` acelera o passo; `Delete`/`Backspace` remove;
  * `Ctrl`/`⌘` + `D` duplica; `Esc` limpa a seleção.
  */
-export function FieldLayer<T extends LayerField>({
+export function FieldLayer<T extends LayerField, D extends string = FieldType>({
     fields,
     page,
     selectedId,
@@ -113,7 +123,7 @@ export function FieldLayer<T extends LayerField>({
     grid = false,
     readOnly = false,
     className,
-}: FieldLayerProps<T>) {
+}: FieldLayerProps<T, D>) {
     const [drag, setDrag] = useState<DragState | null>(null);
     const [dropping, setDropping] = useState(false);
 
@@ -256,11 +266,10 @@ export function FieldLayer<T extends LayerField>({
         // conteúdo solto); só depois decidir se o tipo é conhecido.
         event.preventDefault();
 
-        const type = event.dataTransfer.getData(FIELD_DRAG_MIME) as
-            | FieldType
-            | '';
+        const type = event.dataTransfer.getData(FIELD_DRAG_MIME);
 
-        if (!type || !(type in DEFAULT_FIELD_SIZE)) {
+        // Só tipos conhecidos; quem decide se a paleta oferecia o tipo é o `onDropType`.
+        if (!type || !isKnownFieldType(type)) {
             return;
         }
 
@@ -268,11 +277,11 @@ export function FieldLayer<T extends LayerField>({
         const rect = rectAroundPoint(
             event.clientX - bounds.left,
             event.clientY - bounds.top,
-            DEFAULT_FIELD_SIZE[type],
+            defaultFieldSize(type),
             page,
         );
 
-        onDropType(type, grid ? snapRect(rect, GRID_STEP) : rect);
+        onDropType(type as D, grid ? snapRect(rect, GRID_STEP) : rect);
     };
 
     return (

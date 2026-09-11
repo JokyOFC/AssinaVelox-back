@@ -8,6 +8,7 @@ use App\Integrations\Email\DeliveryContext;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
+use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
@@ -30,7 +31,7 @@ use Illuminate\Notifications\Notification;
  */
 class RecipientInvitationNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
-    use Queueable;
+    use AppliesOrganizationBranding, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -68,7 +69,7 @@ class RecipientInvitationNotification extends Notification implements ShouldBeEn
         // (arquitetura §2 — aprovar, testemunhar e acompanhar não são "assinar"). O texto do
         // signatário, único papel da Fase 1, continua idêntico.
         if ($role !== RecipientRole::Signer) {
-            return $this->roleMail($role);
+            return $this->applyOrganizationBranding($this->roleMail($role), $this->envelope->organization);
         }
 
         $organization = $this->envelope->organization;
@@ -98,9 +99,12 @@ class RecipientInvitationNotification extends Notification implements ShouldBeEn
             $message->line('O prazo para assinar termina em '.$this->deadline().'.');
         }
 
-        return $message
+        $message
             ->line('Este link é pessoal e foi criado só para você — não encaminhe este e-mail.')
             ->salutation('Atenciosamente, AssinaVelox');
+
+        // Fase 2 §2.8: com a marca ativa, só o tema (cabeçalho, botão) e o Reply-To mudam.
+        return $this->applyOrganizationBranding($message, $organization);
     }
 
     private function role(): RecipientRole

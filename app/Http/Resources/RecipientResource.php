@@ -2,10 +2,15 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\DeliveryChannel;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Recipient;
+use App\Rules\PhoneE164;
+use App\Services\Signing\Channels\ChannelInvitations;
+use App\Services\Signing\Channels\RecipientChannels;
+use App\Services\Signing\Channels\SenderPins;
 use App\Support\IpDisplay;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
@@ -71,8 +76,18 @@ class RecipientResource extends JsonResource
             'color_index' => $this->colorIndex,
             'status' => $this->status->value,
             'status_label' => $this->statusLabel(),
-            'channel' => 'email',
-            'auth_methods' => [$this->auth_method->value],
+            // Fase 2 §2.9 (C-CAN): canal do aviso extra do convite e o método do código, + PIN do
+            // remetente quando houver. Participante da Fase 1: `email` e `['email_otp']`.
+            'channel' => (ChannelInvitations::channelOf($this->resource) ?? DeliveryChannel::Email)->value,
+            'auth_methods' => app(SenderPins::class)->requiredFor($this->resource)
+                ? [$this->auth_method->value, 'sender_pin']
+                : [$this->auth_method->value],
+            // Edição pós-envio (revisão da onda B): o método do código, o celular MASCARADO
+            // (o remetente digita um novo para corrigir) e o estado do PIN — bloqueado, o
+            // participante é mandado "falar com quem enviou", e só daqui sai o PIN novo.
+            'auth_method' => $this->auth_method->value,
+            'phone_masked' => $this->phone === null ? null : PhoneE164::mask($this->phone),
+            'pin_state' => app(RecipientChannels::class)->pinState($this->resource),
             'sent_at' => $this->status !== RecipientStatus::Pending ? $this->last_notified_at?->toIso8601String() : null,
             'viewed_at' => $this->viewedAt?->toIso8601String(),
             'signed_at' => $this->signed_at?->toIso8601String(),

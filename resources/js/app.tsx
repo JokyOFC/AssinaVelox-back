@@ -25,6 +25,12 @@ void createInertiaApp({
                 return PublicLayout;
             case name.startsWith('settings/'):
                 return [AppLayout, SettingsLayout];
+            // Fase 2, onda B (C-FORM): páginas públicas do formulário, com casca própria
+            // (`PublicFormShell`). Sem esta regra, o `layout = (page) => page` da página é lido
+            // pelo Inertia 3 como resolvedor de props e cai no AppLayout (topbar da conta).
+            case name === 'public-forms/fill':
+            case name === 'public-forms/confirm':
+                return null;
             default:
                 return AppLayout;
         }

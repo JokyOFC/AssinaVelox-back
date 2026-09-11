@@ -251,6 +251,16 @@ sudo systemctl restart mysql
 Redis é usado para **fila (Horizon)** e **cache**. Não guarda nada que precise sobreviver a uma
 perda total, mas perder a fila significa perder jobs enfileirados: habilite a persistência.
 
+> **Exceção desde a Fase 2, onda B:** o carimbo de tempo mínimo do formulário público é de
+> **uso único**, e a marca de "já usado" fica no cache. Se o Redis for esvaziado (`FLUSHALL`,
+> `cache:clear`, reinício sem persistência), carimbos emitidos antes disso voltam a valer até
+> vencerem, por no máximo 6 horas. As demais barreiras continuam ativas — limite de requisições
+> por IP e por formulário, campo-isca e confirmação por e-mail antes de criar qualquer envelope
+> ou consumir cota —, então o efeito é abrir uma janela de reenvio, não criar documentos. Até
+> essas marcas migrarem para o banco (previsto na onda C), evite esvaziar o cache em produção
+> fora de manutenção e prefira a persistência do Redis (`appendonly yes`) se ela já estiver no
+> seu padrão. Detalhes em `docs/fase-2/formulario-publico.md`.
+
 `/etc/redis/redis.conf`:
 
 ```conf

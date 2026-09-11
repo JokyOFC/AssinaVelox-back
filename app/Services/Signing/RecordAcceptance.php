@@ -19,6 +19,10 @@ use App\Models\SigningField;
 use App\Models\SigningFieldValue;
 use App\Models\SigningSession;
 use App\Models\SigningSessionDocument;
+use App\Services\Branding\Stamp\StampImages;
+use App\Services\Identity\CpfLookup;
+use App\Services\Identity\CpfNumber;
+use App\Services\Identity\IdentityCaptures;
 use App\Services\Signing\Exceptions\SigningRejectedException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -78,6 +82,11 @@ final class RecordAcceptance
         private readonly SignerPresentation $presentation,
         private readonly SignatureImages $images,
         private readonly SignerNotifier $notifier,
+        // Fase 2 §2.10/§2.11 (C-ID): captura simples e consulta cadastral do CPF.
+        private readonly IdentityCaptures $captures,
+        private readonly CpfLookup $cpfLookup,
+        // Fase 2 §2.8 (C-BRAND): carimbo visual congelado no aceite.
+        private readonly StampImages $stamps,
     ) {}
 
     /**
@@ -158,12 +167,28 @@ final class RecordAcceptance
         // recusar e não faz sentido segurar o lock do envelope enquanto se decide isso.
         $values = $this->resolveFieldValues($fields, $context, $payload['fields'] ?? [], $now);
 
+        // Fase 2 §2.10 (C-ID): com a flag `identity_capture`, as fotos exigidas pelo remetente
+        // precisam existir NESTA sessão. Antes da imagem da assinatura, para não deixar PNG
+        // órfão no disco quando o aceite é recusado aqui.
+        $this->captures->assertComplete($context, $session);
+
         // Aprovador não tem representação visual: nada do que vier em `signature` é gravado.
         $visual = $action->requiresVisualSignature()
             ? $this->resolveVisual($context, $payload, $fields)
             : self::noVisual();
 
         $correlationId = SignerTokens::correlationId();
+
+        // Fase 2 §2.11 (C-ID): consulta CADASTRAL do CPF, só com a flag `cpf_lookup`. Chamada
+        // externa, então fora da transação; nenhum resultado bloqueia o aceite.
+        $cpfChecks = $this->cpfLookup->checkFields($fields, $values, $context, $correlationId);
+        $captures = $this->captures->snapshotFor($context, $session);
+
+        // Fase 2 §2.8 (C-BRAND): o carimbo visual é congelado AQUI, no aceite de quem tem o
+        // campo (I/O fora da transação). Marca desligada ou sem marca: null, campo vazio no PDF.
+        $stampPath = $fields->contains(fn (SigningField $field): bool => $field->type === FieldType::Stamp)
+            ? $this->stamps->snapshot($context->envelope->setRelation('organization', $context->organization))
+            : null;
 
         try {
             $acceptance = $this->persist(
@@ -180,6 +205,9 @@ final class RecordAcceptance
                 $request,
                 $now,
                 $correlationId,
+                $cpfChecks,
+                $captures,
+                $stampPath,
             );
         } catch (\Throwable $exception) {
             // A imagem foi normalizada e gravada ANTES da transação (para não segurar o
@@ -243,6 +271,8 @@ final class RecordAcceptance
      * @param  array<string, array{text: string|null, bool: bool|null}>  $values
      * @param  array{kind: SignatureKind|null, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
      * @param  array<string, mixed>  $snapshot
+     * @param  array<string, array<string, mixed>>  $cpfChecks  resultado da consulta cadastral por ULID do campo (C-ID)
+     * @param  list<array{capture_ulid: string, kind: string, sha256: string, width: int, height: int, captured_at: string}>  $captures  fotos referenciadas pelo aceite (C-ID)
      */
     private function persist(
         SignerContext $context,
@@ -258,10 +288,13 @@ final class RecordAcceptance
         Request $request,
         Carbon $now,
         string $correlationId,
+        array $cpfChecks = [],
+        array $captures = [],
+        ?string $stampPath = null,
     ): SignatureAcceptance {
         try {
             return DB::transaction(function () use (
-                $context, $session, $version, $sent, $action, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId
+                $context, $session, $version, $sent, $action, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId, $cpfChecks, $captures, $stampPath
             ): SignatureAcceptance {
                 /** @var Envelope|null $envelope */
                 $envelope = Envelope::withoutOrganizationScope()
@@ -301,12 +334,19 @@ final class RecordAcceptance
                     'terms_version' => ConsentText::versionFor($envelope, $recipient, count($sent)),
                     'consent_statement' => $consentText,
                     'document_sha256' => $version->sha256,
-                    'fields_snapshot' => $snapshot + ['values' => $this->snapshotValues($fields, $values, $visual)],
+                    // `identity_captures` só existe quando houve foto exigida (C-ID): sem ela o
+                    // snapshot é exatamente o de antes.
+                    'fields_snapshot' => $snapshot
+                        + ['values' => $this->snapshotValues($fields, $values, $visual, $cpfChecks)]
+                        + ($captures === [] ? [] : ['identity_captures' => $captures]),
                     'signature_kind' => $visual['kind'],
                     'signature_image_path' => $visual['image_path'],
                     'typed_name' => $visual['typed_name'],
                     'typed_font' => $visual['typed_font'],
                 ]);
+
+                // Fotos da captura simples passam a pertencer a este aceite (C-ID).
+                $this->captures->attachToAcceptance($acceptance, $captures);
 
                 foreach ($fields as $field) {
                     $value = $values[$field->ulid] ?? ['text' => null, 'bool' => null];
@@ -322,6 +362,7 @@ final class RecordAcceptance
                         'image_path' => match ($field->type) {
                             FieldType::Signature => $visual['image_path'],
                             FieldType::Initials => $visual['initials_image_path'] ?? $visual['image_path'],
+                            FieldType::Stamp => $stampPath,
                             default => null,
                         },
                     ]);
@@ -342,7 +383,7 @@ final class RecordAcceptance
                         'document_sha256' => $row['version']->sha256,
                         'fields_snapshot' => [
                             'fields' => $documentFields->map(fn (SigningField $field): array => SignerPresentation::fieldSnapshot($field))->all(),
-                            'values' => $this->snapshotValues($documentFields, $values, $visual),
+                            'values' => $this->snapshotValues($documentFields, $values, $visual, $cpfChecks),
                         ],
                     ]);
                 }
@@ -484,8 +525,12 @@ final class RecordAcceptance
 
                 FieldType::Text => $this->textValue($field, is_string($raw) ? trim($raw) : '', $maxText),
 
-                // Assinatura e rubrica não vêm do mapa de campos: vêm da captura.
-                FieldType::Signature, FieldType::Initials => ['text' => null, 'bool' => null],
+                // Fase 2 §2.11 (C-ID): dígitos verificadores conferidos AQUI, no servidor.
+                FieldType::Cpf => $this->cpfValue($field, $raw),
+
+                // Assinatura e rubrica não vêm do mapa de campos: vêm da captura. O carimbo
+                // (Fase 2 §2.8) é desenhado pelo servidor na consolidação: o cliente não o envia.
+                FieldType::Signature, FieldType::Initials, FieldType::Stamp => ['text' => null, 'bool' => null],
             };
         }
 
@@ -536,6 +581,44 @@ final class RecordAcceptance
         }
 
         return ['text' => $value === '' ? null : $value, 'bool' => null];
+    }
+
+    /**
+     * Campo `cpf` (Fase 2 §2.11, C-ID): 11 dígitos, sem sequência repetida e com os dois
+     * verificadores corretos. Gravado formatado (`000.000.000-00`), porque é conteúdo do
+     * documento preenchido pela própria pessoa; fora do documento só sai mascarado
+     * (`***.456.789-**`). Dígitos válidos NÃO provam que a pessoa é a titular.
+     *
+     * @return array{text: string|null, bool: bool|null}
+     *
+     * @throws SigningRejectedException
+     */
+    private function cpfValue(SigningField $field, mixed $raw): array
+    {
+        $input = is_string($raw) ? trim($raw) : '';
+        $label = $field->label ?: $field->type->label();
+
+        if ($input === '') {
+            if ($field->required) {
+                throw new SigningRejectedException(
+                    'required_field_missing',
+                    sprintf('Preencha o campo "%s" para continuar.', $label),
+                    context: ['field' => $field->ulid],
+                );
+            }
+
+            return ['text' => null, 'bool' => null];
+        }
+
+        if (Str::length($input) > 20 || preg_match('/^[\d.\-\s]+$/', $input) !== 1 || ! CpfNumber::isValid($input)) {
+            throw new SigningRejectedException(
+                'invalid_cpf',
+                sprintf('O CPF informado em "%s" não é válido. Confira os números digitados.', $label),
+                context: ['field' => $field->ulid],
+            );
+        }
+
+        return ['text' => CpfNumber::format($input), 'bool' => null];
     }
 
     // -- Representação visual -----------------------------------------------------------
@@ -631,16 +714,21 @@ final class RecordAcceptance
      * @param  Collection<int, SigningField>  $fields
      * @param  array<string, array{text: string|null, bool: bool|null}>  $values
      * @param  array{kind: SignatureKind|null, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
+     * @param  array<string, array<string, mixed>>  $cpfChecks
      * @return list<array<string, mixed>>
      */
-    private function snapshotValues(Collection $fields, array $values, array $visual): array
+    private function snapshotValues(Collection $fields, array $values, array $visual, array $cpfChecks = []): array
     {
         /** @var list<array<string, mixed>> */
         return $fields
-            ->map(function (SigningField $field) use ($values, $visual): array {
+            ->map(function (SigningField $field) use ($values, $visual, $cpfChecks): array {
                 $value = $values[$field->ulid] ?? ['text' => null, 'bool' => null];
 
                 return array_filter([
+                    // Campo `cpf` (C-ID): a forma mascarada para quem exibir o snapshot fora do
+                    // documento, e o resultado da consulta cadastral quando ela rodou.
+                    'cpf_masked' => $field->type === FieldType::Cpf && $value['text'] !== null ? CpfNumber::mask($value['text']) : null,
+                    'cpf_check' => $cpfChecks[$field->ulid] ?? null,
                     'field_ulid' => $field->ulid,
                     'type' => $field->type->value,
                     'text' => $value['text'],

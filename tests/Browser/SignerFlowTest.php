@@ -93,7 +93,9 @@ it('assina o documento do começo ao fim', function () {
     browserConfirmIdentity($this, $page);
 
     $page->assertSee('Sua assinatura')
-        ->assertSee('Identidade confirmada')
+        // Revisão da onda B: o selo descreve o meio ("Código confirmado"), não a identidade
+        // (arquitetura §2, T1 — o código prova a posse do canal).
+        ->assertSee('Código confirmado')
         ->assertNoJavascriptErrors();
 
     // Sem assinatura e sem aceite o botão continua desabilitado.

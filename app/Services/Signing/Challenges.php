@@ -4,10 +4,16 @@ namespace App\Services\Signing;
 
 use App\Enums\AuditEventType;
 use App\Enums\DeliveryChannel;
+use App\Enums\DeliveryPurpose;
 use App\Enums\DeliveryStatus;
 use App\Models\AuthChallenge;
 use App\Models\DeliveryAttempt;
 use App\Notifications\Signing\SignerOtpNotification;
+use App\Rules\PhoneE164;
+use App\Services\Signing\Channels\ChannelAvailability;
+use App\Services\Signing\Channels\ChannelDelivery;
+use App\Services\Signing\Channels\ChannelMessages;
+use App\Services\Signing\Channels\SenderPins;
 use App\Services\Signing\Exceptions\SigningRejectedException;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Http\Request;
@@ -17,7 +23,11 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * Código de uso único enviado por e-mail (arquitetura §3.1 `auth_challenges`, §4.2/§4.3).
+ * Código de uso único enviado por e-mail (arquitetura §3.1 `auth_challenges`, §4.2/§4.3) —
+ * e, na Fase 2 §2.9 (flag `sms_whatsapp`), por SMS ou WhatsApp, com as mesmas garantias. O
+ * canal é o do método escolhido pelo remetente (`recipients.auth_method`). Com PIN do
+ * remetente, o código confirmado abre a etapa do PIN (Channels\SenderPins) em vez de
+ * autenticar a sessão. Semântica: o código prova a posse do canal, não identidade.
  *
  * ## Como o código é guardado
  *
@@ -53,6 +63,9 @@ final class Challenges
     public function __construct(
         private readonly Repository $config,
         private readonly SignerSessions $sessions,
+        private readonly ChannelAvailability $availability,
+        private readonly ChannelDelivery $delivery,
+        private readonly SenderPins $pins,
     ) {}
 
     // -- Envio ------------------------------------------------------------------------
@@ -66,6 +79,12 @@ final class Challenges
     {
         $this->assertCanSend($context, $request);
 
+        // Fase 2 §2.9: o canal do código é o do método escolhido pelo remetente. Todas as
+        // garantias abaixo (CSPRNG, HMAC, validade, tentativas, consumo único, limites por link
+        // e por IP) são as MESMAS para e-mail, SMS e WhatsApp.
+        $channel = $context->recipient->auth_method->channel();
+        $phone = $channel === DeliveryChannel::Email ? null : $this->assertChannelReady($context, $channel);
+
         $correlationId = SignerTokens::correlationId();
         $ttl = $this->ttlMinutes();
         $expiresAt = Carbon::now()->addMinutes($ttl);
@@ -75,7 +94,7 @@ final class Challenges
         // O código existe apenas nesta variável e no corpo do e-mail. Nada mais.
         $code = $this->generateCode();
 
-        $challenge = DB::transaction(function () use ($context, $session, $expiresAt, $code): AuthChallenge {
+        $challenge = DB::transaction(function () use ($context, $session, $expiresAt, $code, $channel): AuthChallenge {
             // Um código vivo por vez: pedir outro invalida o anterior, senão dois códigos
             // válidos ao mesmo tempo dobrariam a superfície de adivinhação.
             $this->invalidateLiveChallenges($context);
@@ -86,7 +105,7 @@ final class Challenges
                 'recipient_id' => $context->recipient->getKey(),
                 'envelope_id' => $context->envelope->getKey(),
                 'organization_id' => $context->envelope->organization_id,
-                'channel' => DeliveryChannel::Email,
+                'channel' => $channel,
                 'code_hash' => 'pending',
                 'attempts' => 0,
                 'max_attempts' => $this->maxAttempts(),
@@ -99,13 +118,35 @@ final class Challenges
             return $challenge;
         });
 
-        // Sai pelo canal rastreado (EmailProvider + delivery_attempts), como as demais
-        // mensagens do envelope. O código existe apenas nesta variável e no corpo do e-mail.
-        Notification::route('mail', $context->recipient->email)->notify(
-            new SignerOtpNotification($context->recipient, $context->envelope, $code, $ttl, $correlationId),
-        );
+        if ($channel === DeliveryChannel::Email) {
+            // Sai pelo canal rastreado (EmailProvider + delivery_attempts), como as demais
+            // mensagens do envelope. O código existe apenas nesta variável e no corpo do e-mail.
+            Notification::route('mail', $context->recipient->email)->notify(
+                new SignerOtpNotification($context->recipient, $context->envelope, $code, $ttl, $correlationId),
+            );
 
-        $attempt = $this->deliveryAttemptFor($correlationId);
+            $attempt = $this->deliveryAttemptFor($correlationId);
+        } else {
+            // SMS/WhatsApp: provedor do canal, uma linha em delivery_attempts por tentativa.
+            // O código vai só no parâmetro `code` (marcado como sensível) e no texto — nunca
+            // em meta, log ou trilha. Tempo esgotado = `unknown`, nunca `sent`.
+            $attempt = $this->delivery->send(
+                recipient: $context->recipient,
+                channel: $channel,
+                toE164: (string) $phone,
+                purpose: DeliveryPurpose::Otp,
+                template: ChannelMessages::template($channel, DeliveryPurpose::Otp),
+                parameters: [
+                    'code' => $code,
+                    'ttl_minutes' => (string) $ttl,
+                    'title' => ChannelMessages::plain($context->envelope->title, 40),
+                ],
+                text: ChannelMessages::otpText($code, $context->envelope->title, $ttl),
+                sensitive: ['code'],
+                correlationId: $correlationId,
+                meta: ['envelope' => $context->envelope->display_code, 'ttl_minutes' => $ttl],
+            );
+        }
 
         if ($attempt !== null) {
             $challenge->forceFill(['delivery_attempt_id' => $attempt->getKey()])->save();
@@ -113,16 +154,54 @@ final class Challenges
 
         $this->hitSendLimiters($context, $request);
 
-        SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengeSent, [
+        $payload = [
             'challenge_ulid' => $challenge->ulid,
-            'channel' => DeliveryChannel::Email->value,
+            'channel' => $channel->value,
             'expires_at' => $expiresAt->toIso8601String(),
             // "sent" nunca significa "entregue"; `unknown` (provedor fake ou resposta
             // inconclusiva) tampouco significa sucesso.
             'delivery_status' => ($attempt === null ? DeliveryStatus::Unknown : $attempt->status)->value,
-        ], $correlationId);
+        ];
+
+        if ($channel !== DeliveryChannel::Email) {
+            // Evidência honesta: um código "enviado" pelo simulador não chegou a celular nenhum.
+            $payload['simulated'] = (bool) ($attempt->meta['simulated'] ?? false);
+        }
+
+        SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengeSent, $payload, $correlationId);
 
         return $challenge;
+    }
+
+    /**
+     * SMS/WhatsApp: provedor pronto, celular válido e limite diário da organização. A flag não é
+     * conferida aqui — quem já tem o método escolhido continua atendido se ela for desligada.
+     *
+     * @throws SigningRejectedException
+     */
+    private function assertChannelReady(SignerContext $context, DeliveryChannel $channel): string
+    {
+        $describe = $this->availability->describe($channel, $context->organization, checkFeature: false);
+
+        if (! $describe['available']) {
+            throw SigningRejectedException::conflict(
+                'channel_unavailable',
+                sprintf('O envio do código por %s está indisponível no momento. Fale com quem enviou o documento.', $channel->label()),
+            );
+        }
+
+        $phone = PhoneE164::normalize((string) $context->recipient->phone);
+
+        if ($phone === null) {
+            throw SigningRejectedException::conflict(
+                'phone_missing',
+                'Não há um celular válido cadastrado para você receber o código. Fale com quem enviou o documento.',
+            );
+        }
+
+        $this->delivery->assertWithinOrganizationLimit((int) $context->envelope->organization_id);
+
+        return $phone;
     }
 
     /**
@@ -247,9 +326,23 @@ final class Challenges
         $session = $challenge->signingSession()->withoutGlobalScopes()->first()
             ?? $this->sessions->startPending($context, $request);
 
-        $this->sessions->authenticate($session, $context, $request);
-
         $correlationId = SignerTokens::correlationId();
+
+        // Fase 2 §2.9: com PIN do remetente, o código abre só o "portão" do PIN. A sessão
+        // continua `pending_auth` até o PIN conferir (SenderPins::verify).
+        if ($this->pins->requiredFor($context->recipient)) {
+            $this->pins->openGate($session, $context, $request);
+
+            SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengeVerified, [
+                'challenge_ulid' => $challenge->ulid,
+                'attempts_used' => $challenge->attempts,
+                'next_step' => 'sender_pin',
+            ], $correlationId);
+
+            return $challenge;
+        }
+
+        $this->sessions->authenticate($session, $context, $request);
 
         SignerAudit::record($context->envelope, $context->recipient, AuditEventType::ChallengeVerified, [
             'challenge_ulid' => $challenge->ulid,

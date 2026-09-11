@@ -5,9 +5,10 @@
 import type {
     AcceptanceAction,
     AuditEventKind,
+    CaptureKind,
+    DeliveryChannel,
     DocumentProcessingStatus,
     EnvelopeStatus,
-    FieldType,
     InvitationStatus,
     MembershipRole,
     MembershipStatus,
@@ -18,6 +19,8 @@ import type {
     PlanCode,
     RecipientStatus,
     SignatureKind,
+    SignerAuthMethod,
+    SigningFieldType,
     SigningOrder,
     SubscriptionStatus,
 } from '@/types/enums';
@@ -201,13 +204,16 @@ export const documentProcessingTones: Record<
     blocked: 'danger',
 };
 
-export const fieldTypeLabels: Record<FieldType, string> = {
+export const fieldTypeLabels: Record<SigningFieldType, string> = {
     signature: 'Assinatura',
     initials: 'Rubrica',
     name: 'Nome completo',
     date: 'Data',
     text: 'Texto livre',
     checkbox: 'Caixa de seleção',
+    // Fase 2 §2.8 e §2.11 (espelho de `FieldType::label()`).
+    stamp: 'Carimbo visual',
+    cpf: 'CPF',
 };
 
 export const signingOrderLabels: Record<SigningOrder, string> = {
@@ -221,15 +227,54 @@ export const signatureKindLabels: Record<SignatureKind, string> = {
     uploaded: 'Imagem enviada',
 };
 
-export const authMethodLabels = {
+/**
+ * Espelho de `AuthMethod::label()`. Cada código prova a posse do canal (a caixa de e-mail
+ * ou o celular), não a identidade. `sender_pin` é o PIN combinado pelo remetente, sempre
+ * DEPOIS do código (Fase 2 §2.9).
+ */
+export const authMethodLabels: Record<SignerAuthMethod, string> = {
     email_otp: 'Código por e-mail',
-} as const;
+    sms_otp: 'Código por SMS',
+    whatsapp_otp: 'Código por WhatsApp',
+    sender_pin: 'PIN do remetente',
+};
 
-export const deliveryChannelLabels = {
+export const deliveryChannelLabels: Record<DeliveryChannel, string> = {
     email: 'E-mail',
     sms: 'SMS',
     whatsapp: 'WhatsApp',
-} as const;
+};
+
+/** Canal do convite no wizard: o e-mail sempre sai; SMS/WhatsApp somam um aviso com o link. */
+export const inviteChannelLabels: Record<DeliveryChannel, string> = {
+    email: 'Só e-mail',
+    sms: 'E-mail + SMS',
+    whatsapp: 'E-mail + WhatsApp',
+};
+
+/** "por e-mail" / "por SMS" — para frases ("Receber código por SMS"). */
+export const channelPhraseLabels: Record<DeliveryChannel, string> = {
+    email: 'e-mail',
+    sms: 'SMS',
+    whatsapp: 'WhatsApp',
+};
+
+/**
+ * Captura simples (Fase 2 §2.10), espelho de `CaptureKind::label()`. É a imagem que o
+ * participante enviou: não há comparação de rostos nem leitura do documento.
+ */
+export const captureKindLabels: Record<CaptureKind, string> = {
+    selfie: 'Foto do rosto',
+    document_front: 'Foto do documento (frente)',
+    document_back: 'Foto do documento (verso)',
+};
+
+/** Rótulo curto para as caixas de seleção do wizard. */
+export const captureKindShortLabels: Record<CaptureKind, string> = {
+    selfie: 'Rosto',
+    document_front: 'Documento (frente)',
+    document_back: 'Documento (verso)',
+};
 
 export const auditKindTones: Record<AuditEventKind, BadgeTone> = {
     ok: 'success',

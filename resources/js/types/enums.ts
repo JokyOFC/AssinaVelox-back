@@ -66,16 +66,44 @@ export type FieldType =
     | 'name'
     | 'date'
     | 'text'
-    | 'checkbox';
+    | 'checkbox'
+    /** Fase 2 §2.8 (C-BRAND): carimbo visual da organização — representação visual, não prova. */
+    | 'stamp';
+
+/**
+ * Fase 2 §2.11 (C-ID): campo CPF digitado pelo participante, conferido pelos dígitos.
+ *
+ * Fica fora de `FieldType` só porque `components/envelopes/field-types.ts` (área C-BRAND)
+ * indexa tabelas por `FieldType` e ainda não tem a entrada `cpf`. `SigningFieldType` é o
+ * espelho completo de `App\Enums\FieldType`; quando `field-types.ts` ganhar `cpf`, os dois
+ * podem voltar a ser um tipo só.
+ */
+export type IdentityFieldType = 'cpf';
+
+/** Espelho completo de `App\Enums\FieldType` (Fase 1 + `stamp` + `cpf`). */
+export type SigningFieldType = FieldType | IdentityFieldType;
 
 /** Representação visual da assinatura. */
 export type SignatureKind = 'drawn' | 'typed' | 'uploaded';
 
-/** Fase 2: sms_otp, whatsapp_otp */
-export type AuthMethod = 'email_otp';
+/**
+ * Canal do código (`App\Enums\AuthMethod`). SMS e WhatsApp: Fase 2 §2.9, flag
+ * `sms_whatsapp`. Cada método prova a posse do canal, não a identidade.
+ */
+export type AuthMethod = 'email_otp' | 'sms_otp' | 'whatsapp_otp';
 
-/** Fase 1 usa só email. */
+/**
+ * Valores de `auth_methods` da página pública e das evidências: o método do código e,
+ * quando o remetente definiu um PIN, `sender_pin` (segredo compartilhado, pedido depois do
+ * código e nunca no lugar dele).
+ */
+export type SignerAuthMethod = AuthMethod | 'sender_pin';
+
+/** Canal do convite. `email` sempre sai; `sms`/`whatsapp` mandam também um aviso com o link. */
 export type DeliveryChannel = 'email' | 'sms' | 'whatsapp';
+
+/** Fase 2 §2.10 (C-ID): o que a captura simples fotografa. Nenhum tipo verifica nada. */
+export type CaptureKind = 'selfie' | 'document_front' | 'document_back';
 
 export type DeliveryStatus =
     | 'queued'
@@ -190,7 +218,20 @@ export type AuditEventType =
     | 'team.created'
     | 'team.updated'
     | 'team.deleted'
-    | 'folder_access.updated';
+    | 'folder_access.updated'
+    // Fase 2 §2.9 (docs/fase-2/canais-e-pin.md §11)
+    | 'challenge.pin_verified'
+    | 'challenge.pin_failed'
+    | 'recipient.pin_updated'
+    | 'sender_domain.created'
+    | 'sender_domain.verified'
+    | 'sender_domain.failed'
+    | 'sender_domain.deleted'
+    // Fase 2 §2.10/§2.11 (docs/fase-2/identidade.md)
+    | 'cpf_lookup.performed'
+    | 'identity_capture.requirement_updated'
+    | 'identity_capture.recorded'
+    | 'identity_capture.purged';
 
 /** Cor/semântica de um evento na timeline (derivado no backend). */
 export type AuditEventKind = 'ok' | 'info' | 'warn';

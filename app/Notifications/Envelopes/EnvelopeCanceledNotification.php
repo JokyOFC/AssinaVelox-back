@@ -7,6 +7,7 @@ use App\Integrations\Email\DeliveryContext;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
+use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
@@ -21,7 +22,7 @@ use Illuminate\Notifications\Notification;
  */
 class EnvelopeCanceledNotification extends Notification implements ShouldQueue, TracksDelivery
 {
-    use Queueable;
+    use AppliesOrganizationBranding, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -69,9 +70,11 @@ class EnvelopeCanceledNotification extends Notification implements ShouldQueue, 
             $message->line('Motivo informado: "'.MailText::escape($this->reason).'"');
         }
 
-        return $message
+        $message
             ->line('O link que você recebeu não é mais válido e nenhuma ação é necessária da sua parte.')
             ->line('Em caso de dúvida, fale com '.MailText::escape($organization->name).'.')
             ->salutation('Atenciosamente, AssinaVelox');
+
+        return $this->applyOrganizationBranding($message, $organization);
     }
 }

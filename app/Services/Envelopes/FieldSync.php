@@ -106,6 +106,15 @@ final class FieldSync
                 continue;
             }
 
+            // Fase 2, onda B: `cpf` (flag `cpf_field`) e `stamp` (flag `branding`) só nascem
+            // com a flag; um campo já gravado desse tipo continua aceito.
+            if (! FieldTypeAvailability::allows($type, $envelope->organization)
+                && ! $this->alreadyExists($envelope, $raw, $type)) {
+                $errors["fields.{$index}.type"] = FieldTypeAvailability::unavailableMessage($type);
+
+                continue;
+            }
+
             // Papel (Fase 2 §2.4) — mesma regra da prontidão, recusada já aqui para que o
             // remetente veja o erro no campo e não só como pendência no passo 4.
             if (! $recipient->role->allowsFields()) {
@@ -592,7 +601,7 @@ final class FieldSync
             $options['placeholder'] = mb_substr(trim($placeholder), 0, 60);
         }
 
-        if (in_array($type, [FieldType::Name, FieldType::Date, FieldType::Text], true)) {
+        if (in_array($type, [FieldType::Name, FieldType::Date, FieldType::Text, FieldType::Cpf], true)) {
             $fontSize = $incoming['font_size'] ?? null;
 
             if ($fontSize !== null) {
@@ -623,5 +632,20 @@ final class FieldSync
         }
 
         return $options === [] ? null : $options;
+    }
+
+    /**
+     * O campo enviado é um campo JÁ GRAVADO deste envelope, com o mesmo tipo?
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    private function alreadyExists(Envelope $envelope, array $raw, FieldType $type): bool
+    {
+        $ulid = $this->incomingUlid($raw);
+
+        return $ulid !== null && $envelope->fields()
+            ->where('ulid', $ulid)
+            ->where('type', $type->value)
+            ->exists();
     }
 }

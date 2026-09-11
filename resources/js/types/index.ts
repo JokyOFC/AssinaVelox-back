@@ -100,6 +100,29 @@ export interface Features {
     admin_users: boolean;
     admin_audit: boolean;
     impersonation: boolean;
+    /*
+     * Fase 2, onda B — opcionais até `HandleInertiaRequests::features()` compartilhá-las
+     * (`ChannelFeatures::forOrganization` e `IdentityFeatures::forOrganization`). Ausente =
+     * desligada: a interface continua a da Fase 1.
+     */
+    /** §2.9 — PIN do remetente por participante. */
+    pin_auth?: boolean;
+    /** §2.8 parte B — domínios de envio próprios. */
+    sender_domains?: boolean;
+    /** §2.11 — tipo de campo CPF no editor. */
+    cpf_field?: boolean;
+    /** §2.11 — consulta cadastral do CPF no aceite (produção desabilitada). */
+    cpf_lookup?: boolean;
+    /** §2.11 — autopreenchimento por CNPJ (cadastro: só o interruptor global). */
+    cnpj_lookup?: boolean;
+    /** §2.10 — captura simples de foto do rosto e do documento. */
+    identity_capture?: boolean;
+    /** §2.6 — sessão presencial em tablet. */
+    in_person?: boolean;
+    /** §2.7 — link de assinatura em lote (autorização item a item). */
+    batch_signing?: boolean;
+    /** §2.2 — formulário público que gera envelope a partir de um modelo. */
+    public_forms?: boolean;
 }
 
 export interface SharedProps {

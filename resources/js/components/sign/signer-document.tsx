@@ -10,6 +10,7 @@ import {
     type OtherField,
     type SignerField,
     SignerFieldLayer,
+    type StampOwner,
 } from '@/components/sign/signer-field-layer';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,6 +42,8 @@ export interface SignerDocumentProps {
     onGoToNextPending?: () => void;
     /** Somente leitura: comprovante, sem campos clicáveis. */
     readOnly?: boolean;
+    /** Fase 2 §2.8: marca da organização para a prévia do carimbo visual. */
+    stampOwner?: StampOwner | null;
     /**
      * Estado do visualizador, para quem precisa saber se o documento chegou a ser
      * apresentado — a declaração de aceite afirma que o conteúdo foi apresentado nesta
@@ -76,6 +79,7 @@ export function SignerDocument({
     onGoToNextPending,
     readOnly = false,
     onStatusChange,
+    stampOwner = null,
 }: SignerDocumentProps) {
     const pdf = usePdfDocument(pdfUrl);
     const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -100,6 +104,7 @@ export function SignerDocument({
                     initialsImage={initialsImage}
                     activeId={activeFieldId}
                     onActivate={onActivateField}
+                    stampOwner={stampOwner}
                     className={readOnly ? 'pointer-events-none' : undefined}
                 />
             );

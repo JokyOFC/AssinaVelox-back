@@ -40,6 +40,28 @@ return [
         'tags' => filter_var(env('ASSINAVELOX_FEATURE_TAGS', false), FILTER_VALIDATE_BOOLEAN),
         'reports' => filter_var(env('ASSINAVELOX_FEATURE_REPORTS', false), FILTER_VALIDATE_BOOLEAN),
         'audit_log' => filter_var(env('ASSINAVELOX_FEATURE_AUDIT_LOG', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda B — canais (docs/fase-2/canais-e-pin.md). `sms_whatsapp` já era a chave
+        // reservada da Fase 1; `pin_auth` e `sender_domains` são novas.
+        'sms_whatsapp' => filter_var(env('ASSINAVELOX_FEATURE_SMS_WHATSAPP', false), FILTER_VALIDATE_BOOLEAN),
+        'pin_auth' => filter_var(env('ASSINAVELOX_FEATURE_PIN_AUTH', false), FILTER_VALIDATE_BOOLEAN),
+        'sender_domains' => filter_var(env('ASSINAVELOX_FEATURE_SENDER_DOMAINS', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda B — marca da organização, Reply-To e carimbo visual (C-BRAND,
+        // docs/fase-2/branding.md). `branding` já era a chave reservada da Fase 1.
+        'branding' => filter_var(env('ASSINAVELOX_FEATURE_BRANDING', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda B — identidade (C-ID, docs/fase-2/identidade.md). `cnpj_lookup` sem
+        // organização (cadastro) só depende deste interruptor.
+        'cpf_field' => filter_var(env('ASSINAVELOX_FEATURE_CPF_FIELD', false), FILTER_VALIDATE_BOOLEAN),
+        'cpf_lookup' => filter_var(env('ASSINAVELOX_FEATURE_CPF_LOOKUP', false), FILTER_VALIDATE_BOOLEAN),
+        'cnpj_lookup' => filter_var(env('ASSINAVELOX_FEATURE_CNPJ_LOOKUP', false), FILTER_VALIDATE_BOOLEAN),
+        // Desligada até a decisão jurídica da viabilidade §4.4 item 20 (LGPD art. 11, RIPD).
+        'identity_capture' => filter_var(env('ASSINAVELOX_FEATURE_IDENTITY_CAPTURE', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda B — presencial em tablet e assinatura em lote (C-PRES,
+        // docs/fase-2/presencial-e-lote.md).
+        'in_person' => filter_var(env('ASSINAVELOX_FEATURE_IN_PERSON', false), FILTER_VALIDATE_BOOLEAN),
+        'batch_signing' => filter_var(env('ASSINAVELOX_FEATURE_BATCH_SIGNING', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda B — formulário público que gera envelope (C-FORM,
+        // docs/fase-2/formulario-publico.md). Também exige `templates` ligada.
+        'public_forms' => filter_var(env('ASSINAVELOX_FEATURE_PUBLIC_FORMS', false), FILTER_VALIDATE_BOOLEAN),
         // Plataforma (só a config global).
         'admin_users' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_USERS', false), FILTER_VALIDATE_BOOLEAN),
         'admin_audit' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_AUDIT', false), FILTER_VALIDATE_BOOLEAN),
@@ -50,6 +72,25 @@ return [
     // (desligada vale 1, a regra da Fase 1).
     'multi_document' => [
         'max_documents' => (int) env('ASSINAVELOX_MAX_DOCUMENTS_PER_ENVELOPE', 10),
+    ],
+
+    // Fase 2 §2.6 — sessão presencial em tablet (C-PRES, docs/fase-2/presencial-e-lote.md §2).
+    'in_person' => [
+        // Sem nenhuma ação no dispositivo por este tempo, a sessão expira e a tela bloqueia.
+        'idle_minutes' => (int) env('ASSINAVELOX_IN_PERSON_IDLE_MINUTES', 15),
+        // Teto absoluto de uma sessão presencial, mesmo com atividade.
+        'max_hours' => (int) env('ASSINAVELOX_IN_PERSON_MAX_HOURS', 8),
+    ],
+
+    // Fase 2 §2.7 — assinatura em lote (C-PRES, docs/fase-2/presencial-e-lote.md §3).
+    'batch_signing' => [
+        // Validade do link de lote enviado por e-mail.
+        'link_ttl_days' => (int) env('ASSINAVELOX_BATCH_LINK_TTL_DAYS', 7),
+        // Validade da autenticação do lote neste navegador (depois do código).
+        'session_ttl_minutes' => (int) env('ASSINAVELOX_BATCH_SESSION_TTL_MINUTES', 30),
+        // Mínimo de documentos pendentes para oferecer o lote e teto de itens por link.
+        'min_items' => (int) env('ASSINAVELOX_BATCH_MIN_ITEMS', 2),
+        'max_items' => (int) env('ASSINAVELOX_BATCH_MAX_ITEMS', 50),
     ],
 
     // Fase 2 §2.5 — lembretes automáticos (docs/fase-2/lembretes-e-agendamento.md).
@@ -68,6 +109,59 @@ return [
         'min_lead_minutes' => (int) env('ASSINAVELOX_SCHEDULED_SEND_MIN_LEAD_MINUTES', 5),
         'max_days' => (int) env('ASSINAVELOX_SCHEDULED_SEND_MAX_DAYS', 60),
         'batch_size' => (int) env('ASSINAVELOX_SCHEDULED_SEND_BATCH_SIZE', 200),
+    ],
+
+    /*
+    | Fase 2 §2.11 — consulta pública de CNPJ (docs/fase-2/identidade.md §3,
+    | docs/integracoes/cnpj-cpf.md §2.2). Instância pública do Minha Receita, SEM SLA: a
+    | consulta só AUTOPREENCHE; falhou, o formulário continua manual. A BrasilAPI NÃO é
+    | fallback (é proxy da mesma fonte). `driver`: `minha_receita` | `fake` (simulado).
+    */
+    'cnpj' => [
+        'driver' => env('ASSINAVELOX_CNPJ_DRIVER', 'minha_receita'),
+        'base_url' => env('ASSINAVELOX_CNPJ_BASE_URL', 'https://minhareceita.org'),
+        'timeout_seconds' => (float) env('ASSINAVELOX_CNPJ_TIMEOUT', 4),
+        'connect_timeout_seconds' => (float) env('ASSINAVELOX_CNPJ_CONNECT_TIMEOUT', 2),
+        'max_response_kb' => (int) env('ASSINAVELOX_CNPJ_MAX_RESPONSE_KB', 512),
+        // A base da Receita muda por mês: 30 dias para o encontrado, 1 dia para o "não existe".
+        'cache_ttl_days' => (int) env('ASSINAVELOX_CNPJ_CACHE_TTL_DAYS', 30),
+        'not_found_ttl_hours' => (int) env('ASSINAVELOX_CNPJ_NOT_FOUND_TTL_HOURS', 24),
+        // Consultas por minuto: por usuário autenticado e, no cadastro, por IP.
+        'rate_limit' => [
+            'per_minute_user' => (int) env('ASSINAVELOX_CNPJ_RATE_USER', 10),
+            'per_minute_guest' => (int) env('ASSINAVELOX_CNPJ_RATE_GUEST', 5),
+        ],
+        'attribution' => 'Fonte: Receita Federal — dados abertos do CNPJ, via Minha Receita',
+    ],
+
+    /*
+    | Fase 2 §2.11 — consulta CADASTRAL de CPF (classe B). O serviço próprio do proprietário
+    | não tem documentação: `disabled` (padrão) responde "inconclusivo — não configurado" sem
+    | chamada nenhuma; `fake` é o simulador identificado (recusado em produção). Base legal e
+    | finalidade: decisão jurídica pendente (viabilidade §4.4 item 21).
+    */
+    'cpf_lookup' => [
+        'driver' => env('ASSINAVELOX_CPF_LOOKUP_DRIVER', 'disabled'),
+        'purpose' => 'Conferência cadastral do CPF informado no documento (finalidade pendente de validação jurídica).',
+    ],
+
+    /*
+    | Fase 2 §2.10 — captura SIMPLES de foto do rosto e do documento (docs/fase-2/identidade.md
+    | §5). Não é biometria. Flag `identity_capture` desligada até a decisão jurídica.
+    */
+    'capture' => [
+        'max_upload_kb' => (int) env('ASSINAVELOX_CAPTURE_MAX_UPLOAD_KB', 8192),
+        // Lido do cabeçalho antes de decodificar: a "PNG gigante" morre aqui.
+        'max_source_pixels' => (int) env('ASSINAVELOX_CAPTURE_MAX_SOURCE_PIXELS', 30_000_000),
+        'output_max_side' => (int) env('ASSINAVELOX_CAPTURE_OUTPUT_MAX_SIDE', 1600),
+        'jpeg_quality' => (int) env('ASSINAVELOX_CAPTURE_JPEG_QUALITY', 85),
+        'thumbnail_max_side' => (int) env('ASSINAVELOX_CAPTURE_THUMBNAIL_MAX_SIDE', 320),
+        // Retenção: a imagem é apagada N dias depois da captura (a linha fica, sem arquivo).
+        'retention_days' => (int) env('ASSINAVELOX_CAPTURE_RETENTION_DAYS', 180),
+        // Captura que nunca virou aceite (sessão abandonada) sai antes.
+        'orphan_retention_hours' => (int) env('ASSINAVELOX_CAPTURE_ORPHAN_RETENTION_HOURS', 48),
+        // Envios por participante por hora (refazer a foto conta).
+        'max_uploads_per_hour' => (int) env('ASSINAVELOX_CAPTURE_MAX_UPLOADS_PER_HOUR', 30),
     ],
 
     /*
@@ -183,6 +277,107 @@ return [
         'inconclusive_mailers' => ['log'],
         // Canal de log do LogEmailProvider (null = canal padrão).
         'log_channel' => env('ASSINAVELOX_EMAIL_LOG_CHANNEL'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 2 §2.9 — canais SMS e WhatsApp (C-CAN, docs/fase-2/canais-e-pin.md)
+    |--------------------------------------------------------------------------
+    |
+    | SMS e WhatsApp são SERVIÇOS PRÓPRIOS do proprietário, sem documentação disponível
+    | (viabilidade, regra fixa 1). Por isso existem só dois drivers por canal:
+    |
+    |  - `fake` (padrão): simulador IDENTIFICADO — grava a mensagem num registro consultável
+    |    (App\Integrations\Sms\SimulatedOutbox), loga "[SIMULADO]" e nunca transmite nada.
+    |    Só funciona com `allow_simulated` ligado, que por padrão é "fora de produção".
+    |  - `http`: adaptador do serviço próprio, DESABILITADO até a documentação chegar
+    |    (`isConfigured()` é sempre false e a mensagem lista exatamente o que falta).
+    |
+    | Nunca Evolution API, WPPConnect, Baileys, Gammu nem provedor de terceiro.
+    |
+    | Com o canal indisponível (produção sem serviço integrado), o remetente não consegue
+    | escolher SMS/WhatsApp e a interface recebe o motivo (ChannelAvailability::wizardProps()).
+    */
+    'channels' => [
+        'allow_simulated' => filter_var(
+            env('ASSINAVELOX_CHANNELS_ALLOW_SIMULATED', env('APP_ENV', 'production') !== 'production'),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        // Região padrão para interpretar números sem +DDI (libphonenumber).
+        'default_region' => env('ASSINAVELOX_PHONE_DEFAULT_REGION', 'BR'),
+        // Teto por chamada ao provedor. Tempo esgotado = resultado DESCONHECIDO (T5), nunca sucesso.
+        'timeout_seconds' => (int) env('ASSINAVELOX_CHANNELS_TIMEOUT_SECONDS', 10),
+        // Mensagens por SMS + WhatsApp por organização por dia (custo por mensagem, roadmap §2.9).
+        'org_daily_limit' => (int) env('ASSINAVELOX_CHANNELS_ORG_DAILY_LIMIT', 500),
+        'sms' => [
+            'driver' => env('ASSINAVELOX_SMS_DRIVER', 'fake'),
+        ],
+        'whatsapp' => [
+            'driver' => env('ASSINAVELOX_WHATSAPP_DRIVER', 'fake'),
+            // Nomes dos templates por finalidade. Os templates reais precisam ser aprovados no
+            // serviço próprio — até lá são só os nomes que o simulador registra.
+            'templates' => [
+                'otp' => env('ASSINAVELOX_WHATSAPP_TEMPLATE_OTP', 'assinavelox_codigo'),
+                'invitation' => env('ASSINAVELOX_WHATSAPP_TEMPLATE_INVITATION', 'assinavelox_convite'),
+                'resend' => env('ASSINAVELOX_WHATSAPP_TEMPLATE_RESEND', 'assinavelox_convite'),
+            ],
+        ],
+        /*
+        | Webhook de status (POST /webhooks/sms/status e /webhooks/whatsapp/status). Contrato
+        | proposto por nós: HMAC-SHA256 sobre "{timestamp}.{corpo bruto}" com janela de
+        | tolerância (App\Integrations\Sms\StatusCallbackSignature). Com o provedor desabilitado
+        | a rota responde 503. `simulated_secret` só vale para o simulador (testes/local).
+        */
+        'status_webhook' => [
+            'tolerance_seconds' => (int) env('ASSINAVELOX_CHANNELS_WEBHOOK_TOLERANCE_SECONDS', 300),
+            'simulated_secret' => env('ASSINAVELOX_CHANNELS_SIMULATED_WEBHOOK_SECRET'),
+        ],
+        // Registro do simulador: em memória sempre; também no cache no ambiente `local`, para
+        // o desenvolvedor ler o código "enviado" (nunca em log).
+        'simulated_outbox' => [
+            'persist' => filter_var(env('ASSINAVELOX_CHANNELS_SIMULATED_PERSIST', env('APP_ENV') === 'local'), FILTER_VALIDATE_BOOLEAN),
+            'ttl_minutes' => (int) env('ASSINAVELOX_CHANNELS_SIMULATED_TTL_MINUTES', 30),
+            'max_messages' => 50,
+        ],
+    ],
+
+    /*
+    | Fase 2 §2.9 — PIN do remetente (flag `pin_auth`). O remetente define o PIN no wizard e o
+    | comunica POR FORA; o sistema nunca o envia. Guardado só como password_hash de um HMAC
+    | com segredo do servidor (App\Services\Signing\Channels\SenderPins). É autenticação
+    | ADICIONAL: vem depois do código do canal, nunca o substitui.
+    */
+    'pin' => [
+        'min_length' => 4,
+        'max_length' => 8,
+        // Erros antes do bloqueio temporário.
+        'max_attempts' => (int) env('ASSINAVELOX_PIN_MAX_ATTEMPTS', 5),
+        // Duração do bloqueio temporário (minutos). Depois dele é preciso pedir outro código.
+        'lockout_minutes' => (int) env('ASSINAVELOX_PIN_LOCKOUT_MINUTES', 15),
+        // Bloqueios temporários seguidos até o PIN ficar bloqueado de vez (remetente redefine).
+        'max_lockouts' => (int) env('ASSINAVELOX_PIN_MAX_LOCKOUTS', 3),
+    ],
+
+    /*
+    | Fase 2 §2.8 — domínios de envio (flag `sender_domains`, classe B). A verificação real
+    | depende da API do serviço de e-mail do proprietário (sem documentação): `http` fica
+    | desabilitado; `fake` é o simulador. Domínio verificado PELO SIMULADOR nunca vira
+    | remetente: sem verificação real o e-mail sai pelo remetente padrão com Reply-To do cliente.
+    */
+    'sender_domains' => [
+        'verifier' => env('ASSINAVELOX_SENDER_DOMAIN_VERIFIER', 'fake'),
+        'max_per_organization' => (int) env('ASSINAVELOX_SENDER_DOMAINS_MAX', 5),
+        // Parte local do remetente próprio: {from_local_part}@{domínio verificado}.
+        'from_local_part' => env('ASSINAVELOX_SENDER_DOMAIN_LOCAL_PART', 'assinaturas'),
+    ],
+
+    /*
+    | Contratos reservados com simulador identificado (C-CAN). Só existe o driver `fake`;
+    | a implementação real de cada um é de outra onda (roadmap §2.13, §2.21, §3.6).
+    */
+    'integrations' => [
+        'timestamp' => ['driver' => env('ASSINAVELOX_TIMESTAMP_DRIVER', 'fake')],
+        'fiscal_invoice' => ['driver' => env('ASSINAVELOX_FISCAL_INVOICE_DRIVER', 'fake')],
     ],
 
     // Unidade de consumo do plano: envelope_sent (Fase 1). Reservado para outras unidades.
@@ -547,6 +742,8 @@ return [
                 'two_factor_secret', 'two_factor_recovery_codes', 'recovery_code',
                 'pfx', 'pfx_password', 'passphrase', 'private_key',
                 'tax_id', 'cpf', 'cnpj', 'document',
+                // Fase 2, onda B: PIN do remetente (C-CAN) e imagem da captura simples (C-ID).
+                'pin', 'image',
             ],
             /*
             | Exceções à lista acima, conferidas ANTES dela e por nome exato.

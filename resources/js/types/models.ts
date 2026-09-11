@@ -11,10 +11,11 @@ import type {
     AuditEventKind,
     AuditEventType,
     AuthMethod,
+    CaptureKind,
+    DeliveryChannel,
     DocumentProcessingStatus,
     DocumentSourceType,
     EnvelopeStatus,
-    FieldType,
     InvitationStatus,
     MembershipRole,
     MembershipStatus,
@@ -27,6 +28,8 @@ import type {
     RecipientStatus,
     SignatureKind,
     SignatureStatus,
+    SignerAuthMethod,
+    SigningFieldType,
     SigningOrder,
     SubscriptionStatus,
 } from './enums';
@@ -272,11 +275,188 @@ export interface WizardRecipient {
     role: string;
     order: number; // 1..n (persistido também no modo paralelo)
     color_index: number; // paleta de `components/envelopes/recipient-colors`
-    channel: 'email';
+    /** Canal do convite; `email` = só e-mail (Fase 1). Fase 2 §2.9: `sms`/`whatsapp` somam um aviso. */
+    channel: DeliveryChannel;
     auth_methods: AuthMethod[]; // Fase 1: sempre ['email_otp']
     /** Fase 2 §2.4: papel de domínio. Ausente = `signer` (Fase 1). */
     participant_role?: ParticipantRole;
     participant_role_label?: string;
+    /*
+     * Fase 2 §2.9 (`RecipientChannels::wizardFields`, docs/fase-2/canais-e-pin.md §9.1).
+     * Ausentes enquanto o backend não mesclar esses campos no `RecipientWizardResource`.
+     */
+    /** E.164 (`+5511912345678`) como o servidor gravou, ou o que o remetente digitou. */
+    phone?: string | null;
+    phone_masked?: string;
+    /** Canal do código. Ausente = o primeiro de `auth_methods`. */
+    auth_method?: AuthMethod;
+    auth_method_label?: string;
+    /** Há PIN do remetente gravado. O PIN em si nunca volta do servidor. */
+    has_pin?: boolean;
+    /**
+     * SÓ NO CLIENTE: PIN digitado e ainda não salvo. Viaja uma única vez no próximo
+     * `recipients.sync` e é descartado quando a gravação volta.
+     */
+    pin?: string;
+    /** SÓ NO CLIENTE: pedir a remoção do PIN no próximo `recipients.sync`. */
+    remove_pin?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2 §2.9 — canais, código por SMS/WhatsApp e PIN (docs/fase-2/canais-e-pin.md §9)
+// ---------------------------------------------------------------------------
+
+/** Disponibilidade de um canal agora (`ChannelAvailability::describe`). */
+export interface ChannelInfo {
+    channel: DeliveryChannel;
+    label: string;
+    available: boolean;
+    /** Provedor simulado: a mensagem não chega a celular nenhum. */
+    simulated: boolean;
+    provider: string;
+    reason_code: 'feature_disabled' | 'provider_disabled' | null;
+    /** Motivo pronto para a tela quando indisponível. */
+    reason: string | null;
+    /** "Ambiente de testes: as mensagens por SMS são simuladas…" */
+    notice: string | null;
+}
+
+export interface AuthMethodInfo {
+    value: AuthMethod;
+    label: string;
+    channel: DeliveryChannel;
+    requires_phone: boolean;
+    available: boolean;
+    simulated: boolean;
+    reason_code: string | null;
+    reason: string | null;
+    notice: string | null;
+}
+
+/** Prop `channels` do wizard (`ChannelAvailability::wizardProps`). */
+export interface WizardChannels {
+    /** Flag `sms_whatsapp` da organização. */
+    enabled: boolean;
+    channels: Record<DeliveryChannel, ChannelInfo>;
+    auth_methods: AuthMethodInfo[];
+    pin: {
+        /** Flag `pin_auth` da organização. */
+        enabled: boolean;
+        min_length: number;
+        max_length: number;
+        notice: string;
+    };
+    phone: { default_region: string; example: string };
+}
+
+/** Prop `auth` da página pública (`SignerAuthProps::for`). */
+export interface SignerAuth {
+    method: AuthMethod;
+    method_label: string;
+    channel: DeliveryChannel;
+    channel_label: string;
+    /** "m•••@exemplo.com" ou "+55 •••••••5678". */
+    destination: string;
+    simulated: boolean;
+    available: boolean;
+    unavailable_reason: string | null;
+    notice: string | null;
+    /** `pin` = o código já foi confirmado e falta o PIN do remetente. */
+    step: 'code' | 'pin';
+    pin: null | {
+        required: true;
+        step_active: boolean;
+        min_length: number;
+        max_length: number;
+        attempts_left: number;
+        locked_until: string | null;
+        blocked: boolean;
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2 §2.10/§2.11 — captura simples e CNPJ (docs/fase-2/identidade.md §7)
+// ---------------------------------------------------------------------------
+
+/** Uma foto exigida na etapa de captura (`CaptureStep::props`). */
+export interface IdentityCaptureItem {
+    kind: CaptureKind;
+    label: string;
+    instructions: string;
+    facing_mode: 'user' | 'environment';
+    required: true;
+    captured: boolean;
+    captured_at: string | null;
+    width: number | null;
+    height: number | null;
+    /** POST multipart `image` (+ `source`). `null` antes do código. */
+    upload_url: string | null;
+}
+
+/** Prop `identity_capture` da página pública; `null` quando não se aplica. */
+export interface IdentityCaptureStep {
+    required: true;
+    complete: boolean;
+    title: string;
+    items: IdentityCaptureItem[];
+    accept: string[];
+    max_upload_kb: number;
+    retention_days: number;
+    notice: string;
+}
+
+/** Foto na página de evidências do remetente (`CaptureEvidence::forEnvelope`). */
+export interface IdentityCaptureEvidence {
+    id: string;
+    kind: CaptureKind;
+    kind_label: string;
+    /** "Imagem enviada pelo participante — origem informada pelo navegador: …" */
+    label: string;
+    /** Origem DECLARADA pelo navegador no envio; não verificada. */
+    source?: 'camera' | 'upload' | null;
+    /** "Origem informada pelo navegador: câmera (não verificada)" … */
+    source_label?: string;
+    captured_at: string | null;
+    width: number | null;
+    height: number | null;
+    sha256: string | null;
+    available: boolean;
+    purged_at: string | null;
+    /** data URI da miniatura (≤ 320 px) ou `null` depois da retenção. */
+    thumbnail: string | null;
+}
+
+/** Resposta de `settings.organization.cnpj` e `cnpj.lookup`. */
+export interface CnpjLookupResult {
+    status: 'found' | 'not_found' | 'invalid' | 'unavailable' | 'rate_limited';
+    cnpj: string | null;
+    data: null | {
+        legal_name: string | null;
+        trade_name: string | null;
+        registration_status: string | null;
+        address: {
+            street: string | null;
+            number: string | null;
+            complement?: string | null;
+            district: string | null;
+            city: string | null;
+            state: string | null;
+            postal_code: string | null;
+        } | null;
+        cnae: { code: string | null; description: string | null } | null;
+    };
+    suggestions: null | { legal_name: string | null; name: string | null };
+    source: null | {
+        provider: string;
+        simulated: boolean;
+        attribution?: string | null;
+        fetched_at?: string | null;
+        cached?: boolean;
+        reason?: string | null;
+    };
+    message: string;
+    manual_fill: true;
+    retry_after: number | null;
 }
 
 /**
@@ -296,7 +476,7 @@ export interface WizardField {
     client_id: string;
     /** ULID do destinatário (o backend resolve `recipient_client_id` como ULID). */
     recipient_client_id: string;
-    type: FieldType;
+    type: SigningFieldType;
     /** 1-based. `'all'` só para `initials` (rubrica em todas as páginas). */
     page: number | 'all';
     /** Frações [0,1] do CropBox exibido, origem no canto superior esquerdo. */
@@ -406,8 +586,13 @@ export interface Recipient {
     color_index: number;
     status: RecipientStatus;
     status_label: string;
-    channel: 'email';
-    auth_methods: AuthMethod[];
+    channel: DeliveryChannel;
+    /** Pode trazer `sender_pin` quando o remetente definiu um PIN (Fase 2 §2.9). */
+    auth_methods: SignerAuthMethod[];
+    /** Revisão da onda B: método do código, celular mascarado e estado do PIN (edição pós-envio). */
+    auth_method?: Exclude<SignerAuthMethod, 'sender_pin'>;
+    phone_masked?: string | null;
+    pin_state?: 'active' | 'locked' | 'blocked' | null;
     sent_at: string | null;
     viewed_at: string | null;
     signed_at: string | null;
@@ -428,7 +613,7 @@ export interface SigningField {
     recipient_id: string;
     /** Fase 2 §2.3: arquivo onde o campo está. */
     document_id?: string | null;
-    type: FieldType;
+    type: SigningFieldType;
     page: number | 'all';
     x: number;
     y: number;
@@ -459,8 +644,8 @@ export interface RecipientListItem {
     email: string;
     role: string | null;
     envelope: { display_code: string; title: string; status: EnvelopeStatus };
-    channel: 'email';
-    auth_methods: AuthMethod[];
+    channel: DeliveryChannel;
+    auth_methods: SignerAuthMethod[];
     status: RecipientStatus;
     status_label: string;
     when: string;

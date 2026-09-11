@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Requests\Settings\UpdateOrganizationSettingsRequest;
 use App\Http\Requests\Settings\UpdateSecuritySettingsRequest;
+use App\Services\Branding\BrandingPresenter;
 use App\Support\CurrentOrganization;
 use App\Support\OrganizationSettings;
 use App\Support\TaxId;
@@ -38,7 +39,8 @@ class GeneralController extends Controller
                 'tax_id' => TaxId::format($organization->tax_id),
                 'contact_email' => $settings->contactEmail(),
                 'initials' => $organization->initials,
-                'logo_url' => null,
+                // Fase 2 §2.8 (C-BRAND): logo salvo, só com a flag `branding`; senão null.
+                'logo_url' => app(BrandingPresenter::class)->logoUrl($organization),
                 'timezone' => $organization->timezone,
             ],
             'security' => [

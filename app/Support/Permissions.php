@@ -49,6 +49,11 @@ final class Permissions
         'settings.security.update' => Permission::ManageSettings,
         'settings.signing' => Permission::ManageSettings,
         'settings.signing.update' => Permission::ManageSettings,
+        // Fase 2, onda B (C-BRAND): Configurações › Marca, sob `org.role:owner,admin`.
+        'settings.branding' => Permission::ManageSettings,
+        'settings.branding.update' => Permission::ManageSettings,
+        'settings.branding.logo.store' => Permission::ManageSettings,
+        'settings.branding.logo.destroy' => Permission::ManageSettings,
     ];
 
     /** @var array<string, Permission> */

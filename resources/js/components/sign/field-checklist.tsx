@@ -3,6 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SignerField } from '@/components/sign/signer-field-layer';
+import { formatCpf, isValidCpf, onlyDigits } from '@/lib/format';
 import { fieldTypeLabels } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
@@ -113,6 +114,74 @@ export function FieldChecklist({
                 }
 
                 const text = typeof value === 'string' ? value : '';
+
+                if (field.type === 'cpf') {
+                    const serverError = errors?.[`fields.${field.id}`];
+                    const localError =
+                        onlyDigits(text).length === 11 && !isValidCpf(text)
+                            ? 'CPF inválido: confira os dígitos.'
+                            : null;
+                    const message = serverError ?? localError;
+
+                    return (
+                        <div
+                            key={field.id}
+                            className={cn(
+                                'rounded-[10px] border p-2.5',
+                                active
+                                    ? 'border-primary bg-primary-soft'
+                                    : 'border-border',
+                            )}
+                        >
+                            <Label
+                                htmlFor={`field-${field.id}`}
+                                className="text-[12px]"
+                            >
+                                {label}
+                                {field.required && (
+                                    <span className="text-danger"> *</span>
+                                )}
+                            </Label>
+                            <Input
+                                id={`field-${field.id}`}
+                                ref={(element) =>
+                                    registerRef(field.id, element)
+                                }
+                                value={text}
+                                inputMode="numeric"
+                                autoComplete="off"
+                                maxLength={14}
+                                placeholder={
+                                    field.placeholder ?? '000.000.000-00'
+                                }
+                                aria-invalid={Boolean(message)}
+                                aria-describedby={`field-${field.id}-hint`}
+                                onChange={(event) =>
+                                    onChange(
+                                        field.id,
+                                        formatCpf(event.target.value),
+                                    )
+                                }
+                                className="tabular mt-1 h-9"
+                            />
+                            {message && (
+                                <p
+                                    role="alert"
+                                    className="text-danger mt-1 text-[12px]"
+                                >
+                                    {message}
+                                </p>
+                            )}
+                            <p
+                                id={`field-${field.id}-hint`}
+                                className="text-muted-foreground mt-1 text-[11.5px] leading-[1.45]"
+                            >
+                                O CPF é conferido só pelos dígitos; isso não
+                                confirma que a pessoa é a titular.
+                            </p>
+                        </div>
+                    );
+                }
 
                 return (
                     <div

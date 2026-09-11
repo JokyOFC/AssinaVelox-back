@@ -11,6 +11,8 @@ use App\Models\AuditEvent;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
+use App\Services\Identity\CaptureEvidence;
+use App\Services\InPerson\InPersonEvidence;
 use App\Services\Verification\EvidenceDossier;
 use App\Services\Verification\HashLedger;
 use App\Services\Verification\SignatureNarrative;
@@ -107,6 +109,10 @@ class EnvelopeEvidenceController extends Controller
             'notes' => $this->dossier->notes(),
             // Fase 2 §2.3 (aditivo): um item por arquivo, com os resumos e quem aceitou.
             'documents' => $this->dossier->documents($envelope, $request->user()?->can('download', $envelope) ?? false),
+            // Fase 2 §2.10 (C-ID): nota fixa sobre as fotos — não houve verificação de identidade.
+            'identity_capture_notice' => CaptureEvidence::NOTICE,
+            // Fase 2 §2.6 (C-PRES): aceites registrados no dispositivo presencial.
+            'in_person' => InPersonEvidence::forEnvelope($envelope),
             'terms_version' => $envelope->terms_version,
             'verify_url' => $envelope->verification_code
                 ? route('verify.show', ['code' => $envelope->verification_code])

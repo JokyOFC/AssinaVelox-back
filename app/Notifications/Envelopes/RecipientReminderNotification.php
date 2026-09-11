@@ -7,6 +7,7 @@ use App\Integrations\Email\DeliveryContext;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
+use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
@@ -26,7 +27,7 @@ use Illuminate\Notifications\Notification;
  */
 class RecipientReminderNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
-    use Queueable;
+    use AppliesOrganizationBranding, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -79,9 +80,11 @@ class RecipientReminderNotification extends Notification implements ShouldBeEncr
             $message->line('O prazo para assinar termina em '.$this->deadline().'.');
         }
 
-        return $message
+        $message
             ->line('Este link substitui os enviados antes — use sempre o e-mail mais recente. Ele é pessoal: não encaminhe esta mensagem.')
             ->salutation('Atenciosamente, AssinaVelox');
+
+        return $this->applyOrganizationBranding($message, $organization);
     }
 
     private function firstName(): string

@@ -153,3 +153,23 @@ Schedule::command('envelopes:dispatch-scheduled')
     ->withoutOverlapping(5)
     ->runInBackground()
     ->onOneServer();
+
+/*
+| Fase 2, onda B — retenção.
+|
+| Fotos da captura simples (docs/fase-2/identidade.md §5.5): o arquivo sai depois de
+| `capture.retention_days` e a foto que nunca virou aceite, depois de
+| `capture.orphan_retention_hours`. Envios de formulário público não confirmados
+| (docs/fase-2/formulario-publico.md §5) saem quando o link vence. Ambos idempotentes e
+| inertes com as flags desligadas (não há o que apagar).
+*/
+Schedule::command('identity:purge-captures')
+    ->dailyAt('04:40')
+    ->withoutOverlapping(30)
+    ->onOneServer();
+
+Schedule::command('public-forms:purge-submissions')
+    ->hourlyAt(25)
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->onOneServer();

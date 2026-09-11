@@ -72,6 +72,16 @@ const SMOKE_WAVE_B_STUBS_404 = [
     'sign.document',
     'sign.page',
     'sign.download',
+    // Fase 2 §2.2 (C-FORM): token sintético de formulário público e de confirmação. Token
+    // desconhecido, rascunho, revogado ou flag desligada recebem o mesmo 404
+    // (docs/fase-2/formulario-publico.md §5).
+    'form_fill.show',
+    'form_fill.confirm.show',
+    // Fase 2 §2.6/§2.7 (C-PRES): PDF do dispositivo presencial e do item do lote. Sem sessão
+    // presencial / lote autenticado neste navegador, 404 seco — mesma regra de `sign.document`
+    // (docs/fase-2/presencial-e-lote.md §5).
+    'in_person.kiosk.document',
+    'sign.batch.document',
 ];
 
 /**
@@ -101,6 +111,10 @@ const SMOKE_OVERRIDES = [
     'templates.preview' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'templates.source.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'templates.picker' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 2 §2.2 (docs/fase-2/formulario-publico.md): com a flag `public_forms` desligada —
+    // o padrão — todas as telas internas do formulário público respondem 404.
+    'public_forms.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'public_forms.edit' => ['owner' => 404, 'admin' => 404, 'member' => 404],
 ];
 
 /**
@@ -137,6 +151,11 @@ function smokeRouteParameters(string $name, array $ctx): array
         'verification.verify' => ['id' => $user->getKey(), 'hash' => sha1($user->email)],
         // Fase 2: ULID sintético — com a flag desligada a rota responde 404 antes do binding.
         'templates.edit', 'templates.preview', 'templates.source.show' => ['template' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 2 §2.2: ULID e tokens sintéticos — flag desligada (interno) e token desconhecido
+        // (público) respondem 404.
+        'public_forms.edit' => ['publicForm' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        'form_fill.show' => ['token' => str_repeat('c', 40)],
+        'form_fill.confirm.show' => ['token' => str_repeat('c', 40), 'confirmation' => str_repeat('d', 48)],
         default => [],
     };
 }

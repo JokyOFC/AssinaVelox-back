@@ -42,6 +42,9 @@ final class FieldGeometry
         'date' => [40.0, 9.0],
         'text' => [18.0, 9.0],
         'checkbox' => [8.0, 8.0],
+        // Fase 2, onda B: CPF digitado (C-ID) e carimbo visual da organização (C-BRAND).
+        'cpf' => [40.0, 9.0],
+        'stamp' => [60.0, 20.0],
     ];
 
     /** Piso absoluto em frações: nada menor que isso sobrevive ao DECIMAL(9,6). */

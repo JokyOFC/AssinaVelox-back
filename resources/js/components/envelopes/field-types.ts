@@ -3,6 +3,7 @@ import {
     CheckSquare,
     PenLine,
     Signature,
+    Stamp,
     Type,
     UserRound,
 } from 'lucide-react';
@@ -24,26 +25,47 @@ export const FIELD_TYPES: readonly FieldType[] = [
     'checkbox',
 ] as const;
 
-export const FIELD_TYPE_ICONS: Record<FieldType, LucideIcon> = {
+/**
+ * Fase 2 §2.8 (C-BRAND): carimbo visual da organização (logo + nome) —
+ * representação visual, não prova. Só entra na paleta com `features.branding`;
+ * sem a flag a paleta é exatamente `FIELD_TYPES`.
+ */
+export type PaletteFieldType = FieldType | 'stamp';
+
+export const STAMP_FIELD_TYPE = 'stamp' as const;
+
+export function paletteFieldTypes(features: {
+    branding?: boolean;
+}): readonly PaletteFieldType[] {
+    return features.branding ? [...FIELD_TYPES, STAMP_FIELD_TYPE] : FIELD_TYPES;
+}
+
+export const FIELD_TYPE_ICONS: Record<PaletteFieldType, LucideIcon> = {
     signature: Signature,
     initials: PenLine,
     name: UserRound,
     date: CalendarDays,
     text: Type,
     checkbox: CheckSquare,
+    stamp: Stamp,
 };
 
 /**
  * Tamanho padrão ao inserir um campo, em fração da página
  * (mesma convenção de `lib/geometry.ts`).
  */
-export const DEFAULT_FIELD_SIZE: Record<FieldType, { w: number; h: number }> = {
+export const DEFAULT_FIELD_SIZE: Record<
+    PaletteFieldType,
+    { w: number; h: number }
+> = {
     signature: { w: 0.28, h: 0.06 },
     initials: { w: 0.1, h: 0.04 },
     name: { w: 0.28, h: 0.035 },
     date: { w: 0.16, h: 0.03 },
     text: { w: 0.24, h: 0.035 },
     checkbox: { w: 0.03, h: 0.022 },
+    // Proporção 3:1 do desenho do carimbo (StampRenderer 900×300) em A4.
+    stamp: { w: 0.3, h: 0.07 },
 };
 
 /**
@@ -64,13 +86,18 @@ export const INITIALS_ON_ALL_PAGES_RECT = {
  * pontos (não em fração) porque o que importa é o campo ser legível no papel,
  * qualquer que seja o tamanho da página.
  */
-export const FIELD_MIN_SIZE_PT: Record<FieldType, { w: number; h: number }> = {
+export const FIELD_MIN_SIZE_PT: Record<
+    PaletteFieldType,
+    { w: number; h: number }
+> = {
     signature: { w: 56, h: 20 },
     initials: { w: 22, h: 14 },
     name: { w: 40, h: 9 },
     date: { w: 40, h: 9 },
     text: { w: 18, h: 9 },
     checkbox: { w: 8, h: 8 },
+    // Proposta para `FieldGeometry::MINIMUM_POINTS['stamp']` (fora da área C-BRAND).
+    stamp: { w: 60, h: 20 },
 };
 
 /** Fallback quando o documento não informou as dimensões da página. */
@@ -82,7 +109,7 @@ const A4_POINTS: PageSize = { width: 595.28, height: 841.89 };
  * o mesmo fallback do servidor.
  */
 export function minSizeFor(
-    type: FieldType,
+    type: PaletteFieldType,
     pagePoints?: PageSize | null,
 ): MinSize {
     const page = pagePoints ?? A4_POINTS;
@@ -95,17 +122,19 @@ export function minSizeFor(
 }
 
 /** Texto exibido dentro da caixa vazia, por tipo. */
-export const FIELD_TYPE_PLACEHOLDER: Record<FieldType, string | null> = {
+export const FIELD_TYPE_PLACEHOLDER: Record<PaletteFieldType, string | null> = {
     signature: null,
     initials: null,
     name: 'Nome completo',
     date: 'DD/MM/AAAA',
     text: 'Texto',
     checkbox: null,
+    stamp: null,
 };
 
 /** Descrição curta usada na paleta e no painel de propriedades. */
-export const FIELD_TYPE_HINTS: Record<FieldType, string> = {
+export const FIELD_TYPE_HINTS: Record<PaletteFieldType, string> = {
+    stamp: 'Carimbo visual da organização (logo e nome) — representação visual, não prova.',
     signature: 'Representação visual da assinatura do signatário.',
     initials: 'Rubrica curta, geralmente no rodapé de cada página.',
     name: 'Nome do signatário, preenchido no aceite.',

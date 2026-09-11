@@ -12,6 +12,9 @@ use App\Models\SignatureAcceptance;
 use App\Models\SigningSession;
 use App\Models\SigningSessionDocument;
 use App\Models\User;
+use App\Services\Branding\BrandingPresenter;
+use App\Services\Identity\CaptureStep;
+use App\Services\Signing\Channels\SignerAuthProps;
 use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -58,6 +61,10 @@ final class SignerPageProps
         private readonly SignerPresentation $presentation,
         private readonly SignerSessions $sessions,
         private readonly SignerDownloadGrants $grants,
+        // Fase 2, onda B: canal do código e PIN (C-CAN), captura simples (C-ID), marca (C-BRAND).
+        private readonly SignerAuthProps $auth,
+        private readonly CaptureStep $captureStep,
+        private readonly BrandingPresenter $branding,
     ) {}
 
     /**
@@ -98,6 +105,9 @@ final class SignerPageProps
             'limits' => self::limits(),
             'action' => null,
             'copy' => null,
+            // Fase 2, onda B: nada a dizer sobre um link que não abre.
+            'signer_auth' => null,
+            'identity_capture' => null,
         ];
     }
 
@@ -134,18 +144,29 @@ final class SignerPageProps
             'privacy' => [
                 // O texto depende do papel: o visualizador não registra aceite e o aprovador
                 // não grava imagem de assinatura (Fase 2 §2.4, T1).
-                'version' => ConsentText::privacyNoticeVersion($context->recipient->role),
-                'summary' => ConsentText::privacySummary($context->organization, $context->recipient->role),
-                'notice' => ConsentText::privacyNotice($context->organization, $context->recipient->role),
+                // Fase 2, onda B: o texto também depende do canal do código, do PIN, do campo
+                // CPF e das fotos exigidas deste participante (idêntico ao da Fase 1 sem eles).
+                'version' => ConsentText::privacyNoticeVersion($context->recipient->role, $context->recipient),
+                'summary' => ConsentText::privacySummary($context->organization, $context->recipient->role, $context->recipient),
+                'notice' => ConsentText::privacyNotice($context->organization, $context->recipient->role, $context->recipient),
             ],
             'authorization' => null,
             'legal' => self::legal(),
             'receipt' => null,
             'refusal' => $this->refusal($context),
-            'auth_methods' => [AuthMethod::EmailOtp->value],
+            // Fase 2 §2.9 (C-CAN): o método do participante e, quando há PIN, `sender_pin`.
+            // Participante da Fase 1: `['email_otp']`, como antes.
+            'auth_methods' => $this->auth->authMethods($context),
             'limits' => self::limits(),
             'action' => self::action($context),
             'copy' => null,
+            // Fase 2 §2.9 (C-CAN): canal do código, destino mascarado e etapa do PIN. Nome
+            // `signer_auth` (e não `auth`) para não sombrear a prop compartilhada `auth.user`.
+            'signer_auth' => $screen === 'identify' ? $this->auth->for($context, $request) : null,
+            // Fase 2 §2.10 (C-ID): etapa de captura simples; null quando não se aplica.
+            'identity_capture' => in_array($screen, ['identify', 'sign'], true)
+                ? $this->captureStep->props($context, $screen === 'sign' ? $session : null)
+                : null,
         ];
 
         if ($screen === 'sign' && $session !== null && $version !== null) {
@@ -375,10 +396,14 @@ final class SignerPageProps
         /** @var User|null $creator */
         $creator = User::query()->whereKey($context->envelope->created_by_user_id)->first();
 
+        // Fase 2 §2.8 (C-BRAND): flag `branding` + marca salva; senão null (Fase 1).
+        $brand = $this->branding->forSigner($context->organization);
+
         return [
             'organization_name' => $context->organization->name,
             'organization_initials' => $context->organization->initials,
-            'logo_url' => null,
+            'logo_url' => $brand['logo_url'] ?? null,
+            'brand' => $brand,
             // Nome do remetente, sem e-mail: a pessoa precisa saber com quem falar, e o
             // canal de contato é a organização, não o endereço pessoal de quem enviou.
             'user_name' => $creator === null ? $context->organization->name : $creator->name,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Envelopes;
 
+use App\Enums\AuthMethod;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Envelopes\SyncRecipientsRequest;
 use App\Models\Envelope;
@@ -9,9 +10,12 @@ use App\Models\Recipient;
 use App\Services\Envelopes\RecipientSync;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
 use App\Services\Envelopes\Sending\ResendInvitations;
+use App\Services\Signing\Channels\RecipientChannels;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Signatários do envelope — ROUTES §1.2 (sync, update, resend, resendAll).
@@ -24,6 +28,7 @@ class EnvelopeRecipientController extends Controller
     public function __construct(
         private readonly RecipientSync $recipients,
         private readonly ResendInvitations $resends,
+        private readonly RecipientChannels $channels,
     ) {}
 
     /**
@@ -42,8 +47,11 @@ class EnvelopeRecipientController extends Controller
     }
 
     /**
-     * PATCH: edita nome/e-mail de um signatário ainda pendente depois do envio.
-     * Trocar o e-mail revoga os links ativos; o reenvio depende do agente de envio.
+     * PATCH: edita um signatário ainda pendente depois do envio — nome e e-mail e, na Fase 2
+     * (onda B), o celular, o método do código e um PIN novo (docs/fase-2/canais-e-pin.md).
+     * Trocar o e-mail revoga os links ativos; o reenvio depende do agente de envio. Trocar o
+     * celular ou o método encerra as sessões e os códigos vivos; o PIN novo desbloqueia.
+     * Sem `phone`/`auth_method`/`pin` no corpo, o comportamento é o da Fase 1.
      */
     public function update(Request $request, Envelope $envelope, Recipient $recipient): RedirectResponse
     {
@@ -54,7 +62,10 @@ class EnvelopeRecipientController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
-        ], [], ['name' => 'nome', 'email' => 'e-mail']);
+            'phone' => ['nullable', 'string', 'max:32'],
+            'auth_method' => ['nullable', 'string', Rule::in(AuthMethod::values())],
+            'pin' => ['nullable', 'string', 'regex:/^\d*$/', 'max:8'],
+        ], [], ['name' => 'nome', 'email' => 'e-mail', 'phone' => 'celular', 'auth_method' => 'método do código', 'pin' => 'PIN']);
 
         if ($envelope->status->isTerminal()) {
             return back()->with('error', 'Ação indisponível no status atual.');
@@ -62,15 +73,38 @@ class EnvelopeRecipientController extends Controller
 
         $recipient->setRelation('envelope', $envelope);
 
+        $channelInput = array_filter(
+            array_intersect_key($validated, array_flip(['phone', 'auth_method', 'pin'])),
+            fn ($value): bool => is_string($value) && trim($value) !== '',
+        );
+
+        if ($channelInput !== [] && ! $recipient->status->isPendingSignature()) {
+            throw ValidationException::withMessages([
+                'name' => 'Este signatário já concluiu a etapa e não pode mais ser editado.',
+            ]);
+        }
+
+        // Valida canal/PIN ANTES de gravar qualquer coisa: um erro aqui não deixa meia edição.
+        $channels = $channelInput === [] ? null : $this->channels->resolveSent($envelope, $recipient, $channelInput);
+
         $result = $this->recipients->updatePending($recipient, $validated['name'], $validated['email']);
 
+        $applied = $channels === null
+            ? ['channel_changed' => false, 'pin_set' => false]
+            : $this->channels->applySent($envelope, $recipient, $channels);
+
+        $extra = trim(implode(' ', array_filter([
+            $applied['channel_changed'] ? 'Os códigos e as sessões abertas antes da troca foram encerrados; o participante pede um código novo ao abrir o link.' : null,
+            $applied['pin_set'] ? 'PIN novo definido — combine-o com o participante por fora do sistema.' : null,
+        ])));
+
         if (! $result['email_changed']) {
-            return back()->with('success', 'Signatário atualizado.');
+            return back()->with('success', trim('Signatário atualizado. '.$extra));
         }
 
         return $result['rotated']
-            ? back()->with('success', 'Signatário atualizado e novo convite enviado.')
-            : back()->with('warning', 'Signatário atualizado. O link anterior foi revogado — reenvie o convite para o novo e-mail.');
+            ? back()->with('success', trim('Signatário atualizado e novo convite enviado. '.$extra))
+            : back()->with('warning', trim('Signatário atualizado. O link anterior foi revogado — reenvie o convite para o novo e-mail. '.$extra));
     }
 
     /**

@@ -1,3 +1,4 @@
+import { usePage } from '@inertiajs/react';
 import { Copy, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -5,16 +6,21 @@ import {
     FieldLayer,
 } from '@/components/envelopes/field-layer';
 import {
+    CPF_PLACEHOLDER,
+    defaultFieldSize,
+    editorPaletteTypes,
+    fieldMinSize,
+    fieldPlaceholder,
+    fieldTypeHint,
+    fieldTypeIcon,
+    isServerFilled,
+    type EditorFieldType,
+} from '@/components/envelopes/field-type-extras';
+import {
     DATE_FORMATS,
-    DEFAULT_FIELD_SIZE,
     DEFAULT_FONT_SIZE,
-    FIELD_TYPE_ICONS,
-    FIELD_TYPE_PLACEHOLDER,
-    FIELD_TYPES,
     FONT_SIZES,
     INITIALS_ON_ALL_PAGES_RECT,
-    SERVER_FILLED_TYPES,
-    minSizeFor,
 } from '@/components/envelopes/field-types';
 import { recipientColor } from '@/components/envelopes/recipient-colors';
 import { documentName } from '@/components/envelopes/wizard-document-list';
@@ -44,7 +50,7 @@ import {
 import { plural } from '@/lib/format';
 import { fieldTypeLabels, participantRoleLabels } from '@/lib/labels';
 import { cn } from '@/lib/utils';
-import type { FieldType } from '@/types/enums';
+import type { SigningFieldType } from '@/types/enums';
 import type {
     EnvelopeDocument,
     WizardField,
@@ -52,7 +58,30 @@ import type {
 } from '@/types/models';
 
 /** Tipos que desenham a representação visual — proibidos para aprovador (§2.4). */
-const VISUAL_TYPES: FieldType[] = ['signature', 'initials'];
+const VISUAL_TYPES: SigningFieldType[] = ['signature', 'initials'];
+
+/**
+ * Opções iniciais por tipo. Carimbo (§2.8) não tem fonte: é uma imagem desenhada pelo
+ * servidor. CPF (§2.11) leva o placeholder sugerido em `options.placeholder`.
+ */
+function initialOptions(type: SigningFieldType): WizardField['options'] {
+    if (type === 'stamp') {
+        return {};
+    }
+
+    if (type === 'date') {
+        return {
+            font_size: DEFAULT_FONT_SIZE,
+            date_format: DATE_FORMATS[0].value,
+        };
+    }
+
+    if (type === 'cpf') {
+        return { font_size: DEFAULT_FONT_SIZE, placeholder: CPF_PLACEHOLDER };
+    }
+
+    return { font_size: DEFAULT_FONT_SIZE };
+}
 
 function firstName(recipient: WizardRecipient, index: number): string {
     const name = recipient.name.trim();
@@ -61,7 +90,7 @@ function firstName(recipient: WizardRecipient, index: number): string {
 }
 
 function newField(
-    type: FieldType,
+    type: SigningFieldType,
     recipient: WizardRecipient,
     page: number,
     rect: NormalizedRect,
@@ -75,16 +104,11 @@ function newField(
         type,
         page,
         ...clampRect(rect, min),
-        required: type !== 'checkbox',
+        // O carimbo não é preenchido por ninguém: não nasce obrigatório (branding.md §8).
+        required: type !== 'checkbox' && type !== 'stamp',
         label: null,
-        placeholder: FIELD_TYPE_PLACEHOLDER[type],
-        options:
-            type === 'date'
-                ? {
-                      font_size: DEFAULT_FONT_SIZE,
-                      date_format: DATE_FORMATS[0].value,
-                  }
-                : { font_size: DEFAULT_FONT_SIZE },
+        placeholder: fieldPlaceholder(type),
+        options: initialOptions(type),
         // Fase 2 §2.3: só com vários arquivos o campo carrega o arquivo; sem a flag o
         // payload é o da Fase 1.
         ...(documentId ? { document_id: documentId } : {}),
@@ -138,6 +162,13 @@ export function WizardStepFields({
     errors: Record<string, string>;
     disabled?: boolean;
 }) {
+    const { features } = usePage().props;
+    // Paleta pelas flags (T8): `stamp` com `branding` (C-BRAND), `cpf` com `cpf_field` (C-ID).
+    // Com as duas desligadas é exatamente a paleta da Fase 1.
+    const palette = editorPaletteTypes({
+        branding: features?.branding === true,
+        cpf_field: features?.cpf_field === true,
+    });
     const multi = multiDocument && documents.length > 1;
     const firstDocumentId = documents[0]?.id ?? document.id;
     const documentOf = (field: WizardField): string =>
@@ -195,7 +226,7 @@ export function WizardStepFields({
     };
 
     const minOf = (field: WizardField): MinSize =>
-        minSizeFor(
+        fieldMinSize(
             field.type,
             pointsOf(field.page === 'all' ? 1 : Number(field.page)),
         );
@@ -240,7 +271,7 @@ export function WizardStepFields({
         {},
     );
 
-    const addField = (type: FieldType, rect?: NormalizedRect): void => {
+    const addField = (type: EditorFieldType, rect?: NormalizedRect): void => {
         if (!activeRecipient) {
             return;
         }
@@ -249,7 +280,12 @@ export function WizardStepFields({
             return;
         }
 
-        const size = DEFAULT_FIELD_SIZE[type];
+        // Um tipo solto que a paleta não oferece (flag desligada) é ignorado.
+        if (!palette.includes(type)) {
+            return;
+        }
+
+        const size = defaultFieldSize(type);
         const created = newField(
             type,
             activeRecipient,
@@ -260,7 +296,7 @@ export function WizardStepFields({
                 w: size.w,
                 h: size.h,
             },
-            minSizeFor(type, pointsOf(page)),
+            fieldMinSize(type, pointsOf(page)),
             multiDocument ? document.id : undefined,
         );
 
@@ -375,7 +411,7 @@ export function WizardStepFields({
                                     // Camada somente leitura, sem alças e sem eventos: as
                                     // rubricas automáticas são do servidor, mas quem prepara
                                     // precisa vê-las no lugar em que vão cair.
-                                    <FieldLayer
+                                    <FieldLayer<WizardField>
                                         fields={autoPageFields}
                                         page={size}
                                         selectedId={null}
@@ -391,7 +427,7 @@ export function WizardStepFields({
                                         className="pointer-events-none"
                                     />
                                 )}
-                                <FieldLayer
+                                <FieldLayer<WizardField, EditorFieldType>
                                     fields={pageFields}
                                     page={size}
                                     selectedId={selectedId}
@@ -508,8 +544,8 @@ export function WizardStepFields({
                         )}
 
                         <div className="grid grid-cols-2 gap-2">
-                            {FIELD_TYPES.map((type) => {
-                                const Icon = FIELD_TYPE_ICONS[type];
+                            {palette.map((type) => {
+                                const Icon = fieldTypeIcon(type);
                                 const blocked =
                                     activeIsApprover &&
                                     VISUAL_TYPES.includes(type);
@@ -539,7 +575,10 @@ export function WizardStepFields({
                                         title={
                                             blocked
                                                 ? 'Aprovadores não recebem assinatura nem rubrica'
-                                                : undefined
+                                                : type === 'stamp' ||
+                                                    type === 'cpf'
+                                                  ? fieldTypeHint(type)
+                                                  : undefined
                                         }
                                         onClick={() => addField(type)}
                                         className="border-border hover:border-primary hover:bg-accent-subtle flex h-[38px] cursor-grab items-center gap-2 rounded-lg border bg-white px-2.5 text-left text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
@@ -773,7 +812,9 @@ function FieldProperties({
     disabled?: boolean;
 }) {
     const options = field.options ?? {};
-    const serverFilled = SERVER_FILLED_TYPES.includes(field.type);
+    const serverFilled = isServerFilled(field.type);
+    // Carimbo visual: imagem desenhada pelo servidor — sem fonte e sem "obrigatório".
+    const stamp = field.type === 'stamp';
     // Mesmas regras do servidor: nada para visualizador; nada visual para aprovador.
     const assignable = recipients.filter((recipient) => {
         const participantRole = roleOf(recipient);
@@ -879,7 +920,7 @@ function FieldProperties({
                 />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className={cn('grid grid-cols-2 gap-2', stamp && 'hidden')}>
                 <div className="grid gap-1.5">
                     <Label
                         htmlFor={`field-font-${field.client_id}`}
@@ -958,16 +999,26 @@ function FieldProperties({
                 )}
             </div>
 
-            <label className="text-text-secondary flex cursor-pointer items-center gap-2 text-[12.5px]">
-                <Checkbox
-                    checked={field.required}
-                    disabled={disabled}
-                    onCheckedChange={(value) =>
-                        onChange({ required: value === true })
-                    }
-                />
-                Preenchimento obrigatório
-            </label>
+            {!stamp && (
+                <label className="text-text-secondary flex cursor-pointer items-center gap-2 text-[12.5px]">
+                    <Checkbox
+                        checked={field.required}
+                        disabled={disabled}
+                        onCheckedChange={(value) =>
+                            onChange({ required: value === true })
+                        }
+                    />
+                    Preenchimento obrigatório
+                </label>
+            )}
+
+            {(stamp || field.type === 'cpf') && (
+                <p className="border-border bg-sidebar text-text-secondary rounded-[10px] border p-2.5 text-[11.5px] leading-[1.5]">
+                    {fieldTypeHint(field.type)}
+                    {stamp &&
+                        ' Usa o logo e as cores salvos em Configurações › Marca no momento do aceite.'}
+                </p>
+            )}
 
             {serverFilled && (
                 <p className="text-muted-foreground text-[11.5px] leading-[1.5]">

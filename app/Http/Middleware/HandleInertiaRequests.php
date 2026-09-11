@@ -10,9 +10,15 @@ use App\Models\Organization;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\AdminLog\ToolFlags;
+use App\Services\Branding\BrandingFeature;
+use App\Services\Branding\BrandingPresenter;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\Reminders\RemindersFeature;
+use App\Services\Identity\IdentityFeatures;
+use App\Services\InPerson\PresenceFeatures;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\PublicForms\PublicFormsFeature;
+use App\Services\Signing\Channels\ChannelFeatures;
 use App\Services\Templates\TemplatesFeature;
 use App\Support\CurrentOrganization;
 use App\Support\Permissions;
@@ -81,13 +87,14 @@ class HandleInertiaRequests extends Middleware
     public static function features(?Organization $organization = null): array
     {
         $tools = ToolFlags::forOrganization($organization);
+        $channels = ChannelFeatures::forOrganization($organization);
 
         return [
             'templates' => TemplatesFeature::enabled($organization),
             'api_integrations' => false,
             'reminders' => app(RemindersFeature::class)->enabledFor($organization),
-            'sms_whatsapp' => false,
-            'branding' => false,
+            'sms_whatsapp' => $channels[ChannelFeatures::SMS_WHATSAPP],
+            'branding' => BrandingFeature::enabled($organization),
             'multi_document' => DomainFeatures::multiDocument($organization),
             'certificate_login' => false,
             'participant_roles' => DomainFeatures::participantRoles($organization),
@@ -99,6 +106,16 @@ class HandleInertiaRequests extends Middleware
             'admin_users' => ToolFlags::adminUsers(),
             'admin_audit' => ToolFlags::adminAudit(),
             'impersonation' => ToolFlags::impersonation(),
+            // Fase 2, onda B — mesma regra (global E plano). `sms_whatsapp` e `branding`, acima,
+            // eram reservadas da Fase 1 e agora vêm dos resolvedores das áreas.
+            ...$channels,
+            ...IdentityFeatures::forOrganization($organization),
+            // Cadastro e telas sem organização: só o interruptor global do CNPJ.
+            'cnpj_lookup' => $organization === null
+                ? IdentityFeatures::cnpjLookupWithoutOrganization()
+                : IdentityFeatures::cnpjLookup($organization),
+            ...PresenceFeatures::forOrganization($organization),
+            'public_forms' => PublicFormsFeature::enabled($organization),
         ];
     }
 
@@ -232,7 +249,8 @@ class HandleInertiaRequests extends Middleware
             'name' => $organization->name,
             'legal_name' => $organization->legal_name,
             'initials' => $organization->initials,
-            'logo_url' => null,
+            // Fase 2 §2.8: logo da marca (flag `branding` + logo salvo); null na Fase 1.
+            'logo_url' => app(BrandingPresenter::class)->logoUrl($organization),
             'timezone' => $organization->timezone,
             'role' => $membership->role->value,
             'plan' => [

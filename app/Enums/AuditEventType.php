@@ -102,9 +102,91 @@ enum AuditEventType: string
     case TemplateRestored = 'template.restored';
     case TemplateUsed = 'template.used';
 
+    // Fase 2, onda B — identidade (C-ID, docs/fase-2/identidade.md). Payload minimizado:
+    // nunca imagem, caminho de arquivo nem CPF completo (só mascarado ***.456.789-**).
+    case CpfLookupPerformed = 'cpf_lookup.performed';
+    case IdentityCaptureRequirementUpdated = 'identity_capture.requirement_updated';
+    case IdentityCaptureRecorded = 'identity_capture.recorded';
+    case IdentityCapturePurged = 'identity_capture.purged';
+
+    // Fase 2, onda B — canais e PIN do remetente (C-CAN, docs/fase-2/canais-e-pin.md). Nenhum
+    // payload carrega o PIN, o código, o telefone completo ou o token: só ULIDs, motivo e contagens.
+    case ChallengePinVerified = 'challenge.pin_verified';
+    case ChallengePinFailed = 'challenge.pin_failed';
+    case RecipientPinUpdated = 'recipient.pin_updated';
+    // Domínios de envio (C-CAN): eventos da ORGANIZAÇÃO (`envelope_id` nulo).
+    case SenderDomainCreated = 'sender_domain.created';
+    case SenderDomainVerified = 'sender_domain.verified';
+    case SenderDomainFailed = 'sender_domain.failed';
+    case SenderDomainDeleted = 'sender_domain.deleted';
+
+    // Fase 2, onda B — presencial em tablet (C-PRES, docs/fase-2/presencial-e-lote.md §2).
+    // Gravados no envelope. O anfitrião aparece como quem ABRIU a sessão e atestou a presença,
+    // nunca como autor do aceite (o ator do aceite continua sendo o participante). Payload sem
+    // token, segredo do dispositivo, código ou PIN.
+    case InPersonSessionStarted = 'in_person.session_started';
+    case InPersonParticipantStarted = 'in_person.participant_started';
+    case InPersonAcceptanceRecorded = 'in_person.acceptance_recorded';
+    case InPersonParticipantClosed = 'in_person.participant_closed';
+    case InPersonSessionEnded = 'in_person.session_ended';
+
+    // Fase 2, onda B — assinatura em lote (C-PRES, docs/fase-2/presencial-e-lote.md §3).
+    // `batch.link_issued`/`batch.challenge_*` são eventos do LOTE (envelope nulo, exceto o
+    // envelope de origem do link); `batch.item_*` ficam no envelope de cada item.
+    case BatchLinkIssued = 'batch.link_issued';
+    case BatchChallengeSent = 'batch.challenge_sent';
+    case BatchChallengeVerified = 'batch.challenge_verified';
+    case BatchChallengeFailed = 'batch.challenge_failed';
+    case BatchItemOpened = 'batch.item_opened';
+    case BatchItemAuthorized = 'batch.item_authorized';
+    case BatchItemFailed = 'batch.item_failed';
+
+    // Fase 2, onda B — formulário público (C-FORM, docs/fase-2/formulario-publico.md §9).
+    // Gestão: eventos da ORGANIZAÇÃO (`envelope_id` nulo). Envios: gravados no envelope gerado.
+    // Payload só com ULIDs, destino e contagens — nunca e-mail, nome, respostas ou tokens.
+    case PublicFormCreated = 'public_form.created';
+    case PublicFormUpdated = 'public_form.updated';
+    case PublicFormActivated = 'public_form.activated';
+    case PublicFormPaused = 'public_form.paused';
+    case PublicFormRevoked = 'public_form.revoked';
+    case PublicFormSubmissionConfirmed = 'public_form.submission_confirmed';
+    case PublicFormSubmissionApproved = 'public_form.submission_approved';
+    case PublicFormSubmissionRejected = 'public_form.submission_rejected';
+
     public function label(): string
     {
         return match ($this) {
+            self::PublicFormCreated => 'Formulário público criado',
+            self::PublicFormUpdated => 'Formulário público alterado',
+            self::PublicFormActivated => 'Formulário público publicado',
+            self::PublicFormPaused => 'Formulário público pausado',
+            self::PublicFormRevoked => 'Formulário público revogado',
+            self::PublicFormSubmissionConfirmed => 'Documento gerado por formulário público (e-mail confirmado)',
+            self::PublicFormSubmissionApproved => 'Resposta de formulário público aprovada e enviada',
+            self::PublicFormSubmissionRejected => 'Resposta de formulário público recusada',
+            self::InPersonSessionStarted => 'Sessão presencial iniciada',
+            self::InPersonParticipantStarted => 'Participante chamado na sessão presencial',
+            self::InPersonAcceptanceRecorded => 'Aceite registrado presencialmente',
+            self::InPersonParticipantClosed => 'Tela presencial bloqueada',
+            self::InPersonSessionEnded => 'Sessão presencial encerrada',
+            self::BatchLinkIssued => 'Link de assinatura em lote enviado',
+            self::BatchChallengeSent => 'Código do lote enviado',
+            self::BatchChallengeVerified => 'Código do lote confirmado',
+            self::BatchChallengeFailed => 'Código do lote incorreto',
+            self::BatchItemOpened => 'Documento aberto na assinatura em lote',
+            self::BatchItemAuthorized => 'Aceite autorizado na assinatura em lote',
+            self::BatchItemFailed => 'Autorização em lote não registrada',
+            self::ChallengePinVerified => 'PIN do remetente confirmado',
+            self::ChallengePinFailed => 'PIN do remetente incorreto',
+            self::RecipientPinUpdated => 'PIN do participante alterado pelo remetente',
+            self::SenderDomainCreated => 'Domínio de envio cadastrado',
+            self::SenderDomainVerified => 'Domínio de envio verificado',
+            self::SenderDomainFailed => 'Falha na verificação do domínio de envio',
+            self::SenderDomainDeleted => 'Domínio de envio removido',
+            self::CpfLookupPerformed => 'Consulta cadastral de CPF realizada',
+            self::IdentityCaptureRequirementUpdated => 'Exigência de foto do participante alterada',
+            self::IdentityCaptureRecorded => 'Imagem capturada pelo participante',
+            self::IdentityCapturePurged => 'Imagem capturada excluída pela política de retenção',
             self::TemplateCreated => 'Modelo criado',
             self::TemplateVersionCreated => 'Nova versão do modelo',
             self::TemplateUpdated => 'Dados do modelo alterados',
@@ -144,7 +226,7 @@ enum AuditEventType: string
             self::InvitationResent => 'Convite reenviado',
             self::InvitationOpened => 'Convite aberto',
             self::ChallengeSent => 'Código de verificação enviado',
-            self::ChallengeVerified => 'Identidade confirmada',
+            self::ChallengeVerified => 'Código de confirmação validado',
             self::ChallengeFailed => 'Código de verificação incorreto',
             self::SessionStarted => 'Sessão de assinatura iniciada',
             self::DocumentPresented => 'Documento apresentado ao signatário',
@@ -196,6 +278,13 @@ enum AuditEventType: string
             self::ApprovalRecorded,
             self::DocumentFinalized,
             self::ChallengeVerified,
+            self::ChallengePinVerified,
+            self::SenderDomainVerified,
+            self::InPersonAcceptanceRecorded,
+            self::BatchChallengeVerified,
+            self::BatchItemAuthorized,
+            self::PublicFormSubmissionConfirmed,
+            self::PublicFormSubmissionApproved,
             self::EnvelopeCompleted,
             self::EnvelopeSignedCompanyA1,
             self::PaymentApproved,
@@ -204,6 +293,12 @@ enum AuditEventType: string
             self::SubscriptionResumed => 'ok',
 
             self::ChallengeFailed,
+            self::ChallengePinFailed,
+            self::SenderDomainFailed,
+            self::BatchChallengeFailed,
+            self::BatchItemFailed,
+            self::PublicFormRevoked,
+            self::PublicFormSubmissionRejected,
             self::DocumentProcessingFailed,
             self::DocumentBlocked,
             self::RecipientRefused,

@@ -1,13 +1,15 @@
 import { Check } from 'lucide-react';
 import type { CSSProperties } from 'react';
+import { StampPreview } from '@/components/branding/stamp-preview';
+import type { SignerBrand } from '@/components/branding/types';
 import { type PageSize, toPixels } from '@/lib/geometry';
 import { cn } from '@/lib/utils';
-import type { FieldType } from '@/types/enums';
+import type { SigningFieldType } from '@/types/enums';
 
 /** Campo do próprio signatário, já resolvido para uma página concreta. */
 export interface SignerField {
     id: string;
-    type: FieldType;
+    type: SigningFieldType;
     page: number;
     x: number;
     y: number;
@@ -25,7 +27,7 @@ export interface OtherField {
     key: string;
     recipient_name: string;
     role: string | null;
-    type: FieldType;
+    type: SigningFieldType;
     page: number;
     x: number;
     y: number;
@@ -34,6 +36,16 @@ export interface OtherField {
     signed: boolean;
     /** Nota exibida quando ainda não assinou ("assina depois de você"). */
     hint?: string | null;
+}
+
+/**
+ * Quem é a organização remetente — usado só para desenhar a prévia do carimbo visual
+ * (Fase 2 §2.8). Sem `brand`, o carimbo aparece como uma caixa com o rótulo.
+ */
+export interface StampOwner {
+    brand: SignerBrand | null;
+    organizationName: string;
+    organizationInitials: string;
 }
 
 export interface SignerFieldLayerProps {
@@ -50,25 +62,30 @@ export interface SignerFieldLayerProps {
     /** Campo em foco (destacado com anel). */
     activeId: string | null;
     onActivate: (field: SignerField) => void;
+    stampOwner?: StampOwner | null;
     className?: string;
 }
 
-const MINE_LABEL: Record<FieldType, string> = {
+const MINE_LABEL: Record<SigningFieldType, string> = {
     signature: 'Assinatura',
     initials: 'Rubrica',
     name: 'Nome',
     date: 'Data',
     text: 'Texto',
     checkbox: 'Marcar',
+    stamp: 'Carimbo visual',
+    cpf: 'CPF',
 };
 
-const EMPTY_HINT: Record<FieldType, string> = {
+const EMPTY_HINT: Record<SigningFieldType, string> = {
     signature: 'Clique para assinar aqui',
     initials: 'Clique para rubricar',
     name: 'Preenchido no aceite',
     date: 'Data do aceite',
     text: 'Clique para preencher',
     checkbox: 'Clique para marcar',
+    stamp: 'Carimbo da organização',
+    cpf: 'Clique para informar o CPF',
 };
 
 /**
@@ -79,6 +96,9 @@ const EMPTY_HINT: Record<FieldType, string> = {
  * como indicação ("assina depois de você" / "✓ assinou em …"). A geometria vem
  * das mesmas frações normalizadas do editor, convertidas por `lib/geometry.ts`
  * contra as dimensões renderizadas pelo PDF.js — nada é recalculado aqui.
+ *
+ * O carimbo visual (Fase 2 §2.8) nunca é interativo: é desenhado pelo servidor no aceite a
+ * partir da marca da organização. Aqui aparece só a prévia.
  */
 export function SignerFieldLayer({
     page,
@@ -90,6 +110,7 @@ export function SignerFieldLayer({
     initialsImage,
     activeId,
     onActivate,
+    stampOwner = null,
     className,
 }: SignerFieldLayerProps) {
     return (
@@ -99,24 +120,46 @@ export function SignerFieldLayer({
         >
             {others
                 .filter((field) => field.page === pageNumber)
-                .map((field) => (
-                    <OtherFieldBox key={field.key} field={field} page={page} />
-                ))}
+                .map((field) =>
+                    field.type === 'stamp' ? (
+                        <StampBox
+                            key={field.key}
+                            field={field}
+                            page={page}
+                            owner={stampOwner}
+                        />
+                    ) : (
+                        <OtherFieldBox
+                            key={field.key}
+                            field={field}
+                            page={page}
+                        />
+                    ),
+                )}
 
             {fields
                 .filter((field) => field.page === pageNumber)
-                .map((field) => (
-                    <MyFieldBox
-                        key={`${field.id}-${field.page}`}
-                        field={field}
-                        page={page}
-                        value={values[field.id]}
-                        signatureImage={signatureImage}
-                        initialsImage={initialsImage}
-                        active={activeId === field.id}
-                        onActivate={onActivate}
-                    />
-                ))}
+                .map((field) =>
+                    field.type === 'stamp' ? (
+                        <StampBox
+                            key={`${field.id}-${field.page}`}
+                            field={field}
+                            page={page}
+                            owner={stampOwner}
+                        />
+                    ) : (
+                        <MyFieldBox
+                            key={`${field.id}-${field.page}`}
+                            field={field}
+                            page={page}
+                            value={values[field.id]}
+                            signatureImage={signatureImage}
+                            initialsImage={initialsImage}
+                            active={activeId === field.id}
+                            onActivate={onActivate}
+                        />
+                    ),
+                )}
         </div>
     );
 }
@@ -231,6 +274,55 @@ function MyFieldBox({
                 </span>
             )}
         </button>
+    );
+}
+
+/**
+ * Carimbo visual da organização: somente leitura, com a prévia da marca quando existe.
+ * A legenda do rótulo repete o que a evidência diz: representação visual, não prova.
+ */
+function StampBox({
+    field,
+    page,
+    owner,
+}: {
+    field: { x: number; y: number; w: number; h: number };
+    page: PageSize;
+    owner: StampOwner | null;
+}) {
+    const box = toPixels(field, page);
+    const brand = owner?.brand ?? null;
+
+    return (
+        <div
+            style={{
+                left: box.left,
+                top: box.top,
+                width: box.width,
+                height: box.height,
+            }}
+            role="img"
+            aria-label="Carimbo visual da organização — representação visual, não prova."
+            title="Carimbo visual da organização — representação visual, não prova."
+            className="absolute overflow-hidden rounded-sm"
+        >
+            {brand ? (
+                <StampPreview
+                    displayName={brand.display_name}
+                    logoUrl={brand.logo_url}
+                    initials={owner?.organizationInitials}
+                    primary={brand.primary_color}
+                    accent={brand.accent_color}
+                    fill
+                />
+            ) : (
+                <span className="border-input bg-background text-muted-foreground flex size-full items-center justify-center rounded-sm border border-dashed px-1.5 text-center text-[10px] font-semibold">
+                    {owner?.organizationName
+                        ? `Carimbo · ${owner.organizationName}`
+                        : 'Carimbo da organização'}
+                </span>
+            )}
+        </div>
     );
 }
 

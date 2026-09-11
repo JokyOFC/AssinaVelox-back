@@ -46,12 +46,13 @@ import {
 import type {
     AcceptanceAction,
     AuditEvent,
-    AuthMethod,
     Envelope,
+    IdentityCaptureEvidence,
     ParticipantRole,
     RecipientStatus,
     SignatureKind,
     SignatureStatus,
+    SignerAuthMethod,
 } from '@/types';
 
 /** Participante como `App\Services\Verification\EvidenceDossier::recipients` o publica. */
@@ -61,7 +62,8 @@ export interface EvidenceRecipient {
     role: string | null;
     status: RecipientStatus;
     status_label: string;
-    auth_methods: AuthMethod[];
+    /** Fase 2 §2.9: pode trazer `sms_otp`/`whatsapp_otp` e `sender_pin`. */
+    auth_methods: SignerAuthMethod[];
     signature_kind: SignatureKind | null;
     signature_image_url: string | null;
     sent_at: string | null;
@@ -96,6 +98,28 @@ export interface EvidenceRecipient {
         name: string | null;
         sha256: string | null;
     }[];
+    /**
+     * Fase 2 §2.10 (`CaptureEvidence::forEnvelope`): fotos da captura simples, só para o
+     * remetente (nunca na verificação pública nem no PDF de evidências).
+     */
+    identity_captures?: IdentityCaptureEvidence[];
+    /** Fase 2 §2.9: rótulo do método confirmado e canal do aviso extra do convite. */
+    auth_method_label?: string;
+    /** Revisão da onda B: o código saiu pelo simulador (nada transmitido). */
+    auth_method_simulated?: boolean;
+    auth_method_note?: string | null;
+    delivery_channel?: 'email' | 'sms' | 'whatsapp';
+    /**
+     * Fase 2 §2.6 (`InPersonEvidence::forEnvelope`): aceite registrado no
+     * dispositivo presencial. O autor continua sendo o participante.
+     */
+    in_person?: {
+        label: string;
+        host_name: string | null;
+        device_label: string;
+        session_started_at: string | null;
+        accepted_at: string | null;
+    } | null;
 }
 
 /**
@@ -175,7 +199,13 @@ export interface EvidenceProps {
     verify_url: string;
     /** Fase 2 §2.3: um item por arquivo (com um arquivo, a página é a da Fase 1). */
     documents?: EvidenceDocument[];
+    /** Fase 2 §2.10: nota do servidor sobre as fotos (não houve verificação de identidade). */
+    identity_capture_notice?: string | null;
 }
+
+/** Texto usado se o servidor não mandar `identity_capture_notice` (docs/fase-2/identidade.md §5.5). */
+const CAPTURE_EVIDENCE_NOTICE =
+    'Não houve verificação de identidade: a plataforma não compara rostos, não analisa a imagem e não lê o documento fotografado.';
 
 /**
  * Dossiê de evidências do envelope (ROUTES §2.8; DESIGN §4.18 e §6.4).
@@ -199,6 +229,7 @@ export default function EnvelopeEvidence({
     notes,
     verify_url,
     documents = [],
+    identity_capture_notice = null,
 }: EvidenceProps) {
     const multi = documents.length > 1;
     const items = hashes.items ?? [];
@@ -479,6 +510,13 @@ export default function EnvelopeEvidence({
                                                         .join(', ')}
                                                     {recipient.otp_verified_at &&
                                                         ` · confirmada em ${formatDateTime(recipient.otp_verified_at)}`}
+                                                    {recipient.auth_method_note && (
+                                                        <span className="text-warning block font-semibold">
+                                                            {
+                                                                recipient.auth_method_note
+                                                            }
+                                                        </span>
+                                                    )}
                                                 </Field>
                                                 <Field label="Convite enviado">
                                                     {formatDateTime(
@@ -608,6 +646,21 @@ export default function EnvelopeEvidence({
                                                                 }
                                                             </Field>
                                                         )}
+                                                        {recipient.in_person && (
+                                                            <Field label="Modo">
+                                                                {
+                                                                    recipient
+                                                                        .in_person
+                                                                        .label
+                                                                }
+                                                                {' · '}
+                                                                {
+                                                                    recipient
+                                                                        .in_person
+                                                                        .device_label
+                                                                }
+                                                            </Field>
+                                                        )}
                                                     </>
                                                 )}
                                                 {recipient.refused_at && (
@@ -620,6 +673,85 @@ export default function EnvelopeEvidence({
                                                     </Field>
                                                 )}
                                             </dl>
+
+                                            {(recipient.identity_captures
+                                                ?.length ?? 0) > 0 && (
+                                                <div className="mt-3 flex flex-col gap-2">
+                                                    <p className="text-[12.5px] font-semibold">
+                                                        {/* Genérico: a origem (declarada pelo navegador) vai em cada legenda. */}
+                                                        Imagens enviadas pelo
+                                                        participante
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {recipient.identity_captures?.map(
+                                                            (capture) => (
+                                                                <figure
+                                                                    key={
+                                                                        capture.id
+                                                                    }
+                                                                    className="border-border w-[168px] rounded-[10px] border p-2"
+                                                                >
+                                                                    {capture.thumbnail &&
+                                                                    capture.available ? (
+                                                                        <img
+                                                                            src={
+                                                                                capture.thumbnail
+                                                                            }
+                                                                            alt={`${capture.kind_label} enviada por ${recipient.name}`}
+                                                                            className="bg-muted h-[112px] w-full rounded object-contain"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="bg-muted text-muted-foreground flex h-[112px] items-center justify-center rounded p-2 text-center text-[11px] leading-[1.4]">
+                                                                            {capture.purged_at
+                                                                                ? `Arquivo apagado pela retenção em ${formatDateTime(capture.purged_at)}`
+                                                                                : 'Imagem indisponível'}
+                                                                        </div>
+                                                                    )}
+                                                                    <figcaption className="mt-1.5 text-[11.5px] leading-[1.4]">
+                                                                        <span className="block font-semibold">
+                                                                            {
+                                                                                capture.kind_label
+                                                                            }
+                                                                        </span>
+                                                                        {capture.source_label && (
+                                                                            <span className="text-muted-foreground block">
+                                                                                {
+                                                                                    capture.source_label
+                                                                                }
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-muted-foreground block">
+                                                                            {formatDateTime(
+                                                                                capture.captured_at,
+                                                                            )}
+                                                                            {capture.width &&
+                                                                                capture.height &&
+                                                                                ` · ${capture.width}×${capture.height}`}
+                                                                        </span>
+                                                                        {capture.sha256 && (
+                                                                            <span
+                                                                                className="text-muted-foreground block truncate font-mono text-[10.5px]"
+                                                                                title={
+                                                                                    capture.sha256
+                                                                                }
+                                                                            >
+                                                                                SHA-256{' '}
+                                                                                {
+                                                                                    capture.sha256
+                                                                                }
+                                                                            </span>
+                                                                        )}
+                                                                    </figcaption>
+                                                                </figure>
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                    <p className="text-muted-foreground text-[11.5px] leading-[1.5]">
+                                                        {identity_capture_notice ??
+                                                            CAPTURE_EVIDENCE_NOTICE}
+                                                    </p>
+                                                </div>
+                                            )}
 
                                             {recipient.signature_image_url && (
                                                 <figure className="mt-3">

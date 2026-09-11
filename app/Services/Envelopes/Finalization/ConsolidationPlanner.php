@@ -8,6 +8,7 @@ use App\Models\Envelope;
 use App\Models\SignatureAcceptance;
 use App\Models\SigningField;
 use App\Models\SigningFieldValue;
+use App\Services\Branding\Stamp\StampComposer;
 use App\Services\Documents\DocumentStorage;
 use App\Services\Pdf\Dto\ComposePlan;
 use App\Services\Pdf\Support\TemporaryDirectory;
@@ -165,6 +166,26 @@ class ConsolidationPlanner
             return true;
         }
 
+        // Fase 2 §2.8 (C-BRAND): carimbo visual congelado no aceite (`image_path`), desenhado
+        // pelo caminho de imagem que o pdftool já conhece. Sem imagem, o campo fica vazio.
+        if ($field->type === FieldType::Stamp) {
+            $imagePath = $value->image_path;
+            $local = is_string($imagePath) && $imagePath !== '' ? $this->copyImage($imagePath, $workDir, $id) : null;
+
+            if ($local === null) {
+                return false;
+            }
+
+            StampComposer::add($plan, $field, $local);
+
+            return true;
+        }
+
+        // Fase 2 §2.11 (C-ID): o CPF é texto no PDF; o pdftool só conhece os tipos da Fase 1.
+        if ($field->type === FieldType::Cpf) {
+            return $this->addTextValue($plan, $field, (string) ($value->value_text ?? ''), $id, $page, $x, $y, $width, $height, $options, FieldType::Text);
+        }
+
         return $this->addTextValue($plan, $field, (string) ($value->value_text ?? ''), $id, $page, $x, $y, $width, $height, $options);
     }
 
@@ -229,12 +250,13 @@ class ConsolidationPlanner
         float $width,
         float $height,
         array $options,
+        ?FieldType $as = null,
     ): bool {
         if (trim($text) === '') {
             return false;
         }
 
-        $plan->addField($id, $page, $field->type, $x, $y, $width, $height, $text, $options + ['align' => 'left']);
+        $plan->addField($id, $page, $as ?? $field->type, $x, $y, $width, $height, $text, $options + ['align' => 'left']);
 
         return true;
     }

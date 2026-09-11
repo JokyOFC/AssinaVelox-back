@@ -1,7 +1,8 @@
 import { FileText, Lock } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import AppLogo from '@/components/app-logo';
 import { AvatarInitials } from '@/components/avatar-initials';
+import type { SignerBrand } from '@/components/branding/types';
 import { FlashToaster } from '@/components/flash-toaster';
 import { Stepper, type StepperStep } from '@/components/stepper';
 
@@ -11,6 +12,13 @@ export type SignerLayoutProps = {
     sender?: {
         organization_name: string;
         organization_initials: string;
+        logo_url?: string | null;
+        /**
+         * Fase 2 §2.8: marca da organização (flag `branding` + marca salva).
+         * Ausente ou nula = cabeçalho da Fase 1. "via AssinaVelox" continua
+         * visível em qualquer caso.
+         */
+        brand?: SignerBrand | null;
     } | null;
     /** Título do documento — segunda linha do cabeçalho. */
     documentTitle?: string | null;
@@ -48,19 +56,52 @@ export default function SignerLayout({
     privacyUrl = null,
     termsUrl = null,
 }: SignerLayoutProps) {
+    const brand = sender?.brand ?? null;
+
+    // As cores da marca ficam expostas como variáveis para as páginas públicas
+    // que quiserem usá-las (contraste já validado no servidor).
+    const brandStyle = brand
+        ? ({
+              '--brand-primary': brand.primary_color,
+              '--brand-accent': brand.accent_color,
+              '--brand-on-primary': brand.on_primary,
+          } as CSSProperties)
+        : undefined;
+
     return (
-        <div className="bg-accent text-foreground flex min-h-svh flex-col text-[14px]">
-            <header className="border-border sticky top-0 z-10 flex min-h-[60px] items-center gap-3 border-b bg-white px-4 md:gap-4 md:px-6">
+        <div
+            className="bg-accent text-foreground flex min-h-svh flex-col text-[14px]"
+            style={brandStyle}
+            data-branded={brand ? 'true' : undefined}
+        >
+            <header
+                className={
+                    'border-border sticky top-0 z-10 flex min-h-[60px] items-center gap-3 border-b bg-white px-4 md:gap-4 md:px-6' +
+                    (brand ? ' border-t-[3px]' : '')
+                }
+                style={
+                    brand ? { borderTopColor: brand.accent_color } : undefined
+                }
+            >
                 {sender ? (
                     <div className="flex min-w-0 items-center gap-2.5">
-                        <AvatarInitials
-                            initials={sender.organization_initials}
-                            tone="organization"
-                            size="md"
-                        />
+                        {brand?.logo_url ? (
+                            <img
+                                src={brand.logo_url}
+                                alt={`Logo de ${brand.display_name}`}
+                                className="h-9 max-w-[120px] shrink-0 object-contain"
+                            />
+                        ) : (
+                            <AvatarInitials
+                                initials={sender.organization_initials}
+                                tone="organization"
+                                size="md"
+                            />
+                        )}
                         <span className="min-w-0">
                             <span className="block truncate text-[13.5px] font-semibold">
-                                {sender.organization_name}
+                                {brand?.display_name ??
+                                    sender.organization_name}
                             </span>
                             <span className="text-muted-foreground block truncate text-[11.5px]">
                                 {documentTitle ? (

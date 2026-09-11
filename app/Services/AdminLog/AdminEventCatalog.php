@@ -85,6 +85,28 @@ final class AdminEventCatalog
                     AuditEventType::ReportExported,
                 ],
             ],
+            // Fase 2, onda B: ações da organização (sem dado de signatário no payload).
+            'public_forms' => [
+                'label' => 'Formulários públicos',
+                'events' => [
+                    AuditEventType::PublicFormCreated,
+                    AuditEventType::PublicFormUpdated,
+                    AuditEventType::PublicFormActivated,
+                    AuditEventType::PublicFormPaused,
+                    AuditEventType::PublicFormRevoked,
+                    AuditEventType::PublicFormSubmissionApproved,
+                    AuditEventType::PublicFormSubmissionRejected,
+                ],
+            ],
+            'sender_domains' => [
+                'label' => 'Domínios de envio',
+                'events' => [
+                    AuditEventType::SenderDomainCreated,
+                    AuditEventType::SenderDomainVerified,
+                    AuditEventType::SenderDomainFailed,
+                    AuditEventType::SenderDomainDeleted,
+                ],
+            ],
             'support' => [
                 'label' => 'Acessos do suporte',
                 'events' => [

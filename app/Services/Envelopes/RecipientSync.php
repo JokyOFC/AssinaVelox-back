@@ -10,6 +10,7 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
 use App\Services\Envelopes\Contracts\RotatesInvitations;
+use App\Services\Signing\Channels\RecipientChannels;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -45,7 +46,14 @@ final class RecipientSync
         // Papel de domínio de cada linha (Fase 2 §2.4), decidido ANTES de tocar no banco.
         $roles = self::resolveRoles($envelope, $incoming);
 
-        $result = DB::transaction(function () use ($envelope, $incoming, $signingOrder, $roles): array {
+        // Fase 2 §2.9 (C-CAN): telefone E.164, canal, método de autenticação e PIN de cada
+        // linha. Com as flags desligadas devolve os valores já gravados (nada muda).
+        $channels = app(RecipientChannels::class)->resolve($envelope, $incoming);
+
+        /** @var array<int, Recipient> $saved */
+        $saved = [];
+
+        $result = DB::transaction(function () use ($envelope, $incoming, $signingOrder, $roles, $channels, &$saved): array {
             // Sob lock, dentro da transação: `signature_acceptances.recipient_id` é
             // ON DELETE CASCADE, então remover um destinatário de envelope enviado
             // destruiria o aceite de quem já assinou.
@@ -124,6 +132,7 @@ final class RecipientSync
                     'order_index' => $orderIndex,
                     // Ordem em que o remetente montou a lista — é a que as telas mostram.
                     'position' => $position + 1,
+                    ...RecipientChannels::attributes($channels[$position]),
                 ];
 
                 if ($recipient === null) {
@@ -137,6 +146,7 @@ final class RecipientSync
                 }
 
                 $recipient->forceFill($attributes)->save();
+                $saved[$position] = $recipient;
             }
 
             $envelope->forceFill([
@@ -156,6 +166,9 @@ final class RecipientSync
             'updated' => $result['updated'],
             'removed' => $result['removed'],
         ]);
+
+        // PIN do remetente: só hash, depois do commit (evento sem o valor).
+        app(RecipientChannels::class)->applyPins($envelope, $saved, $channels);
 
         EnvelopeReadiness::refresh($envelope);
 

@@ -3,6 +3,7 @@ import {
     ArrowLeft,
     BarChart3,
     Building2,
+    ClipboardList,
     Code,
     CreditCard,
     FileText,
@@ -13,6 +14,7 @@ import {
     Plus,
     ShieldCheck,
     SlidersHorizontal,
+    Tablet,
     Users,
     type LucideIcon,
 } from 'lucide-react';
@@ -46,10 +48,12 @@ import {
     create as envelopesCreate,
     index as envelopesIndex,
 } from '@/routes/envelopes';
+import { create as inPersonCreate } from '@/routes/in_person';
 import { index as integrationsIndex } from '@/routes/integrations';
 import { index as membersIndex } from '@/routes/members';
 import { index as plansIndex } from '@/routes/plans';
 import { edit as profileEdit } from '@/routes/profile';
+import { index as publicFormsIndex } from '@/routes/public_forms';
 import { index as recipientsIndex } from '@/routes/recipients';
 import { index as reportsIndex } from '@/routes/reports';
 import { edit as securityEdit } from '@/routes/security';
@@ -185,6 +189,28 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     icon: LayoutTemplate,
                     // Com a flag ligada o item deixa de ser placeholder.
                     phase2: !(features?.templates ?? false),
+                },
+                {
+                    key: 'public_forms',
+                    title: 'Formulários',
+                    href: publicFormsIndex(),
+                    icon: ClipboardList,
+                    // Fase 2 §2.2: só com a flag `public_forms` e `manage_templates`.
+                    hidden: !(
+                        (features?.public_forms ?? false) &&
+                        (permissions?.manage_templates ?? false)
+                    ),
+                },
+                {
+                    key: 'in_person',
+                    title: 'Presencial',
+                    href: inPersonCreate(),
+                    icon: Tablet,
+                    // Fase 2 §2.6: só com a flag `in_person` e `send_envelopes`.
+                    hidden: !(
+                        (features?.in_person ?? false) &&
+                        (permissions?.send_envelopes ?? false)
+                    ),
                 },
                 {
                     key: 'reports',

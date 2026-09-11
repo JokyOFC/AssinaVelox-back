@@ -7,6 +7,7 @@ use App\Models\Envelope;
 use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Branding\BrandingManager;
 use App\Support\OrganizationSettings;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
@@ -80,6 +81,20 @@ class OrganizationPurge
         // sai antes de tudo. `platform_audit_events` fica — é trilha da plataforma
         // (organization_id nullOnDelete).
         'impersonations',
+        // Fase 2, onda B (antes dos envelopes, destinatários, aceites e modelos que referenciam).
+        // `identity_captures` e `identity_capture_requirements` são RESTRICT na organização.
+        'identity_captures',
+        'identity_capture_requirements',
+        'recipient_pins',
+        'in_person_turns',
+        'in_person_sessions',
+        'batch_signing_items',
+        'batch_signing_challenges',
+        'batch_signing_sessions',
+        'public_form_submissions',
+        'public_forms',
+        'sender_domains',
+        'organization_brandings',
         'signing_field_values',
         'acceptance_documents',
         'signature_acceptances',
@@ -218,6 +233,18 @@ class OrganizationPurge
         // apagado sem registro; um arquivo que resiste vira aviso em log, nunca um
         // registro fantasma no banco.
         $filesRemoved = $this->removeFiles($ulid, $files);
+
+        // Fase 2 §2.8 (C-BRAND): logo da marca (diretório próprio do BrandingManager).
+        try {
+            app(BrandingManager::class)->purge($organization);
+        } catch (\Throwable $exception) {
+            $filesRemoved = false;
+
+            $this->logger->warning('organization.purge.branding_not_removed', [
+                'organization' => $ulid,
+                'exception' => $exception->getMessage(),
+            ]);
+        }
 
         $receipt = [
             'organization' => $ulid,

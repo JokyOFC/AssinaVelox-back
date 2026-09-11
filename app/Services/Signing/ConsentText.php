@@ -3,6 +3,8 @@
 namespace App\Services\Signing;
 
 use App\Enums\AcceptanceAction;
+use App\Enums\DeliveryChannel;
+use App\Enums\FieldType;
 use App\Enums\RecipientRole;
 use App\Integrations\Contracts\PdfSigner;
 use App\Models\CertificateReference;
@@ -11,6 +13,11 @@ use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Organization;
 use App\Models\Recipient;
+use App\Models\SigningField;
+use App\Services\Identity\IdentityCaptures;
+use App\Services\Identity\IdentityFeatures;
+use App\Services\Signing\Channels\ChannelAvailability;
+use App\Services\Signing\Channels\SenderPins;
 use Illuminate\Support\Carbon;
 
 /**
@@ -69,6 +76,18 @@ final class ConsentText
 
     public const APPROVAL_MULTI_TERMS_VERSION = 'v1-approve-multi-2026-09-11';
 
+    /*
+     * Fase 2, onda B (integração I-2B): complementos do texto para quem confirma o código por
+     * SMS/WhatsApp, tem PIN do remetente, campo CPF ou foto exigida. Sem nenhum desses, o texto
+     * é exatamente o da variante de origem. Com eles, a versão ganha este sufixo (cabe nos 32
+     * caracteres de `terms_version`) e o texto resolvido completo continua em
+     * `consent_statement`. PENDENTE DE REVISÃO JURÍDICA, como as demais variantes da Fase 2.
+     */
+    public const WAVE_B_VERSION_SUFFIX = '+b1';
+
+    /** Revisão adversarial da onda B: consulta cadastral, canal simulado, fotos sem prazo. */
+    public const WAVE_B_REVIEW_VERSION_SUFFIX = '+b2';
+
     /**
      * Versão vigente do texto.
      *
@@ -77,6 +96,11 @@ final class ConsentText
      * - demais combinações (testemunha, aprovador, vários documentos): a versão da variante.
      */
     public static function versionFor(Envelope $envelope, ?Recipient $recipient = null, int $documentCount = 1): string
+    {
+        return self::baseVersionFor($envelope, $recipient, $documentCount).self::waveBSuffix($recipient);
+    }
+
+    private static function baseVersionFor(Envelope $envelope, ?Recipient $recipient, int $documentCount): string
     {
         $action = $recipient?->role->acceptanceAction() ?? AcceptanceAction::Sign;
         $multi = $documentCount > 1;
@@ -136,16 +160,16 @@ final class ConsentText
         $action = $recipient?->role->acceptanceAction() ?? AcceptanceAction::Sign;
 
         if ($action !== AcceptanceAction::Sign || $documentCount > 1) {
-            return self::variantCheckboxLabel($envelope, $action, $documentCount);
+            return self::withWaveBCode(self::variantCheckboxLabel($envelope, $action, $documentCount), $recipient);
         }
 
-        return sprintf(
+        return self::withWaveBCode(sprintf(
             'Li o documento %s e declaro que concordo com seu conteúdo e que os dados aqui '
             .'registrados — data e hora, endereço IP, navegador, código confirmado por e-mail, '
             .'a versão exata do documento e os campos que preenchi — constituem evidência do '
             .'meu aceite eletrônico.',
             $envelope->title,
-        );
+        ), $recipient);
     }
 
     /**
@@ -200,7 +224,7 @@ final class ConsentText
             );
 
         $lines = [
-            sprintf('Declaração de aceite eletrônico — versão %s', self::versionFor($envelope)),
+            sprintf('Declaração de aceite eletrônico — versão %s', self::versionFor($envelope, $recipient)),
             '',
             sprintf(
                 'Eu, %s, identificado(a) nesta solicitação pelo e-mail %s, declaro que:',
@@ -230,7 +254,7 @@ final class ConsentText
                 .'informando um motivo.',
         ];
 
-        return implode("\n", $lines);
+        return self::withWaveBStatement(implode("\n", $lines), $recipient);
     }
 
     /**
@@ -385,7 +409,7 @@ final class ConsentText
             },
         );
 
-        return implode("\n", $lines);
+        return self::withWaveBStatement(implode("\n", $lines), $recipient);
     }
 
     /**
@@ -427,13 +451,13 @@ final class ConsentText
     /**
      * Versão do aviso de privacidade exibido a este papel.
      */
-    public static function privacyNoticeVersion(?RecipientRole $role = null): string
+    public static function privacyNoticeVersion(?RecipientRole $role = null, ?Recipient $recipient = null): string
     {
         return match ($role) {
             RecipientRole::Viewer => self::PRIVACY_NOTICE_VIEWER_VERSION,
             RecipientRole::Approver => self::PRIVACY_NOTICE_APPROVER_VERSION,
             default => self::PRIVACY_NOTICE_VERSION,
-        };
+        }.self::waveBSuffix($recipient);
     }
 
     /**
@@ -441,7 +465,7 @@ final class ConsentText
      * O que se registra depende do papel: aceite (signatário e testemunha), aprovação ou só a
      * visualização.
      */
-    public static function privacySummary(Organization $organization, ?RecipientRole $role = null): string
+    public static function privacySummary(Organization $organization, ?RecipientRole $role = null, ?Recipient $recipient = null): string
     {
         $what = match ($role) {
             RecipientRole::Viewer => 'Para registrar sua visualização',
@@ -449,24 +473,230 @@ final class ConsentText
             default => 'Para registrar seu aceite',
         };
 
-        return sprintf(
+        return self::withWaveBCode(sprintf(
             'Este documento foi enviado por %s. %s, a AssinaVelox gravará '
             .'data, IP, navegador, a versão exata do documento e o código confirmado por e-mail.',
             $organization->name,
             $what,
-        );
+        ), $recipient);
     }
 
     /**
      * Aviso de privacidade completo (menos de 350 palavras, conforme a minuta jurídica).
      */
-    public static function privacyNotice(Organization $organization, ?RecipientRole $role = null): string
+    public static function privacyNotice(Organization $organization, ?RecipientRole $role = null, ?Recipient $recipient = null): string
     {
-        return match ($role) {
+        return self::withWaveBNotice(match ($role) {
             RecipientRole::Viewer => self::viewerPrivacyNotice($organization),
             RecipientRole::Approver => self::approverPrivacyNotice($organization),
             default => self::signerPrivacyNotice($organization),
+        }, $recipient);
+    }
+
+    // -- Fase 2, onda B: complementos por participante -----------------------------------
+
+    /**
+     * O que muda nos textos para este participante. `null` = só e-mail, sem PIN, sem CPF e
+     * sem foto exigida: os textos são exatamente os de antes.
+     *
+     * @return array{channel: DeliveryChannel, pin: bool, cpf: bool, cpf_lookup: bool, photos: list<string>, simulated: bool, retention_disabled: bool}|null
+     */
+    private static function waveB(?Recipient $recipient): ?array
+    {
+        if ($recipient === null || $recipient->getKey() === null) {
+            return null;
+        }
+
+        $channel = $recipient->auth_method->channel();
+        $pin = app(SenderPins::class)->requiredFor($recipient);
+        $cpf = SigningField::withoutOrganizationScope()
+            ->where('recipient_id', $recipient->getKey())
+            ->where('type', FieldType::Cpf->value)
+            ->exists();
+
+        $photos = [];
+        $organization = Organization::query()->find($recipient->organization_id);
+        $cpfLookup = $cpf && IdentityFeatures::cpfLookup($organization);
+
+        if (IdentityFeatures::identityCapture($organization)) {
+            foreach (app(IdentityCaptures::class)->requiredKinds($recipient) as $kind) {
+                $photos[] = mb_strtolower($kind->label());
+            }
+        }
+
+        if ($channel === DeliveryChannel::Email && ! $pin && ! $cpf && $photos === []) {
+            return null;
+        }
+
+        // Canal servido pelo simulador: nada é transmitido, e o texto precisa dizer isso.
+        $simulated = $channel !== DeliveryChannel::Email
+            && (app(ChannelAvailability::class)->provider($channel)?->isSimulated() ?? false);
+
+        return [
+            'channel' => $channel,
+            'pin' => $pin,
+            'cpf' => $cpf,
+            'cpf_lookup' => $cpfLookup,
+            'photos' => $photos,
+            'simulated' => $simulated,
+            'retention_disabled' => $photos !== [] && (int) config('assinavelox.capture.retention_days', 180) <= 0,
+        ];
+    }
+
+    /**
+     * Sufixo da versão para os complementos da onda B. `+b1`: textos da integração I-2B.
+     * `+b2` (revisão adversarial): consulta cadastral do CPF, canal simulado ou fotos sem
+     * prazo de exclusão — mudou uma palavra, nova versão. PENDENTE DE REVISÃO JURÍDICA.
+     */
+    private static function waveBSuffix(?Recipient $recipient): string
+    {
+        $wave = self::waveB($recipient);
+
+        if ($wave === null) {
+            return '';
+        }
+
+        return $wave['cpf_lookup'] || $wave['simulated'] || $wave['retention_disabled']
+            ? self::WAVE_B_REVIEW_VERSION_SUFFIX
+            : self::WAVE_B_VERSION_SUFFIX;
+    }
+
+    private static function simulatedNote(DeliveryChannel $channel): string
+    {
+        return sprintf(' [envio por %s simulado nesta instalação: nenhuma mensagem foi transmitida ao celular]', $channel->label());
+    }
+
+    /** "código confirmado por SMS" (+ "e PIN combinado com a remetente"). */
+    private static function withWaveBCode(string $text, ?Recipient $recipient): string
+    {
+        $wave = self::waveB($recipient);
+
+        if ($wave === null) {
+            return $text;
+        }
+
+        $code = match ($wave['channel']) {
+            DeliveryChannel::Sms => 'código confirmado por SMS',
+            DeliveryChannel::Whatsapp => 'código confirmado por WhatsApp',
+            default => 'código confirmado por e-mail',
         };
+
+        return str_replace(
+            'código confirmado por e-mail',
+            $code.($wave['pin'] ? ' e PIN combinado com a remetente' : '').($wave['simulated'] ? self::simulatedNote($wave['channel']) : ''),
+            $text,
+        );
+    }
+
+    /** Item 3 da declaração: o método de autenticação e as fotos enviadas. */
+    private static function withWaveBStatement(string $text, ?Recipient $recipient): string
+    {
+        $wave = self::waveB($recipient);
+
+        if ($wave === null) {
+            return $text;
+        }
+
+        $method = match ($wave['channel']) {
+            DeliveryChannel::Sms => 'código de uso único enviado por SMS ao celular informado pela remetente',
+            DeliveryChannel::Whatsapp => 'código de uso único enviado por WhatsApp ao celular informado pela remetente',
+            default => 'código de uso único confirmado no e-mail acima',
+        };
+
+        if ($wave['pin']) {
+            $method .= ', seguido do PIN combinado com a remetente';
+        }
+
+        $text = str_replace(
+            '(código de uso único confirmado no e-mail acima)',
+            '('.$method.')'.($wave['simulated'] ? self::simulatedNote($wave['channel']) : ''),
+            $text,
+        );
+
+        if ($wave['cpf_lookup']) {
+            $text = str_replace(
+                ', e esta declaração.',
+                ', o resultado da consulta cadastral do CPF que informei, feita a um serviço usado pela AssinaVelox (a consulta não confirma que sou o titular do CPF), e esta declaração.',
+                $text,
+            );
+        }
+
+        if ($wave['photos'] !== []) {
+            $text = str_replace(
+                ', e esta declaração.',
+                sprintf(', as fotos que enviei nesta tela (%s), guardadas como registro, sem verificação de identidade, e esta declaração.', implode(', ', $wave['photos'])),
+                $text,
+            );
+        }
+
+        return $text;
+    }
+
+    /** Aviso de privacidade: o que é registrado e o que é pedido. */
+    private static function withWaveBNotice(string $text, ?Recipient $recipient): string
+    {
+        $wave = self::waveB($recipient);
+
+        if ($wave === null) {
+            return $text;
+        }
+
+        $registered = sprintf(
+            '%s (informados pela remetente); o código de confirmação enviado %s (guardado apenas de forma irreversível)',
+            $wave['channel'] === DeliveryChannel::Email ? 'seu nome e e-mail' : 'seu nome, e-mail e celular',
+            match ($wave['channel']) {
+                DeliveryChannel::Sms => 'por SMS ao seu celular',
+                DeliveryChannel::Whatsapp => 'por WhatsApp ao seu celular',
+                default => 'ao seu e-mail',
+            },
+        );
+
+        if ($wave['pin']) {
+            $registered .= '; a confirmação do PIN que a remetente combinou com você (o PIN também é guardado só de forma irreversível)';
+        }
+
+        if ($wave['cpf'] && $wave['cpf_lookup']) {
+            // Flag `cpf_lookup`: o número sai para um terceiro (LGPD art. 9º — informar o
+            // compartilhamento e a finalidade). PENDENTE DE REVISÃO JURÍDICA.
+            $registered .= '; o CPF que você digitar no documento, que não é conferido apenas pelos dígitos: ele também é '
+                .'enviado a um serviço de consulta cadastral usado pela AssinaVelox, só para conferir a situação do número '
+                .'na base desse serviço, e o resultado da consulta fica registrado com o aceite (a consulta não confirma que '
+                .'você é o titular do CPF)';
+        } elseif ($wave['cpf']) {
+            $registered .= '; o CPF que você digitar no documento, conferido apenas pelos dígitos (isso não confirma a titularidade)';
+        }
+
+        if ($wave['photos'] !== []) {
+            $retentionDays = (int) config('assinavelox.capture.retention_days', 180);
+
+            // `retention_days <= 0` desliga a exclusão automática (CapturePurge): prometer
+            // "apagadas 0 dias depois" seria falso. Diz o que de fato acontece.
+            $registered .= sprintf(
+                '; as fotos que você enviar (%s), guardadas como registro do aceite, sem comparação de rostos, sem análise da imagem e sem leitura do documento, e %s',
+                implode(', ', $wave['photos']),
+                $retentionDays > 0
+                    ? sprintf('apagadas %d dias depois', $retentionDays)
+                    : 'guardadas enquanto o documento existir na conta da remetente',
+            );
+        }
+
+        $text = preg_replace(
+            '/seu nome e\s+e-mail \(informados pela remetente\); o código de confirmação enviado ao seu\s+e-mail \(guardado apenas de forma irreversível\)/u',
+            $registered,
+            $text,
+        ) ?? $text;
+
+        $notAsked = array_values(array_filter([
+            $wave['pin'] ? null : 'senha',
+            $wave['cpf'] ? null : 'CPF',
+            $wave['photos'] !== [] ? null : 'foto',
+            'localização',
+        ]));
+
+        $last = (string) array_pop($notAsked);
+        $list = $notAsked === [] ? $last : implode(', ', $notAsked).' ou '.$last;
+
+        return str_replace('Não pedimos senha, CPF, foto ou localização.', sprintf('Não pedimos %s.', $list), $text);
     }
 
     private static function viewerPrivacyNotice(Organization $organization): string

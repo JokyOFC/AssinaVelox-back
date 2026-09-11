@@ -12,6 +12,7 @@ use App\Models\Recipient;
 use App\Notifications\Envelopes\RecipientInvitationNotification;
 use App\Services\Envelopes\Contracts\RotatesInvitations;
 use App\Services\Envelopes\EnvelopeAudit;
+use App\Services\Signing\Channels\ChannelInvitations;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
@@ -141,6 +142,10 @@ class InvitationDispatcher implements RotatesInvitations
         Notification::route('mail', $recipient->email)->notify(
             new RecipientInvitationNotification($recipient, $envelope, $issued->url, $correlationId, $isReminder),
         );
+
+        // Fase 2 §2.9 (C-CAN): aviso adicional pelo canal do participante (SMS/WhatsApp), com o
+        // mesmo correlation_id. Sem `delivery_channel` (o padrão) não faz nada.
+        app(ChannelInvitations::class)->afterInvitation($recipient, $issued->url, $isReminder, $correlationId);
     }
 
     /**

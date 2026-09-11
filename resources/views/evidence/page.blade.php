@@ -58,6 +58,12 @@
 
         .code { font-size: 11pt; letter-spacing: 0.6pt; font-weight: bold; }
 
+        /* Fase 2 §2.8: identificação visual da organização remetente (só no cabeçalho). */
+        .brand { margin: 0 0 3mm 0; }
+        .brand td { padding: 0; vertical-align: middle; }
+        .brand-logo img { max-height: 12mm; max-width: 45mm; }
+        .brand-name { padding-left: 3mm !important; }
+
         .footer {
             position: fixed;
             bottom: -14mm; left: 0; right: 0;
@@ -74,6 +80,23 @@
 <table class="head-table">
     <tr>
         <td>
+            {{--
+                Fase 2 §2.8 (C-BRAND): logo da organização REMETENTE, só quando a marca está
+                ativa (EvidenceData → BrandingPresenter::forEvidence). Identifica quem enviou o
+                documento; quem gera esta página continua sendo a operadora (linha abaixo). Nada
+                do conteúdo de evidência muda com a marca.
+            --}}
+            @if (! empty($e['branding']['logo_data_uri']))
+                <table class="brand">
+                    <tr>
+                        <td class="brand-logo"><img src="{{ $e['branding']['logo_data_uri'] }}" alt="Logo de {{ $e['branding']['display_name'] }}"></td>
+                        <td class="brand-name">
+                            <span class="strong">{{ $e['branding']['display_name'] }}</span><br>
+                            <span class="small muted">Organização remetente</span>
+                        </td>
+                    </tr>
+                </table>
+            @endif
             <h1>Página de evidências do aceite eletrônico</h1>
             <p class="muted">
                 Documento consolidado por {{ $e['operator']['name'] }} · gerada automaticamente em
@@ -97,6 +120,10 @@
     <tr><td>Identificação interna</td><td>{{ $e['envelope']['display_code'] }}</td></tr>
     <tr><td>Código de verificação</td><td class="strong">{{ $e['envelope']['verification_code'] }}</td></tr>
     <tr><td>Organização remetente</td><td>{{ $e['organization']['legal_name'] ?: $e['organization']['name'] }}</td></tr>
+    @if (! empty($e['stamp']['description']))
+        {{-- Fase 2 §2.8: só existe quando o documento tem campo de carimbo (StampEvidence). --}}
+        <tr><td>Carimbo visual</td><td>{{ $e['stamp']['description'] }}</td></tr>
+    @endif
     <tr><td>Criado em</td><td>{{ $e['envelope']['created_at'] ?? '—' }}</td></tr>
     <tr><td>Enviado em</td><td>{{ $e['envelope']['sent_at'] ?? '—' }}</td></tr>
     <tr><td>Concluído em</td><td>{{ $e['envelope']['completed_at'] ?? '—' }} ({{ $e['organization']['timezone'] }})</td></tr>
@@ -144,6 +171,10 @@
             </td>
             <td class="small">
                 {{ $participant['auth_method'] }}
+                @if (! empty($participant['in_person_label']))
+                    {{-- Fase 2 §2.6 (C-PRES): o autor do aceite continua sendo o participante. --}}
+                    <br>{{ $participant['in_person_label'] }}
+                @endif
                 @if ($participant['ip'])
                     <br>IP {{ $participant['ip'] }}
                 @endif

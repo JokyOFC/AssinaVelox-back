@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\FieldGeometry;
 use App\Services\Envelopes\FieldSync;
+use App\Services\Envelopes\FieldTypeAvailability;
 use App\Services\Envelopes\PageBox;
 use App\Support\OrganizationSettings;
 use Illuminate\Validation\ValidationException;
@@ -85,7 +86,7 @@ final class TemplateDefinitionBuilder
         $fields = [];
 
         if ($type->supportsFields()) {
-            $fields = $this->fields($rawFields, $roles, $source, $errors);
+            $fields = $this->fields($rawFields, $roles, $source, $errors, $organization);
         } elseif ($rawFields !== []) {
             $errors['fields'] = 'Campos pré-posicionados só existem em modelos PDF fixo. Em modelos Word e HTML os campos são posicionados no passo 3 do documento gerado.';
         }
@@ -504,7 +505,7 @@ final class TemplateDefinitionBuilder
      * @param  array<string, string>  $errors
      * @return list<array{role_ref: string, type: string, page: int, x: float, y: float, width: float, height: float, box_type: string, page_width_pt: float, page_height_pt: float, page_rotation: int, required: bool, label: string|null, options: array<string, mixed>|null}>
      */
-    private function fields(array $rows, array $roles, array $source, array &$errors): array
+    private function fields(array $rows, array $roles, array $source, array &$errors, ?Organization $organization = null): array
     {
         if (count($rows) > FieldSync::MAX_FIELDS) {
             $errors['fields'] = sprintf('Um modelo aceita no máximo %d campos.', FieldSync::MAX_FIELDS);
@@ -540,6 +541,13 @@ final class TemplateDefinitionBuilder
 
             if ($type === null) {
                 $errors["fields.{$index}.type"] = 'Tipo de campo inválido.';
+
+                continue;
+            }
+
+            // Fase 2, onda B: `cpf` (flag `cpf_field`) e `stamp` (flag `branding`).
+            if (! FieldTypeAvailability::allows($type, $organization)) {
+                $errors["fields.{$index}.type"] = FieldTypeAvailability::unavailableMessage($type);
 
                 continue;
             }
@@ -629,7 +637,7 @@ final class TemplateDefinitionBuilder
             $options['placeholder'] = mb_substr(trim($placeholder), 0, 60);
         }
 
-        if (in_array($type, [FieldType::Name, FieldType::Date, FieldType::Text], true) && isset($incoming['font_size'])) {
+        if (in_array($type, [FieldType::Name, FieldType::Date, FieldType::Text, FieldType::Cpf], true) && isset($incoming['font_size'])) {
             $size = $incoming['font_size'];
 
             if (! is_numeric($size) || (float) $size < FieldSync::MIN_FONT_SIZE || (float) $size > FieldSync::MAX_FONT_SIZE) {

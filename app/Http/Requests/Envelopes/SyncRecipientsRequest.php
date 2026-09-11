@@ -2,8 +2,11 @@
 
 namespace App\Http\Requests\Envelopes;
 
+use App\Enums\AuthMethod;
+use App\Enums\DeliveryChannel;
 use App\Enums\RecipientRole;
 use App\Models\Envelope;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -36,7 +39,59 @@ class SyncRecipientsRequest extends FormRequest
             // `participant_roles` é conferida em RecipientSync.
             'recipients.*.participant_role' => ['nullable', 'string', Rule::in(RecipientRole::values())],
             'recipients.*.order' => ['nullable', 'integer', 'min:1', 'max:20'],
+            // Fase 2 §2.9 (C-CAN): telefone, canal do convite, método de autenticação e PIN.
+            // Disponibilidade do canal, formato E.164 e força do PIN são conferidos em
+            // App\Services\Signing\Channels\RecipientChannels (com a flag e o provedor).
+            'recipients.*.phone' => ['nullable', 'string', 'max:32'],
+            'recipients.*.channel' => ['nullable', 'string', Rule::in(DeliveryChannel::values())],
+            'recipients.*.auth_method' => ['nullable', 'string', Rule::in(AuthMethod::values())],
+            'recipients.*.pin' => ['nullable', 'string', 'regex:/^\d*$/', 'max:8'],
+            'recipients.*.remove_pin' => ['nullable', 'boolean'],
         ];
+    }
+
+    /**
+     * O PIN sai da entrada logo depois da validação: nunca vai para `_old_input` num
+     * redirect de erro (nem da validação, nem de RecipientSync).
+     */
+    protected function passedValidation(): void
+    {
+        $this->forgetPins();
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        $this->forgetPins();
+
+        parent::failedValidation($validator);
+    }
+
+    private function forgetPins(): void
+    {
+        $targets = [$this];
+        $original = app('request');
+
+        if ($original !== $this) {
+            $targets[] = $original;
+        }
+
+        foreach ($targets as $request) {
+            foreach ([$request->getInputSource(), $request->request] as $bag) {
+                $rows = $bag->all()['recipients'] ?? null;
+
+                if (! is_array($rows)) {
+                    continue;
+                }
+
+                foreach ($rows as $index => $row) {
+                    if (is_array($row)) {
+                        unset($rows[$index]['pin']);
+                    }
+                }
+
+                $bag->set('recipients', $rows);
+            }
+        }
     }
 
     /**

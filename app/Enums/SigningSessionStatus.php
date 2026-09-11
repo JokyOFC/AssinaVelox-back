@@ -13,8 +13,9 @@ enum SigningSessionStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::PendingAuth => 'Aguardando confirmação de identidade',
-            self::Authenticated => 'Identidade confirmada',
+            // O código prova a posse do canal, não a identidade (arquitetura §2, T1).
+            self::PendingAuth => 'Aguardando confirmação do código',
+            self::Authenticated => 'Código confirmado',
             self::Consumed => 'Concluída',
             self::Expired => 'Expirada',
             self::Revoked => 'Revogada',

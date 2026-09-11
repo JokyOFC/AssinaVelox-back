@@ -439,6 +439,89 @@ Com mais de um arquivo: seletor acima do visualizador (campos filtrados por `doc
 2. `EnvelopeController::edit/show` ainda não mescla a prop `reminders` — sem ela, lembretes e agendamento não aparecem (comportamento da Fase 1).
 3. `HandleInertiaRequests::features()` ainda não compartilha `participant_roles` (o wizard usa `domain_features`) nem deriva `multi_document`/`reminders` das flags reais.
 
+## Fase 2 — onda B: canais, PIN, CPF, captura simples e CNPJ
+
+Contratos do backend: `docs/fase-2/canais-e-pin.md` §9 (C-CAN), `docs/fase-2/identidade.md` §7 (C-ID) e `docs/fase-2/branding.md` §6/§8 (C-BRAND). Mesma regra de ouro da onda A (roadmap T8): **cada recurso só aparece com a sua flag**; com todas desligadas, telas, textos e payloads são os de antes. A flag só liga a interface — quem autoriza e valida é o servidor.
+
+### Vocabulário (T1)
+
+- O código por SMS/WhatsApp **prova a posse do canal** (o celular que recebeu), não a identidade. A tela diz isso no wizard.
+- O PIN é um **segredo combinado pelo remetente por fora** do AssinaVelox, pedido **depois** do código e nunca no lugar dele. O sistema nunca envia nem exibe de novo o PIN.
+- O campo CPF é **conferido só pelos dígitos**; a tela diz que isso não confirma que a pessoa é a titular.
+- A foto é **captura simples**: fica anexada ao registro do aceite e **não é verificação de identidade** (sem comparação de rostos, sem análise da imagem, sem leitura do documento).
+- O carimbo visual é **representação visual, não prova**.
+- `tests/Feature/Phase2/VocabularyTest.php` varre `resources/js` inteiro.
+
+### De onde vem cada flag
+
+| Recurso                            | Lido de                                                                | Onde aparece                                                 |
+| ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| SMS/WhatsApp (§2.9)                | prop `channels.enabled` do wizard (`ChannelAvailability::wizardProps`) | wizard, passo 2 (celular, canal do convite, canal do código) |
+| PIN do remetente (§2.9)            | `channels.pin.enabled`                                                 | wizard, passo 2                                              |
+| Campo CPF (§2.11)                  | `features.cpf_field`                                                   | wizard, passo 3 (paleta)                                     |
+| Carimbo visual (§2.8)              | `features.branding` (via `paletteFieldTypes` de `field-types.ts`)      | wizard, passo 3 (paleta)                                     |
+| Captura simples (§2.10)            | `features.identity_capture` + prop `capture_requirements` do wizard    | wizard, passo 2                                              |
+| Autopreenchimento por CNPJ (§2.11) | `features.cnpj_lookup`                                                 | Configurações › Geral e cadastro                             |
+
+As chaves novas de `Features` (`pin_auth`, `sender_domains`, `cpf_field`, `cpf_lookup`, `cnpj_lookup`, `identity_capture`) são **opcionais** no tipo: ausente = desligada. A página pública, o detalhe e as evidências **não olham flag** — mostram o que o servidor mandar (`auth`, `identity_capture`, campo `cpf`/`stamp` num envelope já enviado).
+
+### Componentes novos
+
+| Arquivo                                                | Papel                                                                                                                                                                                                         |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/envelopes/recipient-channel-fields.tsx`    | `RecipientChannelFields` (celular com máscara, "Enviar convite por", "Como … se autentica", motivos de indisponibilidade e selo "simulado") e `RecipientPinControl` (definir, gerar, trocar e remover o PIN). |
+| `components/envelopes/capture-requirement-control.tsx` | Caixas "Rosto", "Documento (frente)", "Documento (verso)" por participante; grava por `fetch` JSON em `PUT envelopes.recipients.identity_capture`.                                                            |
+| `components/envelopes/field-type-extras.ts`            | Extensão de `field-types.ts` (área C-BRAND) com o tipo `cpf`: ícone, tamanho, mínimo (40×9 pt), placeholder e dica; `editorPaletteTypes(features)`.                                                           |
+| `components/identity/phone.ts`                         | Máscara "+55 11 91234-5678" e pré-validação de celular (DDD, 9 dígitos, estrangeiro por tamanho E.164). O servidor decide.                                                                                    |
+| `components/identity/pin.ts`                           | Regras de PIN iguais às de `SenderPins` (tamanho, repetido, sequência com volta) e `generatePin` com `crypto.getRandomValues`.                                                                                |
+| `components/identity/http.ts`                          | `postJson`/`requestJson` com XSRF, tempo-limite e "rede/tempo esgotado = desconhecido" (T5).                                                                                                                  |
+| `components/identity/camera-capture-dialog.tsx`        | Uma foto: explicação da permissão, `getUserMedia` (câmera frontal espelhada só na prévia), escolher arquivo, pré-visualizar, "Usar esta foto", "Refazer".                                                     |
+| `components/identity/capture-step.tsx`                 | `CaptureStepCard` (etapa na tela `sign`) e `CaptureStepPreview` (aviso na tela `identify`).                                                                                                                   |
+| `components/identity/cnpj-lookup.tsx`                  | `useCnpjLookup`, `CnpjLookupButton`, `CnpjLookupNotice` (mensagem, atribuição da fonte, selo "simulado", "preencha manualmente").                                                                             |
+| `components/sign/pin-card.tsx`                         | Etapa do PIN depois do código (`POST sign.pin.verify`).                                                                                                                                                       |
+
+### Wizard
+
+- **Passo 2.** Com `channels.enabled`: celular (obrigatório quando o convite ou o código usam SMS/WhatsApp), "Enviar convite por" (Só e-mail / E-mail + SMS / E-mail + WhatsApp — o e-mail sai sempre) e o canal do código a partir de `channels.auth_methods`. Canal indisponível fica desabilitado **com o motivo do servidor em texto visível** (não só em `title`); provedor simulado ganha o selo "simulado" e o `notice`. Sem a flag, o bloco é o da Fase 1 (chips "Código por e-mail" e "Token SMS · Fase 2").
+- **Celular e gravação automática.** O sync só sai quando todo celular exigido está completo; um número pela metade num participante só por e-mail simplesmente não é enviado (`phone` viaja completo ou vazio). A pendência "Informe um celular válido…" aparece no passo 4.
+- **PIN.** Com `channels.pin.enabled`: "Definir PIN" abre um diálogo com o campo, "Gerar" e "Copiar", e o aviso de que o PIN não é exibido de novo. O PIN fica **só no estado local** até o próximo `recipients.sync`, viaja uma única vez (`pin`) e é descartado quando a gravação volta; depois a tela só conhece `has_pin`. "Remover PIN" envia `remove_pin: true`. Enquanto há PIN a salvar, o envio fica bloqueado ("Aguarde o PIN ser salvo antes de enviar.").
+- **Fotos.** Com `features.identity_capture`, cada participante que registra aceite (visualizador não) ganha as caixas de foto, habilitadas depois que a linha é salva (precisa do ULID). O verso só com a frente, como no servidor.
+- **Payload.** `channel`, `auth_method` e `phone` só com `channels.enabled`; `pin`/`remove_pin` só com `channels.pin.enabled`. Enquanto o `RecipientWizardResource` não devolver os campos de canal (`has_pin` é o sinal), a resposta do sync é mesclada com o que o cliente já sabe, para o canal escolhido não "voltar" para e-mail.
+- **Passo 3.** Paleta por `editorPaletteTypes({ branding, cpf_field })`. CPF entra depois de "Texto livre" com placeholder `000.000.000-00` (em `placeholder` e `options.placeholder`). Carimbo nasce **não obrigatório**, sem fonte, com a dica "representação visual, não prova". A camada aceita soltar `cpf` (`FieldLayer<T, D>` ganhou o parâmetro `D`, com padrão `FieldType` para o editor de modelos).
+- **Passo 4.** Com canais ou PIN, a linha do participante diz "E-mail + SMS · código por sms + PIN" em vez de "e-mail com código de verificação".
+
+### Página pública (`sign/show.tsx`)
+
+- **Código por canal (`auth`).** "Receber código por SMS", "Enviamos um código por SMS para +55 •••••••5678", selo "simulado" e o aviso do simulador. Canal indisponível: caixa com o motivo do servidor e "Fale com {remetente}", sem botão. O reenvio mantém a contagem regressiva. Sem `auth`, os textos são exatamente os da Fase 1 ("Receber código por e-mail").
+- **PIN (`auth.step === 'pin'`).** `PinCard` substitui o campo do código; erros em `errors.pin`; tentativas restantes abaixo de 3. `pin.locked_until`: contagem regressiva e os controles do código desabilitados até lá, depois "peça um novo código". `pin.blocked`: "PIN bloqueado — fale com {remetente}", sem controles.
+- **CPF.** Máscara `000.000.000-00`, validação dos dígitos no cliente (CPF errado, mesmo opcional, bloqueia o envio), erro do servidor em `errors['fields.{id}']` e a frase "O CPF é conferido só pelos dígitos; isso não confirma que a pessoa é a titular."
+- **Captura (`identity_capture`).** Na tela `identify`, só o aviso do que será pedido. Na tela `sign`, o cartão com cada foto: câmera ou arquivo, pré-visualização, refazer. O envio é `fetch` multipart (`image` + `source`) com `Accept: application/json`; a resposta 201 substitui o bloco local. Tempo esgotado/rede: "Não recebemos a confirmação do envio" (reenviar substitui a anterior). O aceite só habilita com `complete`.
+- **Carimbo.** Nunca interativo e nunca pendente; mostra `StampPreview` com `sender.brand` (ou uma caixa "Carimbo · {organização}" sem marca).
+
+### CNPJ
+
+- **Configurações › Geral** (`POST settings.organization.cnpj`): botão "Preencher pelo CNPJ" ao lado do campo, habilitado com CNPJ completo e válido. Razão social vazia é preenchida; campo já preenchido com outro valor não é sobrescrito — a sugestão aparece com "Usar". O nome de exibição nunca muda sozinho.
+- **Cadastro** (`POST cnpj.lookup`): consulta automática ao completar um CNPJ válido; preenche "Empresa" só se estiver vazio (ou ainda com a sugestão anterior).
+- Qualquer desfecho mostra a mensagem do servidor, a atribuição da fonte e o selo "simulado"; o formulário **nunca é bloqueado**. Sem a flag, nenhuma chamada é feita.
+
+### Evidências e detalhe
+
+- **Evidências:** por participante, `identity_captures` com miniatura, tipo, data, dimensões e SHA-256, e a nota `identity_capture_notice` ("Não houve verificação de identidade…"). `auth_methods` aceita `sms_otp`, `whatsapp_otp` e `sender_pin` (rótulos em `authMethodLabels`).
+- **Detalhe:** o chip do canal diz "E-mail + SMS"/"E-mail + WhatsApp" com o ícone do canal.
+
+### Tipos
+
+`FieldType` ganhou `stamp`. O CPF está em `SigningFieldType = FieldType | 'cpf'` (espelho completo de `App\Enums\FieldType`) porque `field-types.ts` indexa tabelas por `FieldType` e ainda não tem `cpf`; quando tiver, os dois voltam a ser um tipo só. `AuthMethod` ganhou `sms_otp` e `whatsapp_otp`; `SignerAuthMethod` soma `sender_pin`. Novos: `CaptureKind`, `WizardChannels`, `ChannelInfo`, `AuthMethodInfo`, `SignerAuth`, `IdentityCaptureStep`, `IdentityCaptureItem`, `IdentityCaptureEvidence`, `CnpjLookupResult`. `AuditEventType` ganhou os 11 eventos da onda B.
+
+### Pendências fora do front (integração)
+
+1. `HandleInertiaRequests::features()`: compartilhar `ChannelFeatures::forOrganization()` e `IdentityFeatures::forOrganization()` (e o global de `cnpj_lookup` sem organização, para o cadastro).
+2. `EnvelopeController::edit`: props `channels` (`ChannelAvailability::wizardProps`) e `capture_requirements` (`IdentityCaptures::requirementsForEnvelope`); `RecipientWizardResource` com `RecipientChannels::wizardFields()`.
+3. `SignerPageProps`: **`signer_auth`** (`SignerAuthProps::for`), `auth_methods` (`SignerAuthProps::authMethods`), `identity_capture` (`CaptureStep::props`) e `sender.brand`/`sender.logo_url`. **Não usar o nome `auth`** que o contrato do C-CAN propõe: `auth` já é a prop compartilhada `{ user }` do `HandleInertiaRequests`, e o Inertia mescla as compartilhadas nas da página. Foi um bug real nesta onda — lendo `props.auth`, a página pública recebia `{ user: null }`, tratava o canal como indisponível e escondia "Receber código por e-mail" (o `SignerFlowTest` travava). A página agora lê `signer_auth` e só aceita `auth` quando ele tem a forma de `SignerAuth` (`signerAuthOf`).
+4. `EvidenceDossier`: `identity_captures` por participante e `identity_capture_notice`.
+5. `field-types.ts` (C-BRAND): acrescentar `cpf` às tabelas; aí `SigningFieldType` e `FieldType` podem ser unificados e `field-type-extras.ts` encolhe.
+6. `php artisan wayfinder:generate --with-form` depois das rotas finais (os helpers usados — `sign.pin.verify`, `sign.capture.store`, `envelopes.recipients.identity_capture`, `settings.organization.cnpj`, `cnpj.lookup` — já estavam gerados no ambiente).
+
 ## Responsividade
 
 - Sidebar: `SidebarProvider` + `collapsible="offcanvas"`; abaixo de `md` (768px) vira `Sheet`; estado persistido no cookie `sidebar_state` (prop compartilhada `sidebarOpen`).

@@ -5,6 +5,8 @@ use App\Http\Controllers\Admin\ImpersonationController as AdminImpersonationCont
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\PlaceholderController as AdminPlaceholderController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Batch\BatchLinkController;
+use App\Http\Controllers\Batch\BatchSigningController;
 use App\Http\Controllers\Billing\BillingCheckoutController;
 use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
@@ -19,6 +21,10 @@ use App\Http\Controllers\Envelopes\EnvelopeFieldController;
 use App\Http\Controllers\Envelopes\EnvelopeRecipientController;
 use App\Http\Controllers\Envelopes\EnvelopeSendController;
 use App\Http\Controllers\FolderController;
+use App\Http\Controllers\Identity\CaptureRequirementController;
+use App\Http\Controllers\Identity\CnpjLookupController;
+use App\Http\Controllers\InPerson\InPersonHostController;
+use App\Http\Controllers\InPerson\KioskController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\Members\InvitationAcceptController;
 use App\Http\Controllers\Members\InvitationController;
@@ -32,13 +38,20 @@ use App\Http\Controllers\Organizations\OrganizationSwitchController;
 use App\Http\Controllers\Public\HomeController;
 use App\Http\Controllers\Public\LegalController;
 use App\Http\Controllers\Public\VerificationController;
+use App\Http\Controllers\PublicForms\PublicFormConfirmationController;
+use App\Http\Controllers\PublicForms\PublicFormController;
+use App\Http\Controllers\PublicForms\PublicFormFillController;
+use App\Http\Controllers\PublicForms\PublicFormSubmissionController;
 use App\Http\Controllers\RecipientController;
 use App\Http\Controllers\Reports\AuditLogController;
 use App\Http\Controllers\Reports\ReportController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\Settings\BrandingController;
+use App\Http\Controllers\Settings\BrandingLogoController;
 use App\Http\Controllers\Settings\GeneralController;
 use App\Http\Controllers\Settings\NotificationController as NotificationSettingsController;
 use App\Http\Controllers\Settings\SigningController;
+use App\Http\Controllers\Sign\CaptureController as SignCaptureController;
 use App\Http\Controllers\Sign\DocumentController as SignDocumentController;
 use App\Http\Controllers\Sign\DownloadController as SignDownloadController;
 use App\Http\Controllers\Sign\OtpController;
@@ -52,6 +65,9 @@ use App\Http\Controllers\Templates\TemplatePickerController;
 use App\Http\Controllers\Templates\TemplateSourceController;
 use App\Http\Controllers\Templates\TemplateUseController;
 use App\Http\Controllers\Webhooks\MercadoPagoController;
+use App\Http\Controllers\Webhooks\SmsStatusWebhookController;
+use App\Http\Controllers\Webhooks\WhatsAppStatusWebhookController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -79,6 +95,36 @@ Route::middleware('throttle:public')->group(function (): void {
         ->name('verify.check_file');
 });
 
+// Fase 2 §2.8 — logo da organização para e-mails e página pública (docs/fase-2/branding.md).
+// Só o token opaco da versão do logo na URL; resposta idêntica (PNG transparente) para
+// token desconhecido, logo removido ou marca desligada.
+Route::get('marca/logo.png', [BrandingLogoController::class, 'show'])
+    ->middleware('throttle:300,1')
+    ->name('branding.logo');
+
+// Fase 2 §2.11 (C-ID) — autopreenchimento por CNPJ no cadastro e em "Nova organização" (sem
+// organização: vale o interruptor global `cnpj_lookup`). JSON; limite por usuário ou IP no
+// serviço. Nunca bloqueia o formulário (docs/fase-2/identidade.md §3).
+Route::post('cnpj/consulta', [CnpjLookupController::class, 'registration'])
+    ->middleware('throttle:public')
+    ->name('cnpj.lookup');
+
+// Fase 2 §2.2 (C-FORM) — formulário público que gera envelope a partir de um modelo
+// (docs/fase-2/formulario-publico.md). Sem login. Token de 40 caracteres aleatórios; token
+// desconhecido, rascunho, revogado ou flag `public_forms` desligada: o mesmo 404. Os limites
+// por IP e por formulário ficam no serviço (PublicFormIntake); `throttle:public` é o teto geral.
+// A confirmação do e-mail é um POST: o GET só mostra a tela (pré-carregamento de link não confirma).
+Route::prefix('formulario/{token}')
+    ->where(['token' => '[A-Za-z0-9]{40}', 'confirmation' => '[A-Za-z0-9]{48}'])
+    ->middleware('throttle:public')
+    ->name('form_fill.')
+    ->group(function (): void {
+        Route::get('/', [PublicFormFillController::class, 'show'])->name('show');
+        Route::post('/', [PublicFormFillController::class, 'store'])->name('submit');
+        Route::get('confirmar/{confirmation}', [PublicFormConfirmationController::class, 'show'])->name('confirm.show');
+        Route::post('confirmar/{confirmation}', [PublicFormConfirmationController::class, 'store'])->name('confirm');
+    });
+
 // -- Signatário (público, sem conta) -------------------------------------------------------
 Route::prefix('assinar/{token}')
     ->where(['token' => '[A-Za-z0-9_-]{20,128}'])
@@ -90,19 +136,78 @@ Route::prefix('assinar/{token}')
         Route::get('/', [SignerPageController::class, 'show'])->name('show');
         Route::post('codigo', [OtpController::class, 'send'])->middleware('throttle:otp-send')->name('otp.send');
         Route::post('codigo/verificar', [OtpController::class, 'verify'])->middleware('throttle:otp-verify')->name('otp.verify');
+        // Fase 2 §2.9 (C-CAN): PIN do remetente, depois do código. O limite de tentativas de
+        // verdade fica em `recipient_pins` (bloqueio temporário); este é o freio por IP.
+        Route::post('pin', [OtpController::class, 'verifyPin'])->middleware('throttle:10,10,sign-pin')->name('pin.verify');
         Route::get('documento', [SignDocumentController::class, 'show'])->middleware('signer.verified')->name('document');
         Route::get('paginas/{page}.png', [SignDocumentController::class, 'page'])->middleware('signer.verified')->whereNumber('page')->name('page');
         Route::post('assinar', [SignatureController::class, 'store'])->middleware(['signer.verified', 'throttle:10,1'])->name('complete');
         Route::post('recusar', [RefusalController::class, 'store'])->middleware('signer.verified')->name('refuse');
+        // Fase 2 §2.10 (C-ID, docs/fase-2/identidade.md §5): foto do rosto/documento exigida
+        // pelo remetente. 404 com a flag `identity_capture` desligada ou tipo não exigido.
+        Route::post('captura/{kind}', [SignCaptureController::class, 'store'])
+            ->middleware('signer.verified')
+            ->whereIn('kind', ['selfie', 'document_front', 'document_back'])
+            ->name('capture.store');
         // Sem `signer.verified`: o aceite consome a sessão e o comprovante é pedido logo
         // depois. A autorização é feita no controller (aceite registrado ou sessão viva).
         Route::get('download/{type}', [SignDownloadController::class, 'show'])->whereIn('type', ['signed', 'evidence'])->name('download');
+    });
+
+// -- Assinatura em lote (Fase 2 §2.7, C-PRES — docs/fase-2/presencial-e-lote.md §3) -------
+// Público, sem conta. `assinar/lote/{token}` troca o token do e-mail por uma entrada na sessão
+// e redireciona para `assinar/lote`; o resto usa a sessão. "lote" não casa com o `{token}` do
+// grupo `assinar/{token}` (20..128 caracteres). Autorização SEMPRE item a item.
+Route::prefix('assinar/lote')
+    ->middleware('throttle:signer')
+    ->name('sign.batch.')
+    ->group(function (): void {
+        Route::get('{token?}', [BatchSigningController::class, 'show'])->where('token', '[A-Za-z0-9_-]{20,128}')->name('show');
+        Route::post('codigo', [BatchSigningController::class, 'sendCode'])->middleware('throttle:10,10,batch-otp-send')->name('otp.send');
+        Route::post('codigo/verificar', [BatchSigningController::class, 'verifyCode'])->middleware('throttle:15,10,batch-otp-verify')->name('otp.verify');
+        Route::get('documento', [BatchSigningController::class, 'document'])->name('document');
+        Route::post('itens/{item}/abrir', [BatchSigningController::class, 'open'])->where('item', '[A-Za-z0-9]{26}')->name('items.open');
+        Route::post('itens/{item}/autorizar', [BatchSigningController::class, 'authorizeItem'])->where('item', '[A-Za-z0-9]{26}')->middleware('throttle:30,1,batch-authorize')->name('items.authorize');
+        Route::post('sair', [BatchSigningController::class, 'leave'])->name('leave');
+    });
+
+// -- Dispositivo presencial (Fase 2 §2.6, C-PRES — docs/fase-2/presencial-e-lote.md §2) ----
+// Público, sem conta: autoriza o segredo do dispositivo na sessão (posto pelo anfitrião) e,
+// para o documento e o aceite, a sessão de assinatura do PRÓPRIO participante da vez.
+Route::prefix('presencial')
+    ->middleware('throttle:signer')
+    ->name('in_person.kiosk.')
+    ->group(function (): void {
+        Route::get('/', [KioskController::class, 'show'])->name('show');
+        Route::post('participante', [KioskController::class, 'select'])->middleware('throttle:60,1,in-person-select')->name('participant');
+        Route::post('codigo', [KioskController::class, 'sendCode'])->middleware('throttle:20,10,in-person-otp-send')->name('otp.send');
+        Route::post('codigo/verificar', [KioskController::class, 'verifyCode'])->middleware('throttle:30,10,in-person-otp-verify')->name('otp.verify');
+        Route::post('pin', [KioskController::class, 'verifyPin'])->middleware('throttle:10,10,in-person-pin')->name('pin.verify');
+        Route::get('documento', [KioskController::class, 'document'])->name('document');
+        Route::post('captura/{kind}', [KioskController::class, 'capture'])
+            ->whereIn('kind', ['selfie', 'document_front', 'document_back'])
+            ->name('capture.store');
+        Route::post('aceite', [KioskController::class, 'accept'])->middleware('throttle:10,1,in-person-accept')->name('complete');
+        Route::post('bloquear', [KioskController::class, 'lock'])->name('lock');
+        Route::post('encerrar', [KioskController::class, 'end'])->name('end');
     });
 
 // -- Webhook Mercado Pago (sem CSRF — bootstrap/app.php) ---------------------------------
 Route::post('webhooks/mercadopago', [MercadoPagoController::class, 'handle'])
     ->middleware('throttle:webhook')
     ->name('webhooks.mercadopago');
+
+// -- Webhooks de status de SMS/WhatsApp (Fase 2 §2.9, C-CAN) ------------------------------
+// Sem CSRF: autenticados por HMAC + carimbo de tempo (App\Services\Signing\Channels\StatusWebhooks).
+// Com o provedor desabilitado (hoje, em produção) respondem 503 com o motivo.
+Route::post('webhooks/sms/status', SmsStatusWebhookController::class)
+    ->middleware('throttle:webhook')
+    ->withoutMiddleware([PreventRequestForgery::class])
+    ->name('webhooks.sms.status');
+Route::post('webhooks/whatsapp/status', WhatsAppStatusWebhookController::class)
+    ->middleware('throttle:webhook')
+    ->withoutMiddleware([PreventRequestForgery::class])
+    ->name('webhooks.whatsapp.status');
 
 // -- Convites (guest ou autenticado) ------------------------------------------------------
 Route::get('convites/{token}', [InvitationAcceptController::class, 'show'])
@@ -154,6 +259,8 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::post('{envelope}/destinatarios/{recipient}/reenviar', [EnvelopeRecipientController::class, 'resend'])->name('recipients.resend');
         Route::post('{envelope}/reenviar', [EnvelopeRecipientController::class, 'resendAll'])->name('resend');
         Route::patch('{envelope}/destinatarios/{recipient}', [EnvelopeRecipientController::class, 'update'])->name('recipients.update');
+        // Fase 2 §2.10 (C-ID): fotos exigidas do participante antes do aceite (só rascunho).
+        Route::put('{envelope}/participantes/{recipient}/captura', [CaptureRequirementController::class, 'update'])->name('recipients.identity_capture');
         Route::post('{envelope}/cancelar', [EnvelopeController::class, 'cancel'])->name('cancel');
         Route::delete('{envelope}', [EnvelopeController::class, 'destroy'])->name('destroy');
         Route::post('{envelope}/duplicar', [EnvelopeController::class, 'duplicate'])->name('duplicate');
@@ -174,6 +281,10 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         ->middleware('org.role:owner,admin')
         ->name('recipients.resend_pending');
 
+    // Fase 2 §2.11 (C-ID): autopreenchimento por CNPJ em Configurações › Geral (flag
+    // `cnpj_lookup` da organização + `updateSettings`). JSON; nunca bloqueia o formulário.
+    Route::post('configuracoes/organizacao/cnpj', [CnpjLookupController::class, 'organization'])->name('settings.organization.cnpj');
+
     // Fase 2 (placeholders)
     // Modelos (Fase 2 §2.1 — docs/fase-2/modelos.md). Flag `templates` desligada: `index` é o
     // placeholder da Fase 1 e as demais respondem 404 (middleware do próprio controller).
@@ -190,6 +301,20 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::post('{template}/arquivo', [TemplateSourceController::class, 'update'])->middleware('throttle:30,1')->name('source.update');
         Route::get('{template}/pre-visualizacao', [TemplateSourceController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
         Route::post('{template}/usar', [TemplateUseController::class, 'store'])->middleware('throttle:20,1')->name('use');
+    });
+    // Formulários públicos (Fase 2 §2.2, C-FORM — docs/fase-2/formulario-publico.md). Flag
+    // `public_forms` desligada: 404 em todas (middleware dos controllers). Sem `org.role`:
+    // `manage_templates` (e `send_envelopes` para aprovar) na PublicFormPolicy.
+    Route::prefix('formularios')->name('public_forms.')->group(function (): void {
+        Route::get('/', [PublicFormController::class, 'index'])->name('index');
+        Route::post('/', [PublicFormController::class, 'store'])->middleware('throttle:30,1')->name('store');
+        Route::get('{publicForm}/editar', [PublicFormController::class, 'edit'])->name('edit');
+        Route::put('{publicForm}', [PublicFormController::class, 'update'])->name('update');
+        Route::post('{publicForm}/publicar', [PublicFormController::class, 'activate'])->name('activate');
+        Route::post('{publicForm}/pausar', [PublicFormController::class, 'pause'])->name('pause');
+        Route::post('{publicForm}/revogar', [PublicFormController::class, 'revoke'])->name('revoke');
+        Route::post('envios/{submission}/aprovar', [PublicFormSubmissionController::class, 'approve'])->name('submissions.approve');
+        Route::post('envios/{submission}/recusar', [PublicFormSubmissionController::class, 'reject'])->name('submissions.reject');
     });
     Route::get('api-integracoes', [IntegrationController::class, 'index'])->name('integrations.index');
     Route::get('api-integracoes/chaves', [IntegrationController::class, 'keys'])->middleware('org.role:owner,admin')->name('integrations.keys');
@@ -248,6 +373,13 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
             Route::get('assinatura', [SigningController::class, 'edit'])->name('settings.signing');
             Route::patch('assinatura', [SigningController::class, 'update'])->name('settings.signing.update');
 
+            // Fase 2 §2.8 — marca (flag `branding`; desligada, o GET mostra "Fase 2" e as
+            // escritas respondem 403). docs/fase-2/branding.md.
+            Route::get('marca', [BrandingController::class, 'edit'])->name('settings.branding');
+            Route::patch('marca', [BrandingController::class, 'update'])->name('settings.branding.update');
+            Route::post('marca/logo', [BrandingLogoController::class, 'store'])->name('settings.branding.logo.store');
+            Route::delete('marca/logo', [BrandingLogoController::class, 'destroy'])->name('settings.branding.logo.destroy');
+
             // Plano e cobrança
             Route::get('plano', [BillingController::class, 'index'])->name('billing.index');
             Route::post('plano/checkout', [BillingCheckoutController::class, 'store'])->name('billing.checkout');
@@ -268,6 +400,17 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
     });
 
     Route::get('planos', [PlanController::class, 'index'])->middleware('org.role:owner,admin')->name('plans.index');
+
+    // Fase 2 §2.6/§2.7 (C-PRES, docs/fase-2/presencial-e-lote.md). Sem `org.role`: permissões nas
+    // policies (InPersonSessionPolicy, BatchSigningPolicy). Flag desligada: o GET mostra o estado
+    // "Fase 2" e os POSTs respondem 404.
+    Route::get('presencial/iniciar', [InPersonHostController::class, 'create'])->name('in_person.create');
+    Route::post('presencial', [InPersonHostController::class, 'store'])->middleware('throttle:20,1,in-person-start')->name('in_person.store');
+    Route::post('presencial/{session}/encerrar', [InPersonHostController::class, 'end'])->where('session', '[A-Za-z0-9]{26}')->name('in_person.end');
+    Route::post('documentos/{envelope}/destinatarios/{recipient}/lote', [BatchLinkController::class, 'store'])
+        ->middleware('throttle:10,1,batch-link')
+        ->scopeBindings()
+        ->name('envelopes.recipients.batch');
 });
 
 // -- Painel interno (platform-admin; NÃO passa por org) ------------------------------------

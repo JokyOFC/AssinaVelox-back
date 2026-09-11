@@ -9,6 +9,11 @@ import {
     UserPlus,
 } from 'lucide-react';
 import { useState } from 'react';
+import { CaptureRequirementControl } from '@/components/envelopes/capture-requirement-control';
+import {
+    RecipientChannelFields,
+    RecipientPinControl,
+} from '@/components/envelopes/recipient-channel-fields';
 import { recipientColor } from '@/components/envelopes/recipient-colors';
 import { SelectableChip } from '@/components/filter-bar';
 import InputError from '@/components/input-error';
@@ -29,8 +34,12 @@ import {
     signingOrderLabels,
 } from '@/lib/labels';
 import { cn } from '@/lib/utils';
-import type { ParticipantRole, SigningOrder } from '@/types/enums';
-import type { ParticipantRoleOption, WizardRecipient } from '@/types/models';
+import type { CaptureKind, ParticipantRole, SigningOrder } from '@/types/enums';
+import type {
+    ParticipantRoleOption,
+    WizardChannels,
+    WizardRecipient,
+} from '@/types/models';
 
 const ORDER_HINTS: Record<SigningOrder, string> = {
     sequential: 'Cada signatário recebe o documento após o anterior assinar.',
@@ -78,6 +87,12 @@ export function roleOf(recipient: {
  * (Signatário, Testemunha, Aprovador, Visualizador) com a explicação do efeito. O
  * `role` continua sendo o rótulo livre ("Locatária"). Visualizadores não entram na ordem
  * e aparecem com o ícone de olho no lugar do número. Sem a flag, o passo é o da Fase 1.
+ *
+ * Fase 2, onda B — cada bloco só com a sua flag; com todas desligadas, o passo é o de antes:
+ * - `channels.enabled` (§2.9, `sms_whatsapp`): celular, canal do convite e canal do código,
+ *   com o motivo quando SMS/WhatsApp estão indisponíveis e o selo "simulado" no simulador;
+ * - `channels.pin.enabled` (§2.9, `pin_auth`): PIN do remetente por participante;
+ * - `captureEnabled` (§2.10, `identity_capture`): fotos exigidas antes do aceite.
  */
 export function WizardStepRecipients({
     recipients,
@@ -89,6 +104,11 @@ export function WizardStepRecipients({
     disabled,
     participantRoles = false,
     roleOptions,
+    envelopeId,
+    channels = null,
+    captureEnabled = false,
+    captureRequirements = {},
+    onCaptureRequirementChange,
 }: {
     recipients: WizardRecipient[];
     signingOrder: SigningOrder;
@@ -99,7 +119,18 @@ export function WizardStepRecipients({
     disabled?: boolean;
     participantRoles?: boolean;
     roleOptions?: ParticipantRoleOption[];
+    envelopeId?: string;
+    channels?: WizardChannels | null;
+    captureEnabled?: boolean;
+    /** `{ [recipientUlid]: kinds[] }` (`IdentityCaptures::requirementsForEnvelope`). */
+    captureRequirements?: Record<string, CaptureKind[]>;
+    onCaptureRequirementChange?: (
+        recipientId: string,
+        kinds: CaptureKind[],
+    ) => void;
 }) {
+    const channelsEnabled = channels?.enabled === true;
+    const pinEnabled = channels?.pin.enabled === true;
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
     const options: ParticipantRoleOption[] =
@@ -495,32 +526,85 @@ export function WizardStepRecipients({
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-end gap-6">
-                            <div className="flex flex-col gap-1.5">
-                                <span className="text-[12.5px] font-semibold">
-                                    Enviar por
-                                </span>
-                                <span className="bg-muted text-text-secondary inline-flex items-center gap-[5px] rounded-md px-[7px] py-1 text-[11.5px] font-semibold">
-                                    <Mail className="size-3" />
-                                    E-mail
-                                </span>
-                            </div>
-                            <div className="flex flex-1 flex-col gap-1.5">
-                                <span className="text-[12.5px] font-semibold">
-                                    {participantRoles
-                                        ? 'Como o participante se autentica'
-                                        : 'Como o signatário se autentica'}
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                    <SelectableChip selected disabled>
-                                        Código por e-mail
-                                    </SelectableChip>
-                                    <SelectableChip selected={false} disabled>
-                                        Token SMS · Fase 2
-                                    </SelectableChip>
+                        {channelsEnabled && channels ? (
+                            <RecipientChannelFields
+                                recipient={recipient}
+                                index={index}
+                                channels={channels}
+                                errors={errors}
+                                disabled={disabled}
+                                participantRoles={participantRoles}
+                                onChange={(patch) => update(index, patch)}
+                            />
+                        ) : (
+                            <div className="flex flex-wrap items-end gap-6">
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-[12.5px] font-semibold">
+                                        Enviar por
+                                    </span>
+                                    <span className="bg-muted text-text-secondary inline-flex items-center gap-[5px] rounded-md px-[7px] py-1 text-[11.5px] font-semibold">
+                                        <Mail className="size-3" />
+                                        E-mail
+                                    </span>
+                                </div>
+                                <div className="flex flex-1 flex-col gap-1.5">
+                                    <span className="text-[12.5px] font-semibold">
+                                        {participantRoles
+                                            ? 'Como o participante se autentica'
+                                            : 'Como o signatário se autentica'}
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <SelectableChip selected disabled>
+                                            Código por e-mail
+                                        </SelectableChip>
+                                        <SelectableChip
+                                            selected={false}
+                                            disabled
+                                        >
+                                            Token SMS · Fase 2
+                                        </SelectableChip>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
+
+                        {pinEnabled && channels && (
+                            <div className="border-muted border-t pt-3">
+                                <RecipientPinControl
+                                    recipient={recipient}
+                                    index={index}
+                                    pin={channels.pin}
+                                    errors={errors}
+                                    disabled={disabled}
+                                    onChange={(patch) => update(index, patch)}
+                                />
+                            </div>
+                        )}
+
+                        {captureEnabled && envelopeId && !viewer && (
+                            <div className="border-muted border-t pt-3">
+                                <CaptureRequirementControl
+                                    envelopeId={envelopeId}
+                                    recipientId={recipient.id}
+                                    recipientName={recipient.name}
+                                    kinds={
+                                        recipient.id
+                                            ? (captureRequirements[
+                                                  recipient.id
+                                              ] ?? [])
+                                            : []
+                                    }
+                                    disabled={disabled}
+                                    onSaved={(kinds) =>
+                                        recipient.id &&
+                                        onCaptureRequirementChange?.(
+                                            recipient.id,
+                                            kinds,
+                                        )
+                                    }
+                                />
+                            </div>
+                        )}
                     </div>
                 );
             })}

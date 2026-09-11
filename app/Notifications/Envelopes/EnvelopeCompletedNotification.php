@@ -8,6 +8,7 @@ use App\Integrations\Email\DeliveryContext;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
+use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Concerns\RestrictsChannels;
 use App\Notifications\Contracts\TracksDelivery;
 use App\Support\MailText;
@@ -27,7 +28,7 @@ use Illuminate\Notifications\Notification;
  */
 class EnvelopeCompletedNotification extends Notification implements ShouldQueue, TracksDelivery
 {
-    use Queueable, RestrictsChannels;
+    use AppliesOrganizationBranding, Queueable, RestrictsChannels;
 
     public function __construct(
         public readonly Envelope $envelope,
@@ -89,7 +90,13 @@ class EnvelopeCompletedNotification extends Notification implements ShouldQueue,
             $message->line('Código de verificação pública: **'.$this->envelope->formatted_verification_code.'** — confira em '.route('verify.index').'.');
         }
 
-        return $message->salutation('Atenciosamente, AssinaVelox');
+        $message->salutation('Atenciosamente, AssinaVelox');
+
+        // Fase 2 §2.8: a marca vale para a cópia ao participante; o aviso a quem enviou é
+        // interno da conta e continua com o tema da plataforma.
+        return $this->recipient !== null
+            ? $this->applyOrganizationBranding($message, $this->envelope->organization)
+            : $message;
     }
 
     /**

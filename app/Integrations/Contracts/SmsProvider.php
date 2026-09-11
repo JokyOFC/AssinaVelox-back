@@ -2,22 +2,11 @@
 
 namespace App\Integrations\Contracts;
 
-use App\Integrations\Dto\DeliveryReceipt;
-
 /**
- * Fase 2/3 — sem implementação. Envio de SMS (OTP por sms_otp, lembretes).
+ * Envio de SMS (código `sms_otp`, aviso de convite) pelo serviço PRÓPRIO do proprietário.
  *
- * Reservado para manter o vocabulário estável: canal `sms` em
- * delivery_attempts.channel; recibo com o mesmo DeliveryReceipt do e-mail.
+ * Implementações: App\Integrations\Sms\FakeSmsProvider (simulador identificado) e
+ * App\Integrations\Sms\HttpSmsProvider (produção, desabilitado até existir documentação).
+ * Contrato completo em {@see MessagingProvider}; canal `sms` em delivery_attempts.channel.
  */
-interface SmsProvider
-{
-    /**
-     * @param  string  $toE164  número no formato E.164 (ex.: +5511999999999)
-     */
-    public function send(string $toE164, string $message, ?string $correlationId = null): DeliveryReceipt;
-
-    public function isConfigured(): bool;
-
-    public function name(): string;
-}
+interface SmsProvider extends MessagingProvider {}

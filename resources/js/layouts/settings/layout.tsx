@@ -18,6 +18,7 @@ import { edit as profileEdit } from '@/routes/profile';
 import { edit as securityEdit } from '@/routes/security';
 import {
     audit as settingsAudit,
+    branding as settingsBranding,
     general as settingsGeneral,
     notifications as settingsNotifications,
     signing as settingsSigning,
@@ -79,6 +80,16 @@ export default function SettingsLayout({
                     title: 'Padrões de assinatura',
                     href: settingsSigning(),
                     hidden: !(permissions?.manage_settings ?? false),
+                },
+                // Fase 2 §2.8: marca da organização (flag `branding`).
+                {
+                    key: 'branding',
+                    title: 'Marca',
+                    href: settingsBranding(),
+                    hidden: !(
+                        (features?.branding ?? false) &&
+                        (permissions?.manage_settings ?? false)
+                    ),
                 },
                 {
                     key: 'notifications',

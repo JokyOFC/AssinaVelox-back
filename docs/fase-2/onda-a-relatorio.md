@@ -314,12 +314,12 @@ fechadas antes do commit da onda.
 
 ### 9.1 Correções
 
-| Pendência | O que mudou | Teste |
-| --- | --- | --- |
-| §7.6 e §8.3: visualizador contado como pendente | O filtro de participantes (`RecipientRole::participatingValues()` / escopo `participating`) entrou na aba "Pendentes" e nos indicadores da tela Assinaturas, no aviso "Fulano assinou" (numerador e denominador) e no resumo diário. O visualizador acompanha; não tem aceite a dar. | `tests/Feature/Phase2/Domain/ViewerIsNotPendingTest.php` (4) |
-| §8.3: visualizador saltando para o topo da lista | Nova coluna `recipients.position` (migration `2026_09_11_110500`), preenchida para os dados existentes pela ordenação anterior (`order_index`, `id`), então nada muda na tela para quem já usa. A relação `Envelope::recipients()` ordena por `position`; `RecipientSync` grava a posição da lista e `reindex()` passou a reordenar por ela — o que também corrige a perda da ordem arrumada ao alternar entre paralelo e sequencial. `order_index` continua sendo a única fonte da vez de assinar. A factory espelha `order_index` em `position`. | `tests/Feature/Review/Phase2/ViewerListPositionTest.php` |
-| §7.3: título da aba | A tela de identificação usa "Aprovar", "Assinar como testemunha" ou "Documento" conforme o papel, em vez de "Assinar" para todos. | coberto pela revisão de tipos e pelo build; sem teste próprio |
-| Travamentos da suíte de navegador | `tests/BrowserTestCase.php` aponta o hot file do Vite para um caminho inexistente. Com um `public/hot` presente — aberto ou órfão —, as páginas carregavam scripts de um servidor de desenvolvimento, sem JavaScript, e cada asserção esperava o teto de 20 s: parecia travamento. | suíte Browser inteira em 38 s |
+| Pendência                                        | O que mudou                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Teste                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| §7.6 e §8.3: visualizador contado como pendente  | O filtro de participantes (`RecipientRole::participatingValues()` / escopo `participating`) entrou na aba "Pendentes" e nos indicadores da tela Assinaturas, no aviso "Fulano assinou" (numerador e denominador) e no resumo diário. O visualizador acompanha; não tem aceite a dar.                                                                                                                                                                                                                                                               | `tests/Feature/Phase2/Domain/ViewerIsNotPendingTest.php` (4)  |
+| §8.3: visualizador saltando para o topo da lista | Nova coluna `recipients.position` (migration `2026_09_11_110500`), preenchida para os dados existentes pela ordenação anterior (`order_index`, `id`), então nada muda na tela para quem já usa. A relação `Envelope::recipients()` ordena por `position`; `RecipientSync` grava a posição da lista e `reindex()` passou a reordenar por ela — o que também corrige a perda da ordem arrumada ao alternar entre paralelo e sequencial. `order_index` continua sendo a única fonte da vez de assinar. A factory espelha `order_index` em `position`. | `tests/Feature/Review/Phase2/ViewerListPositionTest.php`      |
+| §7.3: título da aba                              | A tela de identificação usa "Aprovar", "Assinar como testemunha" ou "Documento" conforme o papel, em vez de "Assinar" para todos.                                                                                                                                                                                                                                                                                                                                                                                                                  | coberto pela revisão de tipos e pelo build; sem teste próprio |
+| Travamentos da suíte de navegador                | `tests/BrowserTestCase.php` aponta o hot file do Vite para um caminho inexistente. Com um `public/hot` presente — aberto ou órfão —, as páginas carregavam scripts de um servidor de desenvolvimento, sem JavaScript, e cada asserção esperava o teto de 20 s: parecia travamento.                                                                                                                                                                                                                                                                 | suíte Browser inteira em 38 s                                 |
 
 ### 9.2 Incidente de ambiente
 
@@ -332,16 +332,16 @@ ou apagar o arquivo.
 
 ### 9.3 Verificações finais (números reais)
 
-| Verificação | Resultado |
-| --- | --- |
-| Unit + Feature | 1.130 testes, todos verdes, 9.005 asserções |
-| Browser | 39 testes: 36 verdes e 3 pulados (os `skip` da Fase 1), 740 asserções |
-| pdftool (pytest) | 93 verdes |
-| PHPStan | 0 erros |
-| Pint | verde |
-| `types:check` | 0 erros |
-| `check` | 227 arquivos formatados, sem avisos |
-| `build` | OK |
+| Verificação      | Resultado                                                             |
+| ---------------- | --------------------------------------------------------------------- |
+| Unit + Feature   | 1.130 testes, todos verdes, 9.005 asserções                           |
+| Browser          | 39 testes: 36 verdes e 3 pulados (os `skip` da Fase 1), 740 asserções |
+| pdftool (pytest) | 93 verdes                                                             |
+| PHPStan          | 0 erros                                                               |
+| Pint             | verde                                                                 |
+| `types:check`    | 0 erros                                                               |
+| `check`          | 227 arquivos formatados, sem avisos                                   |
+| `build`          | OK                                                                    |
 
 ### 9.4 O que continua aberto
 

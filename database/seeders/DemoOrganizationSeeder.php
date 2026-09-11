@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use App\Enums\AccessLinkPurpose;
 use App\Enums\AuditEventType;
+use App\Enums\AuthMethod;
+use App\Enums\DeliveryChannel;
 use App\Enums\DeliveryPurpose;
 use App\Enums\DocumentSourceType;
 use App\Enums\DocumentVersionKind;
@@ -38,8 +40,13 @@ use App\Models\SigningFieldValue;
 use App\Models\SigningSession;
 use App\Models\Subscription;
 use App\Models\Team;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\VerificationRecord;
+use App\Services\Branding\BrandingManager;
+use App\Services\PublicForms\PublicFormManager;
+use App\Services\PublicForms\PublicFormSchema;
+use App\Services\Signing\Channels\SenderPins;
 use App\Services\Tags\TagColor;
 use App\Services\Tags\TagManager;
 use App\Services\Templates\TemplateManager;
@@ -74,11 +81,18 @@ class DemoOrganizationSeeder extends Seeder
         ['name' => 'Henrique Alves Castro', 'email' => 'henrique.castro@exemplo.com.br'],
     ];
 
-    /** Chaves de `plans.features` da onda A (Fase 2). */
+    /** Chaves de `plans.features` da Fase 2 (onda A e onda B). */
     private const PHASE2_PLAN_FEATURES = [
         'templates', 'multi_document', 'participant_roles', 'reminders',
         'custom_roles', 'tags', 'reports', 'audit_log',
+        // Onda B (docs/fase-2/onda-b-relatorio.md §6). `cpf_lookup` e `cnpj_lookup` ficam de
+        // fora: a consulta de CPF não tem serviço configurado e a de CNPJ acessa a rede.
+        'sms_whatsapp', 'pin_auth', 'sender_domains', 'branding', 'cpf_field',
+        'identity_capture', 'in_person', 'batch_signing', 'public_forms',
     ];
+
+    /** PIN de demonstração do participante "PIN" (onda B). Só para o ambiente local. */
+    public const DEMO_PIN = '48291573';
 
     private int $signerCursor = 0;
 
@@ -193,6 +207,71 @@ class DemoOrganizationSeeder extends Seeder
             ->sum('quantity')]);
 
         $this->seedHorizontePhase2($org, $owner, $admin, $locacoes, $vendas);
+        $this->seedHorizonteWaveB($org, $owner);
+    }
+
+    /**
+     * Dados de demonstração da Fase 2, onda B (docs/fase-2/onda-b-relatorio.md §6): marca da
+     * organização, um formulário público publicado (fila de revisão) e um documento em andamento
+     * com um participante por SMS simulado e outro com PIN do remetente (PIN {@see self::DEMO_PIN}).
+     * Tudo só aparece com os interruptores globais `ASSINAVELOX_FEATURE_*` ligados: desligados
+     * (o padrão e o que os testes usam), a demonstração continua a da onda A.
+     */
+    private function seedHorizonteWaveB(Organization $org, User $owner): void
+    {
+        $ownerMembership = Membership::query()->where('organization_id', $org->id)->where('user_id', $owner->id)->firstOrFail();
+
+        CurrentOrganization::instance()->runAs($org, function () use ($org, $owner): void {
+            $branding = app(BrandingManager::class);
+            $branding->update($org, $owner, [
+                'display_name' => 'Horizonte Imóveis',
+                'primary_color' => '#1257C9',
+                'accent_color' => '#0E9F6E',
+                'reply_to_email' => 'atendimento@horizonte.demo',
+            ]);
+
+            $logo = tempnam(sys_get_temp_dir(), 'horizonte-logo');
+
+            if ($logo !== false && function_exists('imagecreatetruecolor')) {
+                $image = imagecreatetruecolor(480, 160);
+                imagealphablending($image, false);
+                imagesavealpha($image, true);
+                imagefilledrectangle($image, 0, 0, 479, 159, (int) imagecolorallocatealpha($image, 255, 255, 255, 127));
+                imagealphablending($image, true);
+                imagefilledrectangle($image, 12, 24, 124, 136, (int) imagecolorallocate($image, 18, 87, 201));
+                imagefilledpolygon($image, [24, 110, 68, 44, 112, 110], (int) imagecolorallocate($image, 255, 255, 255));
+                imagefilledrectangle($image, 150, 60, 460, 100, (int) imagecolorallocate($image, 14, 159, 110));
+                imagepng($image, $logo);
+                imagedestroy($image);
+
+                $branding->replaceLogo($org, $owner, $logo);
+                @unlink($logo);
+            }
+
+            $template = Template::query()->where('organization_id', $org->id)->where('name', 'Termo de entrega de chaves')->first();
+
+            if ($template !== null) {
+                $forms = app(PublicFormManager::class);
+                $form = $forms->create($org, $owner, $template, 'Solicitação de termo de entrega de chaves');
+                $forms->update($form, $owner, array_replace(app(PublicFormSchema::class)->configInput($form), [
+                    'instructions' => 'Preencha os dados do imóvel. Você receberá um e-mail para confirmar o pedido; o documento é revisado pela equipe antes do envio.',
+                ]));
+                $forms->activate($form->fresh());
+            }
+
+            $envelope = Envelope::query()->where('organization_id', $org->id)->where('title', 'Aditivo de reajuste — Contrato 2024/118')->first();
+            $recipients = $envelope?->recipients()->orderBy('order_index')->get() ?? collect();
+
+            if ($recipients->count() >= 2) {
+                $recipients[0]->forceFill([
+                    'phone' => '+5511912345678',
+                    'auth_method' => AuthMethod::SmsOtp,
+                    'delivery_channel' => DeliveryChannel::Sms->value,
+                ])->save();
+
+                app(SenderPins::class)->set($recipients[1], self::DEMO_PIN, $owner);
+            }
+        }, $ownerMembership);
     }
 
     /**

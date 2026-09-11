@@ -40,7 +40,10 @@ use App\Services\Envelopes\PageBox;
 use App\Services\Envelopes\RecipientSync;
 use App\Services\Envelopes\Reminders\ReminderProps;
 use App\Services\Envelopes\Sending\CancelEnvelope;
+use App\Services\Identity\IdentityCaptures;
+use App\Services\Identity\IdentityFeatures;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\Signing\Channels\ChannelAvailability;
 use App\Services\Tags\EnvelopeTagIndex;
 use App\Services\Templates\TemplatesFeature;
 use App\Support\CurrentOrganization;
@@ -354,6 +357,14 @@ class EnvelopeController extends Controller
             'issues' => EnvelopeReadiness::issues($envelope),
             // Fase 2 §2.5: lembretes e envio agendado (`available=false` com a flag desligada).
             'reminders' => app(ReminderProps::class)->forEnvelope($envelope),
+            // Fase 2 §2.9 (C-CAN): canais, métodos do código e PIN (`enabled=false` e
+            // `pin.enabled=false` com as flags desligadas — o passo 2 é o da Fase 1).
+            'channels' => app(ChannelAvailability::class)->wizardProps($organization),
+            // Fase 2 §2.10 (C-ID): fotos exigidas por participante (`{ulid: kinds[]}`); só com
+            // a flag `identity_capture`, senão null.
+            'capture_requirements' => IdentityFeatures::identityCapture($organization)
+                ? app(IdentityCaptures::class)->requirementsForEnvelope($envelope)
+                : null,
         ]);
     }
 

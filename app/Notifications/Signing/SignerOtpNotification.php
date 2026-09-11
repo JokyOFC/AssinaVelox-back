@@ -7,6 +7,7 @@ use App\Integrations\Email\DeliveryContext;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
+use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
@@ -47,7 +48,7 @@ use Illuminate\Notifications\Notification;
  */
 class SignerOtpNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
-    use Queueable;
+    use AppliesOrganizationBranding, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -80,7 +81,7 @@ class SignerOtpNotification extends Notification implements ShouldBeEncrypted, S
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('Seu código para assinar '.$this->envelope->title)
             ->greeting('Olá, '.$this->firstName().'!')
             ->line('Use o código abaixo para confirmar sua identidade e assinar o documento **'
@@ -90,6 +91,8 @@ class SignerOtpNotification extends Notification implements ShouldBeEncrypted, S
             ->line('O código vale por '.$this->ttlMinutes.' minutos e só pode ser usado uma vez.')
             ->line('Se você não pediu este código, ignore esta mensagem: sem ele, nada é assinado.')
             ->salutation('Equipe '.config('app.name'));
+
+        return $this->applyOrganizationBranding($message, $this->envelope->organization);
     }
 
     /**

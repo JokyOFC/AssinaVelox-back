@@ -80,9 +80,36 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
         'report.exported', 'impersonation.started', 'impersonation.ended', 'impersonation.page_viewed',
     ];
 
+    // Fase 2, onda B — identidade (C-ID, docs/fase-2/identidade.md). Só acréscimos.
+    $identity = [
+        'cpf_lookup.performed', 'identity_capture.requirement_updated',
+        'identity_capture.recorded', 'identity_capture.purged',
+    ];
+
+    // Fase 2, onda B — canais e PIN do remetente (C-CAN, docs/fase-2/canais-e-pin.md). Só acréscimos.
+    $channels = [
+        'challenge.pin_verified', 'challenge.pin_failed', 'recipient.pin_updated',
+        'sender_domain.created', 'sender_domain.verified', 'sender_domain.failed', 'sender_domain.deleted',
+    ];
+
+    // Fase 2, onda B — presencial e lote (C-PRES, docs/fase-2/presencial-e-lote.md). Só acréscimos.
+    $presence = [
+        'in_person.session_started', 'in_person.participant_started', 'in_person.acceptance_recorded',
+        'in_person.participant_closed', 'in_person.session_ended',
+        'batch.link_issued', 'batch.challenge_sent', 'batch.challenge_verified', 'batch.challenge_failed',
+        'batch.item_opened', 'batch.item_authorized', 'batch.item_failed',
+    ];
+
+    // Fase 2, onda B — formulário público (C-FORM, docs/fase-2/formulario-publico.md). Só acréscimos.
+    $publicForms = [
+        'public_form.created', 'public_form.updated', 'public_form.activated', 'public_form.paused',
+        'public_form.revoked', 'public_form.submission_confirmed', 'public_form.submission_approved',
+        'public_form.submission_rejected',
+    ];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2])
-        ->toHaveCount(45 + 31);
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms])
+        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms));
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

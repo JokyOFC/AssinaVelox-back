@@ -1,0 +1,295 @@
+# AssinaVelox — Viabilidade das Fases 2 e 3
+
+> Síntese das pesquisas técnicas de 2026-09-11. Identificadores em inglês; prosa em português.
+> Precedência: este documento **não altera** o `roadmap.md` nem a `arquitetura.md`; ele classifica cada item do roadmap e registra onde a pesquisa contradiz o que o roadmap presume (§6). Quando uma correção for aceita, ela entra no roadmap e na arquitetura, e só então vale.
+> Fontes: os briefs em `docs/integracoes/`, que trazem a URL de cada fato. Aqui só se repete a URL quando o fato é novo, ou seja, não aparece em nenhum brief (marcado **[nova]**). O que nenhum brief confirmou em fonte oficial fica **NÃO CONFIRMADO**.
+
+## 0. Legenda e regras fixas
+
+**Classificação**
+
+| Classe | Significado |
+|---|---|
+| **A** | Implementar de verdade agora: há documentação oficial ou não há dependência externa. A flag continua nascendo desligada (T8) e só liga depois dos testes (T9). |
+| **B** | Implementar o contrato + um fake **identificado** (rotulado como simulado na UI, nos dados e nas evidências), com a produção desabilitada até existir credencial ou documentação. |
+| **C** | Bloqueado: só documentar o que falta. Não se escreve adaptador, porque ele modelaria um contrato inventado (T4). |
+
+Item com classe composta (ex.: **A + B**) tem partes com destinos diferentes; a matriz diz qual parte é qual.
+
+**Disponibilidade da integração** (igual à dos briefs): **(a)** API pública e documentada; **(b)** existe, mas exige credenciamento, contrato ou elegibilidade; **(c)** não existe API pública.
+
+**Regras fixas da especificação do produto (valem por cima de qualquer recomendação dos briefs)**
+
+1. **E-mail, SMS, WhatsApp, consulta de CPF e liveness/face match** são serviços próprios do proprietário e não têm documentação disponível. Por isso ficam em **B** (contrato + fake) e **nunca são substituídos por terceiros**. Isso vale para SERPRO Consulta CPF, provedores de SMS, Evolution/WPPConnect/Baileys e quaisquer outros. O envio de e-mail por SMTP da Fase 1 continua como está; o que fica em B é qualquer uso da **API** do provedor de e-mail, como verificação de domínio e status de entrega.
+2. **Biometria** (liveness/face match) é backlog futuro e **não será implementada**. A captura simples de foto e vídeo (§2.10, §3.3) não é biometria e nunca recebe esse rótulo.
+3. **e-Notariado** só entra com integração oficial disponível para o nosso caso.
+4. **gov.br** não pode presumir acesso comercial à API.
+5. **Carimbo ICP-Brasil** depende de contratar uma ACT credenciada.
+6. **Nenhum perfil PAdES além de B-B** pode ser anunciado sem teste real (T2): `pdftool validate` + validação externa com fixtures reais.
+7. **Permissões configuráveis** usam tabelas próprias (`roles`, `role_permissions`, `folder_permissions`). **Sem `spatie/laravel-permission`.**
+
+---
+
+## 1. Matriz de viabilidade
+
+Colunas: item | classificação | dependências externas | pacotes necessários (com versão) | o que falta do proprietário | fonte.
+
+"Instalado" = já está no `composer.lock` ou no `tools/pdftool/requirements.lock.txt` (verificado em 2026-09-11).
+
+### 1.1 Fase 2
+
+| Item | Classe | Dependências externas | Pacotes (versão) | O que falta do proprietário | Fonte |
+|---|---|---|---|---|---|
+| **§2.1 Templates tipados** | **A** | Nenhuma de terceiro. O LibreOffice precisa estar no servidor de produção; hoje não está instalado localmente e o `PdfConverter` tem fake. | `phpoffice/phpword` 1.4.0 (instalado) + `phpoffice/math` 0.3.0 (instalado, corrige a CVE-2025-48882); `barryvdh/laravel-dompdf` (instalado). Regras obrigatórias: escape de saída ligado (vem **desligado** por padrão), só `.docx` sem `vbaProject.bin`, blocos de um nível só, limites anti-zip-bomb. | Decidir o posicionamento de campos em DOCX/HTML: PDF fixo, âncoras (§3.2) ou revisão manual obrigatória. Instalar o LibreOffice na produção. | [pacotes §1](integracoes/pacotes-fase-2-3.md); roadmap §2.1 |
+| **§2.2 Formulário público** | **A** | Depende de §2.1 e do e-mail já em uso (SMTP da Fase 1). O provedor de CAPTCHA (Q14, por flag) **não foi pesquisado**: NÃO CONFIRMADO qual usar. | Nenhum novo. | Decidir se a submissão já cria envelope com vários signatários; escolher um CAPTCHA, se um dia a flag for ligada. | roadmap §2.2 (sem pesquisa externa) |
+| **§2.3 Múltiplos documentos** | **A** | Nenhuma. | Nenhum novo. | Decidir: página de evidências única por envelope (recomendado) ou uma por documento. | roadmap §2.3 |
+| **§2.4 Papéis (testemunha, aprovador, visualizador)** | **A** | Nenhuma. | Nenhum novo. | Decidir se aprovador pode ficar em ordem paralela (recomendado: sempre etapa própria). | roadmap §2.4 |
+| **§2.5 Lembretes e envio agendado** | **A** | Nenhuma no canal e-mail. Lembrete por WhatsApp/SMS herda o **B** de §2.9/§2.18. | Nenhum novo. | Confirmar o desenho do agendamento (recomendado: coluna `scheduled_send_at` + job, sem status novo). | roadmap §2.5 |
+| **§2.6 Presencial em tablet** | **A** | Nenhuma com host + OTP por e-mail. O OTP do participante por SMS/WhatsApp herda o **B** de §2.9. | Nenhum novo. | Decidir se a foto do documento (§2.10) é exigida no presencial. | roadmap §2.6 |
+| **§2.7 Assinatura em lote** | **A** | Nenhuma. A parte criptográfica por item depende de §2.12. | Nenhum novo. | Decidir: lote só da mesma organização remetente (recomendado) ou de qualquer remetente. | roadmap §2.7 |
+| **§2.8 Branding e remetente próprio** | **A + B** | **A:** logo, cores, `Reply-To` do cliente e `FieldType.stamp`, sem dependência externa. **B:** `sender_domains` (DKIM/SPF/status do domínio) exige a API do provedor de e-mail do proprietário, que não tem documentação (regra fixa 1). | Nenhum novo (GD já disponível). | Documentação da API do serviço próprio de e-mail: registros exigidos, consulta de status e autenticação. Sem ela o remetente continua sendo o da plataforma. | roadmap §2.8; arquitetura §8 |
+| **§2.9 OTP por SMS/WhatsApp e PIN** | **B** (SMS/WhatsApp) **+ A** (PIN do remetente) | SMS e WhatsApp são serviços próprios sem documentação (regra fixa 1). O PIN é interno. | `giggsey/libphonenumber-for-php` **9.0.39** (Apache-2.0, `php ^8.1`, 2026-09-10) para validar E.164 — **[nova]** https://repo.packagist.org/p2/giggsey/libphonenumber-for-php.json | Documentação e credenciais de homologação dos serviços de SMS e WhatsApp (endpoint, autenticação, erros, limites, webhooks de status); custo por mensagem para os limites por plano; decidir se o PIN pode substituir o OTP. | roadmap §2.9; arquitetura §8 |
+| **§2.10 Selfie e documento** | **A**, com flag desligada até a decisão jurídica | Nenhuma (APIs nativas `getUserMedia`/`canvas`). A `Permissions-Policy` precisa liberar `camera=(self)` só nas rotas públicas com captura. Liveness/face match: **não implementar** (regra fixa 2). | Nenhum novo (nenhum npm). | Base legal do art. 11 da LGPD; papel de controlador × operador; RIPD (art. 38); prazo de retenção. | [pacotes §7](integracoes/pacotes-fase-2-3.md); [e-notariado §4](integracoes/e-notariado-e-regulatorio.md) |
+| **§2.11 CNPJ e CPF** | **A** (dígitos do CPF + consulta de CNPJ) **+ B** (consulta cadastral de CPF) | CNPJ: instância pública do Minha Receita (a), sem SLA; a BrasilAPI é proxy dela e **não** serve de redundância. CPF cadastral: serviço próprio sem documentação (regra fixa 1). SERPRO e Conecta **não** são opções: o SERPRO seria substituição por terceiro, proibida pela regra fixa 1, e o Conecta só atende órgãos públicos. | Nenhum novo. | Documentação e credenciais do serviço próprio de CPF (entradas exigidas, como data de nascimento; campos; códigos; SLA; custo); base legal e finalidade LGPD; decisão sobre o modo "estrito"; aceite do uso da instância pública do Minha Receita, com atribuição à Receita. | [cnpj-cpf](integracoes/cnpj-cpf.md) |
+| **§2.12 A1/PFX do participante** | **A** | Nenhum fornecedor. A revogação (CRL/OCSP) exige rede de saída até as ACs. As âncoras ICP-Brasil vêm do repositório do ITI e são fixadas por fingerprint. A validação externa é manual, no Verificador de Conformidade do ITI, que não tem API confirmada. | `pyHanko` 0.37.0, `pyhanko-certvalidator` 0.32.0, `asn1crypto` 1.5.1, `cryptography` 50.0.1 (todos instalados). | Decidir a retenção do PFX (recomendado: não reter); regra de correspondência CPF/CN × recipient; KMS, se houver retenção. | [carimbo §3–§4](integracoes/carimbo-do-tempo-e-ltv.md); [a3 §4](integracoes/a3-componente-local.md); roadmap §2.12 |
+| **§2.13 TSA própria RFC 3161 + dossiê ZIP** | **A** (produção da TSA atrás de flag até cumprir o checklist) | Nenhum fornecedor. O `DummyTimeStamper` do pyHanko é **só fake de teste**: política alheia, serial aleatório, ESSCertID SHA-1. A TSA de produção é código próprio (asn1crypto + cryptography). A verificação usa `openssl ts -verify`. | Instalados: `asn1crypto`, `cryptography`, `pyHanko`, `ext-zip`, `bacon/bacon-qr-code` 3.1.1. `maennchen/zipstream-php` 3.2.2 é opcional (não necessário agora). | Proteção da chave da TSA (arquivo restrito agora; HSM/KMS antes de clientes pagantes); NTP monitorado; OID de política (arco próprio, ex.: PEN IANA; o processo está NÃO CONFIRMADO); AC interna do operador para o certificado com EKU `timeStamping` crítica. | [carimbo §1, §6](integracoes/carimbo-do-tempo-e-ltv.md); [pacotes §9](integracoes/pacotes-fase-2-3.md) |
+| **§2.14 Permissões, times, tags, relatórios, admin** | **A** | Nenhuma. | Nenhum novo; **sem `spatie/laravel-permission`** (regra fixa 7). | Decidir o papel `integration` para tokens de API; consentimento de impersonation nos Termos (Q15); faixas de IP permitidas por organização. | roadmap §2.14; [pacotes §11](integracoes/pacotes-fase-2-3.md) |
+| **§2.15 API REST v1** | **A** | Nenhuma. | `laravel/sanctum` 4.3.3 e `dedoc/scramble` 0.13.43 (instalados). | Decidir de onde vêm as permissões do token (recomendado: papel `integration`). O contrato só congela depois de §2.3/§2.4. | roadmap §2.15 |
+| **§2.16 Webhooks de saída** | **A** | Nenhuma. Não há pacote SSRF compatível com PHP 8.3: `cboxdk/laravel-ssrf` exige 8.4. Por isso a proteção é código própria (`OutboundUrlGuard` + `CURLOPT_RESOLVE` + sem redirect). | Nenhum novo. | — (depende só de engenharia). Condição técnica: teste de integração provando o *pin* por `CURLOPT_RESOLVE` no Guzzle 8.2 (NÃO CONFIRMADO na documentação). | [pacotes §6](integracoes/pacotes-fase-2-3.md) |
+| **§2.17 n8n / Zapier / Make** | **A** (endpoints REST Hooks do nosso lado) **+ B** (apps publicados nos marketplaces) | Plataformas de terceiros com revisão do vendor. **Não pesquisadas nesta rodada**: requisitos de publicação, CLI e versão estão NÃO CONFIRMADOS. | Nenhum no Laravel. Ferramentas de cada plataforma: NÃO CONFIRMADO. | Contas de desenvolvedor na Zapier e no Make; decidir sobre um nó próprio no n8n; aceitar que a publicação só ocorre com a API v1 congelada. | roadmap §2.17 (sem brief) |
+| **§2.18 WhatsApp Business (serviço próprio)** | **B** | Serviço próprio sem documentação (regra fixa 1). Evolution/WPPConnect/Baileys continuam não adotados. | `giggsey/libphonenumber-for-php` 9.0.39 (o mesmo de §2.9). | Documentação da API (envio, templates pré-aprovados, webhook de status com assinatura, limites); credenciais de homologação; decidir entre número da operadora e número do cliente; custo por conversa. | roadmap §2.18; arquitetura §1 e §8 |
+| **§2.19 Retenção e preservação** | **A** | Nenhuma. | Nenhum novo. | Prazos legais mínimos (inclusive o XML fiscal, se §2.21 existir); janela de rotação de backup para a Política de Privacidade; decidir tombstone na página de verificação; exclusão da organização com hold ativo (bloqueia ou transfere). | roadmap §2.19; [nfse §6.4](integracoes/nfse.md) |
+| **§2.20 Pagamentos ampliados** | **A** (Pix/boleto/cartão pelo Checkout Pro, reembolso, cancelamento, chargeback, Merchant Orders, conciliação por `/v1/payments/search`) **+ B** (Assinaturas `preapproval`, relatórios de liberação/settlement, Brick/checkout transparente) | Mercado Pago (a), com a credencial e o SDK da Fase 1. Pagamento de teste **não dispara webhook**; as fixtures vêm de `GET`. A API de Payments é "legado"; checkout transparente, se um dia existir, deve usar a API de Orders. | `mercadopago/dx-php` 3.16 (instalado). Opcional, só se o Brick for adotado: `@mercadopago/sdk-react` 1.0.7 (Apache-2.0, aceita React 19). | Chave Pix cadastrada na conta vendedora; decisão Q20 × cancelamento automático do MP após 3 parcelas recusadas; política de cota em estorno; regra para "aprovado depois de expirar"; teste com conta vendedora real antes de Assinaturas. | [mercado-pago-fase-2](integracoes/mercado-pago-fase-2.md); [mercado-pago](integracoes/mercado-pago.md) |
+| **§2.21 NFS-e** | **B** (emissão real bloqueada) | O Mercado Pago não tem API de NFS-e (c). O Sistema Nacional NFS-e (Sefin Nacional/ADN) está documentado, é gratuito e é (b): exige CNPJ, cadastro no CNC, município que emite pelo Emissor Nacional, certificado digital para mTLS e XML assinado. Provedores comerciais também são (b). | Nenhum agora. Assinatura XMLDSig: biblioteca NÃO CONFIRMADA (o pyHanko assina PDF, não XML). | CNPJ, município (IBGE) e regime da operadora; parecer contábil (subitem LC 116, NBS, ISS, IBS/CBS); confirmação do Emissor Nacional no município; certificado da operadora (`kind=fiscal_a1`); escolha entre Sefin direto e provedor comercial. **Prazo externo:** a Resolução CGSN 191/2026 obriga ME/EPP do Simples a emitir pelo Emissor Nacional a partir de **1º/11/2026**. | [nfse](integracoes/nfse.md) |
+
+### 1.2 Fase 3
+
+| Item | Classe | Dependências externas | Pacotes (versão) | O que falta do proprietário | Fonte |
+|---|---|---|---|---|---|
+| **§3.1 Geração documental em lote** | **A** | O LibreOffice precisa estar na produção. O CSV é lido com funções nativas. | XLSX: `openspout/openspout` **5.3.0** (MIT), a última versão que aceita PHP 8.3; da 5.4.0 em diante exige 8.4 — **[nova]** https://repo.packagist.org/p2/openspout/openspout.json. Alternativa: `phpoffice/phpspreadsheet` **5.9.0** (MIT, `php ^8.2`; todas as extensões exigidas estão presentes localmente; puxa `maennchen/zipstream-php`) — **[nova]** https://repo.packagist.org/p2/phpoffice/phpspreadsheet.json. Como cada biblioteca trata fórmulas (ler só o valor em cache, sem avaliar) está **NÃO CONFIRMADO** e precisa ser testado contra T6. | Limites de linhas e de concorrência por plano. | roadmap §3.1 |
+| **§3.2 Âncoras e OCR** | **A** (âncoras em PDF nativo) **+ B** (OCR de escaneados até o Tesseract existir na produção) | O Tesseract não está instalado; roda como binário em processo isolado, sem rede. | pip: `pdfplumber==0.11.10` (MIT; puxa `pdfminer.six==20260107` e `pypdfium2>=5.9.0`), `pypdfium2==5.13.0` (Apache-2.0/BSD-3). O `pillow` 12.3.0 já no lock atende o `>=12.2.0`. Binário: Tesseract 5.5.3 + `por` (`tessdata_fast`). **Rejeitados:** `PyMuPDF` (AGPL) e `pytesseract` (sem ganho; Python 3.13 NÃO CONFIRMADO). | Instalar o Tesseract no servidor de produção; fornecer uma fixture de escaneado representativa para a meta de ≥ 90%. | [pacotes §5](integracoes/pacotes-fase-2-3.md) |
+| **§3.3 Condicionais, delegação, multilíngue, vídeo/foto** | **A** (vídeo com flag desligada até a decisão jurídica) | Nenhuma. O vídeo é gravado com `MediaRecorder` nativo e guardado **sem transcodificar**; o ffmpeg fica adiado (só build LGPL, se um dia for preciso). | Nenhum novo. | Tradução jurídica profissional dos termos por idioma; base legal LGPD e RIPD para vídeo; política de delegação padrão. | [pacotes §7](integracoes/pacotes-fase-2-3.md); [e-notariado §3–§4](integracoes/e-notariado-e-regulatorio.md) |
+| **§3.4 A3 por componente local** | **A** (lado servidor: `pdftool prepare-external`/`embed-external` aceitando **assinatura bruta e CMS**, `pending_external_signatures` com TTL, `FakeLocalSigner` com PKCS#12 de teste) **+ B** (`LocalSignerBridge`/`NexuLocalSigner` e a UI A3) | O NexU oficial sumiu; só resta um fork individual (EUPL-1.2, sem macOS, CORS configurado na máquina do usuário). O Assinador Serpro é gratuito, mas a licença para SaaS e o formato do comando de hash estão NÃO CONFIRMADOS. O Lacuna Web PKI é comercial, com preço NÃO CONFIRMADO. O Chrome 142+ pede permissão de Local Network Access. | Nenhum novo (fluxo *interrupted signing* do pyHanko 0.37 já instalado). | Piloto com tokens A3 reais no Windows; escolha do componente (fork NexU + parecer sobre a EUPL, Serpro com confirmação de licença, ou contrato Lacuna/BRy); orçamento de suporte ao usuário final. | [a3-componente-local](integracoes/a3-componente-local.md) |
+| **§3.5 Assinatura gov.br** | **C** (API direta) **+ B** (fluxo "assina no `assinador.iti.br` e devolve o PDF") | A API é (b) e o AssinaVelox **não é elegível**: o acesso é só para órgão público com serviço público, Login Único e `redirect_uri` em domínio de governo (Portaria SGD/MGI 7.076/2024). O validador VALIDAR não tem API (c). A cadeia gov.br não é publicada pelo ITI (o link oficial aponta para um arquivo na UFSC). | Nenhum novo (`pdftool validate`). | Para o fluxo de devolução: fixture real assinada no portal por uma conta prata/ouro e conferida no VALIDAR; fixar a raiz gov.br por fingerprint; confirmar que o portal faz atualização incremental; mapear onde está o CPF no certificado; incluir nos termos a cláusula de aceitação desse meio pelas partes. Para a API: um órgão público cliente, implantação no domínio dele e aceite por escrito da SGD. | [gov-br-assinatura](integracoes/gov-br-assinatura.md) |
+| **§3.6 Carimbo ICP-Brasil e PAdES de longo prazo** | **A** (código B-T/B-LT/B-LTA no `pdftool`, testado offline, **UI continua dizendo `PAdES-B-B`**) **+ B** (`IcpBrasilTimestampProvider` com fake que nunca grava `icp_brasil`) | Pelo DOC-ICP-11 §2.7.2, só uma ACT credenciada (9 na lista do ITI de 07/05/2025) emite carimbo ICP-Brasil. O SERPRO é o caminho mais documentado: OAuth2 `client_credentials` e `apitimestamp/v1/stamps-asn1`, com formato de corpo e preço NÃO CONFIRMADOS. O B-LT exige OCSP/CRL de todas as cadeias, com `revocation_mode` `hard-fail`/`require` em produção. | Instalados: `pyHanko` 0.37.0 (`timestamper`, `embed_validation_info`, `use_pades_lta`, `update_archival_timestamp_chain`). Opcional e só para conferência manual: `pyhanko-cli` 0.5.0. | Contrato com uma ACT (e-CNPJ, Consumer Key/Secret); preço por carimbo, que define a `timestamp_quota`; OIDs e `sigPolicyHash` da política PAdES vigente na LPA; aprovação no Verificador do ITI; decisão sobre o re-carimbo LTA gerar um novo hash final (histórico de hashes na verificação). | [carimbo-do-tempo-e-ltv](integracoes/carimbo-do-tempo-e-ltv.md) |
+| **§3.7 Antifraude com revisão humana** | **A** | Nenhuma. | Nenhum novo. | Avaliação de legítimo interesse e RIPD; prazo interno de resposta à revisão (art. 20 da LGPD); listas de confiança por organização. | [e-notariado §5](integracoes/e-notariado-e-regulatorio.md) |
+| **§3.8 e-Notariado** | **C** | e-Not Assina (b): cadastro da empresa, chave por organização e **certificado notarizado de todos os signatários**. Não se confirmou se um SaaS multi-tenant pode operá-lo, se há sandbox, nem se aceita PDF já com PAdES. O fluxo de cartório exige ACT com o CNB-CF e é para sistemas de cartório. Lavrar ato é (c). | Nenhum. | Resposta formal do CNB-CF sobre uso por SaaS (ou o modelo "cada organização cliente traz a própria chave"); acesso à homologação; tabela de valores; revisão jurídica. Enquanto isso: só exportar o dossiê e orientar o usuário. | [e-notariado-e-regulatorio](integracoes/e-notariado-e-regulatorio.md) |
+| **§3.9 Widget, SDKs, Drive, Dropbox, HubSpot, SSO** | **A** (widget iframe e `embed.js`, depois da API v1 congelada; SDKs gerados da OpenAPI) **+ B** (OIDC, SAML, Drive, Dropbox, HubSpot API) **+ C** (CRM card do HubSpot em app público) | Drive, Dropbox e HubSpot são (a), mas exigem apps registrados; o Google exige *brand verification* (com `drive.file` não há *security assessment*). O CRM card em app público é (b), com disponibilidade geral NÃO CONFIRMADA. OIDC e SAML precisam de um IdP de teste. O gerador de SDK **não foi pesquisado** (NÃO CONFIRMADO). | `laravel/socialite` 5.31.0 (puxa `phpseclib ^4`, `firebase/php-jwt`); `socialiteproviders/manager` 4.10.0; `socialiteproviders/openidconnect` 1.0.0 (fixar `1.0.*`; versão única, de agosto de 2026); `onelogin/php-saml` 4.3.2 (+ `robrichards/xmlseclibs` 3.1.5, transitivo). **Não instalar:** `google/apiclient`, `hubspot/api-client`, `spatie/dropbox-api` (forçariam o rebaixamento do Guzzle 8 → 7), `jumbojett/openid-connect-php` (phpseclib 3), `24slides/laravel-saml2` (arquivado). Usar o HTTP Client do Laravel. | Projeto no Google Cloud com homepage, política de privacidade e domínio verificados; app Dropbox (App Folder + domínios do Chooser); app de desenvolvedor HubSpot + conta de teste; IdP de teste para OIDC e SAML; política de "break-glass" para SSO obrigatório. | [pacotes §2–§4, §8](integracoes/pacotes-fase-2-3.md) |
+| **§3.10 Afiliados** | **A** (o sistema calcula, não paga) | Nenhuma. Os repasses ficam fora da plataforma. | Nenhum novo. | Taxas, janela de atribuição, prazo de aprovação da comissão; tratamento tributário e contratual dos repasses. | roadmap §3.10 |
+
+### 1.3 Backlog (§4 do roadmap), confirmado
+
+| Item | Classe | Motivo |
+|---|---|---|
+| Liveness / face match | **Não implementar** | Regra fixa 2; o serviço próprio não tem documentação. |
+| IA, app offline, whitelabel | Fora de fase | Sem mudança em relação ao roadmap §4. |
+
+### 1.4 Contagem
+
+- **A puro:** §2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.10, 2.12, 2.13, 2.14, 2.15, 2.16, 2.19, §3.1, 3.3, 3.7, 3.10 (18 itens).
+- **Composto com parte A:** §2.8, 2.9, 2.11, 2.17, 2.20, §3.2, 3.4, 3.6, 3.9 (9 itens).
+- **B puro:** §2.18, 2.21 (2 itens).
+- **Composto com parte C:** §3.5 (C na API + B no fluxo de devolução) e §3.9 (C no CRM card).
+- **C puro:** §3.8.
+
+---
+
+## 2. Dependências a instalar
+
+### 2.1 Já instaladas (não reinstalar)
+
+| Ecossistema | Pacote | Versão | Uso nas Fases 2/3 |
+|---|---|---|---|
+| composer | `phpoffice/phpword` (+ `phpoffice/math` 0.3.0) | 1.4.0 | §2.1 |
+| composer | `laravel/sanctum` | 4.3.3 | §2.15 |
+| composer | `dedoc/scramble` | 0.13.43 | §2.15 (OpenAPI) |
+| composer | `mercadopago/dx-php` | 3.16 | §2.20 |
+| composer | `bacon/bacon-qr-code` | 3.1.1 | §2.13 |
+| composer | `barryvdh/laravel-dompdf` | ^3.1 | §2.1 (HTML→PDF) |
+| pip | `pyHanko` / `pyhanko-certvalidator` | 0.37.0 / 0.32.0 | §2.12, §2.13, §3.4, §3.5, §3.6 |
+| pip | `asn1crypto` / `cryptography` / `aiohttp` | 1.5.1 / 50.0.1 / 3.14.3 | TSA própria e cliente RFC 3161 |
+| pip | `pypdf` / `pillow` | 6.18.0 / 12.3.0 | já no pdftool |
+| PHP ext | `zip`, `gd`, `intl`, `curl`, `openssl`, `xmlreader`, `xmlwriter`, `iconv`… | PHP 8.3 | ZIP do dossiê, imagens, SSRF |
+
+### 2.2 Obrigatórias
+
+| Ecossistema | Pacote | Versão exata | Fase / item | Justificativa |
+|---|---|---|---|---|
+| composer | `giggsey/libphonenumber-for-php` | 9.0.39 | Fase 2 — §2.9, §2.18 | Validar `recipients.phone` em E.164 antes de qualquer canal SMS/WhatsApp, inclusive com os fakes. Apache-2.0, `php ^8.1`. **[nova]** https://repo.packagist.org/p2/giggsey/libphonenumber-for-php.json |
+| composer | `laravel/socialite` | 5.31.0 | Fase 3 — §3.9 | Base oficial do OIDC e do OAuth do Google (Drive). Traz `phpseclib ^4`. |
+| composer | `socialiteproviders/manager` | 4.10.0 | Fase 3 — §3.9 | Requisito do provider OIDC. |
+| composer | `socialiteproviders/openidconnect` | 1.0.0 (fixar `1.0.*`) | Fase 3 — §3.9 | Valida `iss`, `aud`, `nonce` e `at_hash`, com PKCE. Pacote novo: exige testes negativos e um plano B próprio. |
+| composer | `onelogin/php-saml` | 4.3.2 | Fase 3 — §3.9 | SAML com a correção da CVE-2025-66475. A proteção contra replay é código nosso. |
+| pip | `pdfplumber` | 0.11.10 | Fase 3 — §3.2 | Âncoras com coordenadas em PDF nativo (MIT). Puxa `pdfminer.six==20260107`. |
+| pip | `pypdfium2` | 5.13.0 | Fase 3 — §3.2 | Rasterizar páginas para o OCR (Apache-2.0/BSD-3). Fixar explicitamente; o pdfplumber exige `>=5.9.0`. |
+| binário (servidor) | Tesseract + `por` (`tessdata_fast`) | 5.5.3 | Fase 3 — §3.2 | OCR por processo isolado. Sem ele o OCR fica em B. |
+| binário (servidor) | LibreOffice headless | NÃO CONFIRMADO (versão não pesquisada) | Fase 2 — §2.1, §3.1 | Conversão DOCX→PDF; já é premissa da Fase 1, mas não está instalado localmente. |
+
+Nenhum pacote npm é obrigatório. Captura de foto e vídeo, iframe, `postMessage` e CHIPS usam APIs nativas.
+
+### 2.3 Opcionais (instalar só se a decisão correspondente for tomada)
+
+| Ecossistema | Pacote | Versão | Quando |
+|---|---|---|---|
+| composer | `openspout/openspout` | 5.3.0 (última com PHP 8.3) | §3.1, se o lote aceitar XLSX. Leitura por *streaming*. Fica preso à linha 5.3 até o projeto migrar para PHP 8.4. |
+| composer | `phpoffice/phpspreadsheet` | 5.9.0 | §3.1, alternativa ao OpenSpout; mais pesada, compatível com PHP 8.3. Escolher **um** dos dois. |
+| composer | `maennchen/zipstream-php` | 3.2.2 | §2.13, só se o download em lote precisar ser montado na hora (hoje não precisa). |
+| composer | `scaler-tech/laravel-saml2` | 2.7.2 | §3.9, só se quisermos rotas SAML prontas em vez do adaptador próprio (não recomendado agora). |
+| npm | `@mercadopago/sdk-react` | 1.0.7 | §2.20, só se o Card Payment Brick for adotado (hoje em B). |
+| pip (dev) | `pyhanko-cli` | 0.5.0 | Conferência manual de assinaturas; nunca no pipeline. |
+| binário | ffmpeg (build LGPL) | — | §3.3, só se a transcodificação de vídeo virar requisito. |
+
+### 2.4 Rejeitados (não instalar)
+
+`spatie/laravel-permission` (regra fixa 7), `google/apiclient`, `hubspot/api-client` e `spatie/dropbox-api` (forçariam o rebaixamento do Guzzle 8.2 → 7.x), `jumbojett/openid-connect-php` (phpseclib 3), `24slides/laravel-saml2` (arquivado, sem Laravel 13), `simplesamlphp/saml2` (LGPL, baixo nível), `cboxdk/laravel-ssrf` e `endroid/qr-code` 6.x (exigem PHP 8.4), `j0k3r/httplug-ssrf-plugin` (só IPv4, *pin* sem TLS), `PyMuPDF` (AGPL em SaaS), `pytesseract`, Evolution/WPPConnect/Baileys.
+
+---
+
+## 3. Ondas de implementação recomendadas
+
+### 3.0 Pré-onda (transversal, antes de tudo)
+
+1. **Teste de vocabulário (T1).** Um teste que falha se UI, e-mails, termos, página de verificação ou API contiverem "assinatura avançada", "qualificada", "reconhecimento de firma", "cartório", "biometria", "liveness" ou "identidade verificada" fora dos contextos permitidos ([e-notariado §2.2](integracoes/e-notariado-e-regulatorio.md)). Motivo: toda feature nova passa a herdar essa guarda.
+2. **Fakes identificados dos contratos reservados**: `SmsProvider`, `WhatsAppProvider`, `CpfVerificationProvider`, `CnpjLookupProvider`, `TimestampProvider`, `FiscalInvoiceProvider`. Motivo: as ondas seguintes dependem deles para testar, e eles não dependem de ninguém.
+
+### 3.1 Fase 2 — partindo das ondas A–D do roadmap §6
+
+| Onda | Itens, na ordem | Motivo |
+|---|---|---|
+| **A — domínio** | §2.4 papéis → §2.3 múltiplos documentos → §2.14 permissões (tabelas próprias) → §2.1 templates → §2.5 lembretes/agendado | Sem mudança de conteúdo em relação ao roadmap. Tudo é **A**, sem dependência externa. §2.4 e §2.3 vêm primeiro porque mudam `recipients` e `documents`, que todas as outras peças usam. §2.14 vem antes de §2.1 porque a listagem por pasta muda as queries de templates e envelopes. |
+| **B1 — canais e identidade (real)** | §2.11 dígitos do CPF + CNPJ → §2.8 logo/cores/`Reply-To` → §2.6 presencial (host + OTP por e-mail) → §2.7 lote → §2.2 formulário público → §2.10 captura (flag desligada) | São as partes **A** da onda B original. §2.2 depende de §2.1 (onda A). §2.10 é construída, mas não liga sem a decisão jurídica. |
+| **B2 — canais (contrato + fake)** | §2.18 WhatsApp → §2.9 SMS/WhatsApp + PIN (o PIN é real) → §2.8 `sender_domains` → §2.11 CPF cadastral | Tudo **B** (regra fixa 1). Pode andar em paralelo com B1. Sai pronto para trocar o fake pelo real no dia em que chegar a documentação dos serviços próprios. |
+| **C — criptografia e custódia** | §2.12 A1 do participante (pipeline incremental serializado) → §2.13 TSA própria + dossiê ZIP → §2.19 retenção/preservação | Mesma lógica do roadmap: alteram a finalização e a exclusão. A TSA própria já nasce com `TimestampProvider` e `DummyTimeStamper` como fake. Nenhum perfil acima de B-B é anunciado (T2). |
+| **D — plataforma e receita** | §2.20 partes A (pode **antecipar** para correr em paralelo com a onda A) → §2.15 API v1 → §2.16 webhooks → §2.17 REST Hooks (apps de marketplace ficam em B) → §2.21 NFS-e (só contrato + fake) | Proposta de ajuste: §2.20 só mexe em cobrança e usa a credencial da Fase 1. Não depende do domínio, e antecipá-lo reduz risco de receita. A API continua depois do domínio estável. A NFS-e real fica bloqueada (§4) e não segura a onda. |
+
+### 3.2 Fase 3 — ondas propostas
+
+Pré-requisitos do roadmap: Fase 2 em produção por um ciclo de cobrança, API v1 congelada e matriz de testes da Fase 2 verde.
+
+| Onda | Itens, na ordem | Motivo |
+|---|---|---|
+| **E — assinatura externa e longo prazo** | §3.4 lado servidor (`prepare-external`/`embed-external` com assinatura bruta e CMS, `pending_external_signatures`, `FakeLocalSigner`) → §3.5 fluxo de devolução gov.br (contrato + fake) → §3.6 código B-T/B-LT/B-LTA offline + `IcpBrasilTimestampProvider` fake → `LocalSignerBridge`/`NexuLocalSigner` (B) | Os três itens compartilham a reserva de revisão com expiração e o `embed-external`. Construir a base uma vez evita três pipelines. Tudo testável sem rede nem credencial. |
+| **F — produtividade documental** | §3.1 lote → §3.2 âncoras em PDF nativo (OCR em B) → §3.3 condicionais e delegação → §3.3 multilíngue → §3.3 captura de vídeo (flag desligada) | §3.1 e §3.2 reaproveitam os templates de §2.1. Condicionais mudam `current_order`, que é central, e por isso vêm antes das traduções. |
+| **G — integrações de plataforma** | §3.9 widget iframe + `embed.js` → SDKs a partir da OpenAPI → OIDC (B) → SAML (B) → Drive/Dropbox/HubSpot (B) | O widget só depende de padrões web e da API congelada. SSO e conectores dependem de apps e IdPs registrados pelo proprietário. |
+| **H — risco e receita** | §3.7 antifraude → §3.10 afiliados | Afiliados usa o §3.7 para detectar autoindicação e contas duplicadas. |
+| **Trilha bloqueada** (sem código) | §3.5 API direta gov.br, §3.8 e-Notariado, CRM card do HubSpot | Só avançam com os desbloqueios da §4. |
+
+---
+
+## 4. Pendências consolidadas do proprietário
+
+Só o proprietário pode fornecer o que está abaixo. Entre colchetes, os itens que cada pendência destrava.
+
+### 4.1 Documentação e credenciais de serviços próprios
+
+1. **E-mail**: documentação da API do provedor (verificação de domínio DKIM/SPF/Return-Path, status de entrega, autenticação) [§2.8].
+2. **SMS**: documentação (endpoint, autenticação, erros, limites, status), credenciais de homologação e custo por mensagem [§2.9].
+3. **WhatsApp Business**: documentação, templates pré-aprovados por finalidade, webhook de status com assinatura e credenciais; decisão entre número da operadora e número do cliente [§2.18, §2.9].
+4. **Consulta de CPF**: documentação (entradas exigidas, campos, códigos, SLA, custo) e credenciais [§2.11].
+5. **Identidade (liveness/face match)**: nada agora; permanece backlog [§4 do roadmap].
+
+### 4.2 Contratos, contas e credenciais de terceiros
+
+6. **Mercado Pago**: chave Pix cadastrada na conta vendedora; conta vendedora real para testar Assinaturas [§2.20].
+7. **ACT ICP-Brasil** (SERPRO ou outra da lista do ITI): contrato, e-CNPJ, Consumer Key/Secret, preço por carimbo [§3.6].
+8. **NFS-e**: CNPJ, município (IBGE), regime, cadastro no CNC e certificado digital da operadora para mTLS e XMLDSig; escolha entre Sefin Nacional direto e provedor comercial [§2.21].
+9. **Google Cloud**: projeto com *brand verification* (homepage, política de privacidade, domínio verificado) [§3.9 Drive].
+10. **Dropbox**: app com App Folder e domínios do Chooser registrados [§3.9].
+11. **HubSpot**: app de desenvolvedor e conta de teste [§3.9].
+12. **Zapier / Make**: contas de desenvolvedor [§2.17].
+13. **IdP de teste** para OIDC e SAML [§3.9].
+14. **Componente A3**: piloto com pelo menos dois modelos de token no Windows; escolha entre fork do NexU (com parecer sobre a EUPL-1.2), Assinador Serpro (confirmar licença e uso por SaaS) ou Lacuna/BRy (contrato) [§3.4].
+15. **gov.br (fluxo de devolução)**: uma conta prata/ouro para produzir a fixture real no `assinador.iti.br` e conferi-la no VALIDAR [§3.5].
+16. **CNB-CF**: resposta formal sobre uso do e-Not Assina por SaaS, acesso à homologação e tabela de valores [§3.8].
+
+### 4.3 Infraestrutura operacional
+
+17. LibreOffice e Tesseract 5.5.3 (`por`) no servidor de produção [§2.1, §3.1, §3.2].
+18. TSA do operador: local protegido para a chave (HSM/KMS antes de clientes pagantes), NTP monitorado, OID de política (arco próprio) e AC interna para o certificado da TSA [§2.13].
+19. Rede de saída do worker de finalização até as ACs (OCSP/CRL) e até a TSA/ACT [§2.12, §3.6].
+
+### 4.4 Decisões jurídicas
+
+20. Base legal (LGPD art. 11), papel de controlador × operador, RIPD e retenção para foto e vídeo [§2.10, §3.3].
+21. Base legal e finalidade da consulta de CPF; decisão sobre o modo "estrito" [§2.11].
+22. Legítimo interesse e RIPD para o antifraude; prazo de resposta às revisões [§3.7].
+23. Prazos legais de guarda, inclusive do XML fiscal; janela de backup declarada na Política de Privacidade [§2.19, §2.21].
+24. Consentimento de impersonation nos Termos (Q15) [§2.14].
+25. Parecer contábil: subitem LC 116, NBS, ISS, IBS/CBS 2026/2027 [§2.21].
+26. Revisão jurídica das traduções dos termos [§3.3] e das cláusulas de aceitação de meios (gov.br) [§3.5].
+27. Tratamento tributário e contratual dos repasses de afiliados [§3.10].
+
+### 4.5 Decisões de produto
+
+28. Q20 × cancelamento automático do Mercado Pago após 3 parcelas recusadas; "aprovado depois de expirar"; política de cota em estorno [§2.20].
+29. Re-carimbo LTA gera um novo hash final: a página de verificação aceita o histórico de hashes? [§3.6].
+30. Decisões pendentes já listadas no roadmap: posicionamento de campos em templates, aprovador paralelo, lote entre organizações, evidência única por envelope, PIN × OTP, tombstone e holds na exclusão da organização, papel `integration`, retenção de PFX, regra CPF/CN × recipient, break-glass do SSO, janela de atribuição de afiliados.
+
+---
+
+## 5. Riscos principais
+
+| # | Risco | Impacto | Mitigação |
+|---|---|---|---|
+| R1 | **Os serviços próprios (SMS, WhatsApp, CPF, API de e-mail) seguem sem documentação.** | Os itens B da onda B2 ficam indefinidamente em fake, e o produto não entrega OTP multicanal. | Contratos estreitos e fakes com fixtures; cobrar a documentação do proprietário como pendência nº 1–4; nunca trocar por terceiro (regra fixa 1). |
+| R2 | **Prazo fiscal externo.** A Resolução CGSN 191/2026 obriga ME/EPP do Simples a emitir pelo Emissor Nacional a partir de **1º/11/2026**, e §2.21 está bloqueado por dados da operadora. | Obrigação fiscal real da operadora sem automação. | A emissão manual (Emissor Nacional web ou Sistema de Gestão do MP) é contingência **fora do software**; o recibo interno continua dizendo que não é documento fiscal. |
+| R3 | **Anunciar mais do que foi provado.** Perfis PAdES B-T/LT/LTA, "ICP-Brasil" para TSA própria, "avançada" para o aceite. Hipótese não testada: o B-B atual, sem `SignaturePolicyIdentifier`, provavelmente não é aprovado como AD-RB no Verificador do ITI. | Risco jurídico e reputacional. | T1/T2/T3, teste de vocabulário na pré-onda, `signature_profile` fixo em `PAdES-B-B` até a validação externa passar. |
+| R4 | **Componente A3 frágil.** Upstream do NexU desaparecido, fork de uma pessoa, CORS configurado na máquina do usuário, Local Network Access do Chrome 142+, sem macOS. | Suporte caro e risco de segurança na máquina do usuário final. | Lado servidor desacoplado (aceita assinatura bruta e CMS); componente trocável atrás do `LocalSignerBridge`; piloto antes de liberar. |
+| R5 | **Rede de saída na finalização** (TSA, OCSP/CRL). | Com `soft-fail`, um "B-LT" pode sair sem revogação; indisponibilidade de AC atrasa envelopes. | `hard-fail`/`require` em produção, timeout, retentativa idempotente e degradação explícita para B-B registrada. |
+| R6 | **Guzzle 8.2 × `CURLOPT_RESOLVE`.** A continuidade da opção `curl` na linha 8 está NÃO CONFIRMADA. | O *pin* de IP anti-SSRF pode não funcionar silenciosamente. | Teste de integração obrigatório antes de ligar §2.16; sem ele, a flag não liga. |
+| R7 | **Dependências jovens ou presas.** `socialiteproviders/openidconnect` tem uma única versão; o OpenSpout está preso à 5.3.0 por causa do PHP 8.3; SDKs oficiais de terceiros forçariam o Guzzle 7. | Manutenção e eventuais CVEs. | Fixar versões, testes negativos, plano B próprio (driver OIDC sobre `AbstractProvider`), HTTP Client em vez de SDKs; planejar a migração para PHP 8.4. |
+| R8 | **Minha Receita sem SLA** (e a BrasilAPI é o mesmo backend). | Autopreenchimento de CNPJ indisponível. | Cache em `cnpj_lookups`, preenchimento manual que nunca bloqueia, `base_url` configurável. |
+| R9 | **LGPD em foto, vídeo e antifraude.** Não há guia final da ANPD sobre biometria; não está confirmado se uma selfie armazenada é dado biométrico. | Tratamento de dado sensível sem base. | Flags desligadas até as decisões 20–22; tratar como sensível por precaução; nada de reconhecimento facial. |
+| R10 | **Concorrência na assinatura externa.** Uma revisão reservada para A3/gov.br expira enquanto outro participante assina. | Revisões irmãs impossíveis de fundir (roadmap §2.12). | Pipeline serializado por envelope, reserva com TTL e reconstrução do digest; teste de concorrência da Fase 3. |
+| R11 | **Mercado Pago:** a API de Payments virou legado; Assinaturas conflitam com Q20; pagamento de teste não dispara webhook. | Retrabalho e fixtures incompletas. | Ficar no Checkout Pro; checkout transparente, se vier, sobre Orders; fixtures via `GET`; Assinaturas em B até o teste real. |
+| R12 | **Premissas do roadmap contraditas pela pesquisa** (§6). | Implementação sobre suposição errada. | Registrar as correções no roadmap e na arquitetura antes de iniciar cada item. |
+
+---
+
+## 6. Correções sugeridas ao roadmap (derivadas das pesquisas)
+
+Registrar em `roadmap.md` e em `arquitetura.md` quando o item for iniciado. Este documento não os altera.
+
+1. **§3.4:** `embed-external` deve aceitar **assinatura bruta + certificado** (NexU, Lacuna) **e** CMS pronto (possivelmente Serpro, gov.br). Hoje o texto só prevê CMS ([a3 §4.2](integracoes/a3-componente-local.md)).
+2. **§3.5:** o AssinaVelox **não é elegível** à API gov.br; o caminho viável é o upload do PDF assinado no portal ([gov-br §3, §6](integracoes/gov-br-assinatura.md)).
+3. **§3.8:** o signatário precisa de **certificado notarizado**, não de ICP-Brasil; quem usa ICP-Brasil é o tabelião. O Provimento CNJ 100/2020 foi revogado pelo 149/2023 ([e-notariado §1](integracoes/e-notariado-e-regulatorio.md)).
+4. **§2.13:** o "pyHanko `TimeStamper`" não é TSA de produção; o `DummyTimeStamper` é só fake ([carimbo §1.2](integracoes/carimbo-do-tempo-e-ltv.md)).
+5. **§2.14:** decisão tomada: tabelas próprias, **sem** `spatie/laravel-permission`.
+6. **§2.20:** "Preapproval só com cartão" **não** está confirmado nem desmentido pela documentação; manter como premissa conservadora até o teste real. A API de Payments é legado ([mercado-pago-fase-2 §0, §7](integracoes/mercado-pago-fase-2.md)).
+7. **§2.11:** a BrasilAPI de CNPJ é proxy do Minha Receita, então não é fallback. O SERPRO Consulta CPF existe, mas não é opção pela regra fixa 1 ([cnpj-cpf](integracoes/cnpj-cpf.md)).
+8. **§3.9:** não usar SDKs PHP de Google, HubSpot e Dropbox, por causa do Guzzle 8 ([pacotes §0.1](integracoes/pacotes-fase-2-3.md)).
+9. **§3.6:** a política ICP-Brasil exige `SignaturePolicyIdentifier` e VRI no DSS (DOC-ICP-15.03); o pyHanko grava, mas não confere a política ([carimbo §2.4](integracoes/carimbo-do-tempo-e-ltv.md)).
+
+---
+
+## Decisão recomendada para o AssinaVelox
+
+**Implementar de verdade agora** tudo o que não depende de terceiro ou tem documentação oficial:
+
+- **Fase 2:** §2.1–§2.7, §2.10 (com flag desligada), §2.12–§2.16, §2.19, as partes A de §2.8, §2.9 (PIN), §2.11 (dígitos do CPF e CNPJ), §2.17 (REST Hooks) e §2.20 (Checkout Pro, reembolso, cancelamento, chargeback, Merchant Orders, conciliação).
+- **Fase 3, quando começar:** §3.1, §3.3, §3.7, §3.10, o lado servidor de §3.4, o código B-T/LT/LTA de §3.6 (sem anunciar), âncoras nativas de §3.2, widget e SDKs de §3.9.
+
+Justificativa: cada um desses itens usa só bibliotecas já instaladas ou padrões documentados, e cabe no modelo de flag desligada + testes antes de ligar.
+
+**Implementar contrato + fake identificado, produção desabilitada:**
+
+- SMS, WhatsApp, API de e-mail e consulta de CPF: serviços próprios sem documentação (regra fixa 1).
+- NFS-e: faltam dados, parecer e certificado da operadora.
+- Assinaturas, relatórios e Brick do Mercado Pago.
+- Carimbo ICP-Brasil: falta o contrato com a ACT.
+- Componente A3 local: falta piloto e escolha de componente.
+- Fluxo de devolução gov.br: faltam fixture real, raiz fixada e confirmação de atualização incremental.
+- OCR: falta o Tesseract na produção.
+- OIDC, SAML, Drive, Dropbox e HubSpot: faltam apps e IdPs registrados.
+- Apps de marketplace Zapier/Make.
+
+Justificativa: há contrato estável possível, mas ligar em produção exigiria credencial, contrato ou documentação que ainda não existem (T4).
+
+**Bloqueado:**
+
+- **API direta gov.br.** Desbloqueia com um órgão público cliente + implantação no domínio dele + aceite escrito da SGD.
+- **e-Notariado.** Desbloqueia com a resposta formal do CNB-CF sobre uso por SaaS + homologação; a partir daí passa a B.
+- **CRM card do HubSpot em app público.** Desbloqueia quando a disponibilidade geral estiver confirmada na documentação.
+- **Validação automática pelo VALIDAR / Verificador do ITI.** Não há API confirmada; o uso fica manual, como checklist por release.
+
+**Não implementar:** liveness/face match (regra fixa 2).

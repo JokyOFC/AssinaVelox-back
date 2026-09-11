@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AcceptanceAction;
 use App\Enums\AuthMethod;
 use App\Enums\SignatureKind;
 use App\Models\Concerns\BelongsToOrganization;
@@ -37,6 +38,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $signature_image_path
  * @property string|null $typed_name
  * @property string|null $typed_font
+ * @property AcceptanceAction $action
  * @property Carbon|null $created_at
  */
 class SignatureAcceptance extends Model
@@ -66,6 +68,13 @@ class SignatureAcceptance extends Model
         'signature_image_path',
         'typed_name',
         'typed_font',
+        // Fase 2 §2.4: sign | witness | approve (default sign).
+        'action',
+    ];
+
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'action' => 'sign',
     ];
 
     /**
@@ -74,6 +83,7 @@ class SignatureAcceptance extends Model
     protected function casts(): array
     {
         return [
+            'action' => AcceptanceAction::class,
             'accepted_at' => 'datetime',
             'auth_method' => AuthMethod::class,
             'fields_snapshot' => 'array',
@@ -116,5 +126,15 @@ class SignatureAcceptance extends Model
     public function fieldValues(): HasMany
     {
         return $this->hasMany(SigningFieldValue::class, 'signature_acceptance_id');
+    }
+
+    /**
+     * O que este aceite cobriu, documento a documento (Fase 2 §2.3).
+     *
+     * @return HasMany<AcceptanceDocument, $this>
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(AcceptanceDocument::class, 'signature_acceptance_id')->orderBy('position');
     }
 }

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Sign;
 
+use App\Http\Middleware\ResolveSignerToken;
 use App\Services\Signing\RecordAcceptance;
+use App\Services\Signing\SignerContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -39,12 +41,16 @@ class StoreAcceptanceRequest extends FormRequest
         // grosseiro de propósito; o teto fino é do SignatureImages, sobre os bytes decodificados.
         $maxBase64 = (int) ceil(((int) config('assinavelox.signing_session.signature_image.max_decoded_kb', 3072) * 1024) * 4 / 3) + 1024;
 
+        // Aprovador (Fase 2 §2.4) registra aprovação SEM representação visual: a assinatura
+        // deixa de ser obrigatória na forma (e é ignorada pelo serviço se vier).
+        $visual = $this->requiresVisualSignature();
+
         return [
             'authorization' => ['required', 'string', 'min:20', 'max:128'],
             'consent' => ['required', 'accepted'],
 
-            'signature' => ['required', 'array'],
-            'signature.method' => ['required', 'string', Rule::in(['draw', 'type', 'upload'])],
+            'signature' => [$visual ? 'required' : 'nullable', 'array'],
+            'signature.method' => [$visual ? 'required' : 'nullable', 'string', Rule::in(['draw', 'type', 'upload'])],
             'signature.image_base64' => ['nullable', 'string', 'max:'.$maxBase64],
             'signature.text' => ['nullable', 'string', 'max:80'],
             'signature.font' => ['nullable', 'string', Rule::in(RecordAcceptance::FONTS)],
@@ -77,14 +83,29 @@ class StoreAcceptanceRequest extends FormRequest
     }
 
     /**
+     * O participante deste link precisa de representação visual? Sem contexto resolvido
+     * (não deveria acontecer: o middleware `signer` roda antes), vale a regra da Fase 1.
+     */
+    private function requiresVisualSignature(): bool
+    {
+        $context = $this->attributes->get(ResolveSignerToken::ATTRIBUTE);
+
+        if (! $context instanceof SignerContext) {
+            return true;
+        }
+
+        return $context->action()?->requiresVisualSignature() ?? true;
+    }
+
+    /**
      * Payload já no formato que o serviço espera.
      *
      * @return array{signature: array<string, mixed>, initials: array<string, mixed>|null, fields: array<string, mixed>, authorization: string}
      */
     public function payload(): array
     {
-        /** @var array<string, mixed> $signature */
         $signature = $this->input('signature', []);
+        $signature = is_array($signature) ? $signature : [];
         /** @var array<string, mixed>|null $initials */
         $initials = $this->input('initials');
         /** @var array<string, mixed> $fields */

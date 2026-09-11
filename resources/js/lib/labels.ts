@@ -3,6 +3,7 @@
  * Fonte: ROUTES_AND_PAGES §6 e DESIGN_SYSTEM §5, com os renomes da RECONCILIACAO.
  */
 import type {
+    AcceptanceAction,
     AuditEventKind,
     DocumentProcessingStatus,
     EnvelopeStatus,
@@ -11,6 +12,7 @@ import type {
     MembershipRole,
     MembershipStatus,
     NotificationChannel,
+    ParticipantRole,
     PaymentDisplayStatus,
     PaymentStatus,
     PlanCode,
@@ -124,6 +126,46 @@ export const recipientStatusNotes: Record<RecipientStatus, string> = {
     expired: 'Prazo encerrado',
     canceled: 'Documento cancelado',
 };
+
+// ---------------------------------------------------------------------------
+// Papéis de participante (Fase 2 §2.4)
+//
+// Vocabulário (arquitetura §2): nenhum papel produz "assinatura digital".
+// Signatário e testemunha registram aceite eletrônico com representação
+// visual; o aprovador registra aprovação eletrônica SEM representação visual;
+// o visualizador só recebe cópia. Rótulos espelham `RecipientRole::label()`.
+// ---------------------------------------------------------------------------
+
+export const participantRoleLabels: Record<ParticipantRole, string> = {
+    signer: 'Signatário',
+    witness: 'Testemunha',
+    approver: 'Aprovador',
+    viewer: 'Visualizador',
+};
+
+/** Explicação curta do efeito de cada papel (seletor do passo 2). */
+export const participantRoleDescriptions: Record<ParticipantRole, string> = {
+    signer: 'Registra aceite eletrônico com a representação visual da assinatura. Precisa de pelo menos um campo de assinatura.',
+    witness:
+        'Registra aceite eletrônico como testemunha, com declaração própria: não se torna parte do documento. Precisa de um campo de assinatura.',
+    approver:
+        'Aprova o conteúdo por aceite eletrônico, sem representação visual de assinatura. Não recebe campo de assinatura nem rubrica.',
+    viewer: 'Só acompanha: recebe o documento e a cópia final, sem assinar, aprovar ou receber campos. Não entra na ordem.',
+};
+
+/** Rótulo do registro feito pelo participante (`AcceptanceAction::label()`). */
+export const acceptanceActionLabels: Record<AcceptanceAction, string> = {
+    sign: 'Aceite eletrônico',
+    witness: 'Aceite eletrônico como testemunha',
+    approve: 'Aprovação eletrônica',
+};
+
+/** O papel é diferente do padrão da Fase 1 (merece rótulo na tela)? */
+export function isSpecialRole(
+    role: ParticipantRole | null | undefined,
+): boolean {
+    return role !== undefined && role !== null && role !== 'signer';
+}
 
 export const recipientTabLabels = {
     all: 'Todas',

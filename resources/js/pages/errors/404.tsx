@@ -15,7 +15,11 @@ import { index as verifyIndex } from '@/routes/verify';
  * página inicial e a verificação pública por código.
  */
 export default function NotFound({ message }: { message?: string | null }) {
-    const { auth } = usePage().props;
+    // Numa URL sem rota o grupo `web` não roda e as props compartilhadas não chegam:
+    // `auth` pode faltar (antes, a página quebrava com "reading 'user'").
+    const signedIn = Boolean(
+        (usePage().props as { auth?: { user?: unknown } }).auth?.user,
+    );
 
     return (
         <>
@@ -29,7 +33,7 @@ export default function NotFound({ message }: { message?: string | null }) {
                         'O endereço pode estar errado ou o conteúdo foi removido. Verifique o link ou volte ao início.'
                     }
                     action={
-                        auth.user ? (
+                        signedIn ? (
                             <>
                                 <Button asChild variant="outline">
                                     <Link href={home()}>Página inicial</Link>

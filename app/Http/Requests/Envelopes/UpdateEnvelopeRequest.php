@@ -41,6 +41,10 @@ class UpdateEnvelopeRequest extends FormRequest
             'message' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'signing_order' => ['sometimes', 'in:sequential,parallel'],
             'send_copy_to_all' => ['sometimes', 'boolean'],
+            // Fase 2 §2.3: nova ordem dos arquivos (ULIDs de `documents`, cada um uma vez).
+            // A coerência com os documentos do envelope é conferida em DocumentIntake::reorder.
+            'document_order' => ['sometimes', 'array', 'min:1', 'max:50'],
+            'document_order.*' => ['required', 'string', 'size:26', 'distinct'],
         ];
     }
 
@@ -56,6 +60,7 @@ class UpdateEnvelopeRequest extends FormRequest
             'message' => 'mensagem',
             'signing_order' => 'ordem de assinatura',
             'send_copy_to_all' => 'enviar cópia a todos',
+            'document_order' => 'ordem dos arquivos',
         ];
     }
 }

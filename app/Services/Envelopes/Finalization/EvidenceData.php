@@ -2,11 +2,16 @@
 
 namespace App\Services\Envelopes\Finalization;
 
+use App\Enums\AuditEventType;
+use App\Enums\RecipientRole;
 use App\Enums\SignatureStatus;
+use App\Models\AcceptanceDocument;
 use App\Models\AuditEvent;
 use App\Models\CertificateReference;
+use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
+use App\Models\Recipient;
 use App\Models\SignatureAcceptance;
 use App\Services\Envelopes\Finalization\Support\QrCode;
 use App\Services\Signing\ConsentText;
@@ -37,6 +42,9 @@ class EvidenceData
     /**
      * @param  array<string, string|null>  $hashes  original, sent, consolidated
      * @param  array<string, mixed>|null  $validationResult
+     * @param  list<array<string, mixed>>  $documents  Fase 2 §2.3: todos os documentos do envelope
+     *                                                 (vazio com um documento só)
+     * @param  int|null  $position  posição do documento DESTA página (vários documentos)
      * @return array<string, mixed>
      */
     public function build(
@@ -48,6 +56,8 @@ class EvidenceData
         ?CertificateReference $certificate = null,
         ?array $validationResult = null,
         ?CarbonInterface $generatedAt = null,
+        array $documents = [],
+        ?int $position = null,
     ): array {
         $organization = $envelope->organization;
         $timezone = $organization->timezone !== '' ? $organization->timezone : (string) $this->config->get('app.timezone', 'UTC');
@@ -115,7 +125,88 @@ class EvidenceData
                 'utc' => $generatedAt->copy()->utc()->format('d/m/Y H:i:s'),
                 'local' => $this->local($generatedAt, $timezone),
             ],
+            // Fase 2 (aditivos; vazios/nulos num envelope de um documento só com signatários).
+            'documents' => $this->documentRows($documents, $timezone),
+            'document' => $documents === [] ? null : $this->currentDocument($documents, $position),
+            'viewers' => $this->viewers($envelope),
+            'has_roles' => $envelope->recipients()->where('role', '!=', RecipientRole::Signer->value)->exists(),
         ];
+    }
+
+    /**
+     * Seção "Documentos deste envelope": cada documento com seus resumos e quem registrou
+     * aceite/aprovação sobre ele (`acceptance_documents`).
+     *
+     * @param  list<array<string, mixed>>  $documents
+     * @return list<array<string, mixed>>
+     */
+    private function documentRows(array $documents, string $timezone): array
+    {
+        $rows = [];
+
+        foreach ($documents as $row) {
+            /** @var Document $document */
+            $document = $row['document'];
+
+            $accepted = AcceptanceDocument::withoutOrganizationScope()
+                ->with('acceptance.recipient')
+                ->where('document_id', $document->getKey())
+                ->orderBy('id')
+                ->get()
+                ->map(function (AcceptanceDocument $item) use ($timezone): array {
+                    $acceptance = $item->acceptance;
+                    $recipient = $acceptance?->recipient;
+
+                    return [
+                        'name' => $recipient->name ?? '—',
+                        'role_label' => $recipient?->role->label(),
+                        'action_label' => $acceptance?->action->label(),
+                        'accepted_at' => $this->local($acceptance?->accepted_at, $timezone),
+                        'document_sha256' => $item->document_sha256,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            $rows[] = [
+                'position' => (int) ($row['position'] ?? $document->position),
+                'name' => (string) ($row['name'] ?? $document->name),
+                'page_count' => (int) ($row['page_count'] ?? 0),
+                'hashes' => $row['hashes'] ?? [],
+                'accepted_by' => $accepted,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $documents
+     * @return array{position: int, count: int, name: string}
+     */
+    private function currentDocument(array $documents, ?int $position): array
+    {
+        $current = collect($documents)->first(fn (array $row): bool => (int) ($row['position'] ?? 0) === $position) ?? $documents[0];
+
+        return [
+            'position' => (int) ($current['position'] ?? 1),
+            'count' => count($documents),
+            'name' => (string) ($current['name'] ?? ''),
+        ];
+    }
+
+    /**
+     * Quem recebeu cópia sem participar da coleta (visualizadores, Fase 2 §2.4).
+     *
+     * @return list<array{name: string, email: string}>
+     */
+    private function viewers(Envelope $envelope): array
+    {
+        return array_values($envelope->recipients()
+            ->where('role', RecipientRole::Viewer->value)
+            ->get()
+            ->map(fn (Recipient $recipient): array => ['name' => $recipient->name, 'email' => $recipient->email])
+            ->all());
     }
 
     /**
@@ -130,10 +221,19 @@ class EvidenceData
         $rows = [];
 
         foreach ($envelope->recipients()->with('acceptance')->get() as $recipient) {
+            // Visualizador não participa da coleta: vai para a lista `viewers`.
+            if (! $recipient->participates()) {
+                continue;
+            }
+
             /** @var SignatureAcceptance|null $acceptance */
             $acceptance = $recipient->acceptance;
 
             $rows[] = [
+                // Fase 2 §2.4: papel de domínio e o que o aceite registrou.
+                'role' => $recipient->role->value,
+                'role_label' => $recipient->role->label(),
+                'action_label' => $acceptance?->action->label(),
                 'name' => $recipient->name,
                 'email' => $recipient->email,
                 'status' => $recipient->status->value,
@@ -165,6 +265,12 @@ class EvidenceData
     {
         /** @var list<string> $types */
         $types = (array) $this->config->get('assinavelox.evidence.timeline_events', []);
+
+        // A aprovação (Fase 2 §2.4) é tão evidência quanto o aceite: entra na linha do tempo
+        // sempre que a lista configurada incluir o aceite.
+        if (in_array(AuditEventType::AcceptanceRecorded->value, $types, true)) {
+            $types[] = AuditEventType::ApprovalRecorded->value;
+        }
         $limit = max(10, (int) $this->config->get('assinavelox.evidence.timeline_limit', 200));
 
         $events = AuditEvent::query()

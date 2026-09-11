@@ -105,6 +105,8 @@ class EnvelopeEvidenceController extends Controller
             'validation_summary' => $signature['validation']['summary'] ?? null,
             'certificate' => $this->certificateProps($signature['certificate']),
             'notes' => $this->dossier->notes(),
+            // Fase 2 §2.3 (aditivo): um item por arquivo, com os resumos e quem aceitou.
+            'documents' => $this->dossier->documents($envelope, $request->user()?->can('download', $envelope) ?? false),
             'terms_version' => $envelope->terms_version,
             'verify_url' => $envelope->verification_code
                 ? route('verify.show', ['code' => $envelope->verification_code])

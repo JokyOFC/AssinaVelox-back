@@ -1,16 +1,24 @@
-import { Info, TriangleAlert } from 'lucide-react';
+import { Eye, Info, TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { reminderSummary } from '@/components/envelopes/phase2-routes';
 import { recipientColor } from '@/components/envelopes/recipient-colors';
+import {
+    documentName,
+    fileBadge,
+} from '@/components/envelopes/wizard-document-list';
+import { roleOf } from '@/components/envelopes/wizard-step-recipients';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { formatBytes, formatDateMedium, plural } from '@/lib/format';
-import { signingOrderLabels } from '@/lib/labels';
+import { participantRoleLabels, signingOrderLabels } from '@/lib/labels';
 import type { SigningOrder } from '@/types/enums';
 import type {
     EnvelopeDocument,
     FolderRef,
+    ReminderSettings,
     WizardField,
     WizardRecipient,
 } from '@/types/models';
@@ -25,9 +33,17 @@ function expiresOn(days: number): string {
 /**
  * Passo 4 — Revisar e enviar (DESIGN §6.5): resumo do documento, dos
  * signatários e dos campos, mensagem ao signatário e pendências antes do envio.
+ *
+ * Fase 2: com vários arquivos, lista cada um; com papéis, mostra o tipo de cada
+ * participante; com lembretes, a cadência e o cartão de envio agendado (`scheduleSlot`).
+ * As pendências vêm do backend (`EnvelopeReadiness::issues()`), inclusive as novas por
+ * arquivo e por papel. Sem as flags o passo é o da Fase 1.
  */
 export function WizardStepReview({
     document,
+    documents = [],
+    multiDocument = false,
+    participantRoles = false,
     folder,
     title,
     expiresInDays,
@@ -43,8 +59,13 @@ export function WizardStepReview({
     issues,
     onEditStep,
     disabled,
+    reminderSettings,
+    scheduleSlot,
 }: {
     document: EnvelopeDocument | null;
+    documents?: EnvelopeDocument[];
+    multiDocument?: boolean;
+    participantRoles?: boolean;
     folder: FolderRef | null;
     title: string;
     expiresInDays: number;
@@ -66,12 +87,27 @@ export function WizardStepReview({
     issues: string[];
     onEditStep: (step: 1 | 2 | 3) => void;
     disabled?: boolean;
+    /** Cadência de lembretes (só com a flag `reminders`). */
+    reminderSettings?: ReminderSettings | null;
+    /** Cartão de envio agendado (só com a flag `reminders`). */
+    scheduleSlot?: ReactNode;
 }) {
+    const multi = multiDocument && documents.length > 1;
+    const firstDocumentId = documents[0]?.id ?? document?.id ?? null;
+
     const pagesWithFields = new Set(
         fields
             .filter((field) => field.page !== 'all')
             .map((field) => Number(field.page)),
     );
+    const documentsWithFields = new Set(
+        fields.map((field) => field.document_id ?? firstDocumentId),
+    );
+
+    const showRoles =
+        participantRoles ||
+        recipients.some((recipient) => roleOf(recipient) !== 'signer');
+    let turn = 0;
 
     return (
         <div className="flex flex-wrap items-start gap-5">
@@ -79,7 +115,11 @@ export function WizardStepReview({
                 <div className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-5">
                     <Heading
                         variant="small"
-                        title="Documento"
+                        title={
+                            multi
+                                ? `Documento · ${plural(documents.length, 'arquivo')}`
+                                : 'Documento'
+                        }
                         action={
                             <Button
                                 variant="link"
@@ -90,7 +130,51 @@ export function WizardStepReview({
                             </Button>
                         }
                     />
-                    {document ? (
+                    {multi ? (
+                        <>
+                            <p className="text-[14px] font-semibold">
+                                {title}
+                                <span className="text-muted-foreground block text-[12.5px] font-normal">
+                                    {folder && `Pasta ${folder.name} · `}
+                                    expira em {expiresOn(expiresInDays)}
+                                </span>
+                            </p>
+                            <ol className="flex flex-col">
+                                {documents.map((item, index) => (
+                                    <li
+                                        key={item.id}
+                                        className="border-muted flex items-center gap-3 border-t py-2 first:border-t-0"
+                                    >
+                                        <span className="bg-danger-bg text-danger flex size-8 shrink-0 items-center justify-center rounded-lg text-[9.5px] font-extrabold">
+                                            {fileBadge(item)}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate text-[13px] font-semibold">
+                                                {index + 1}.{' '}
+                                                {documentName(item)}
+                                            </span>
+                                            <span className="text-muted-foreground tabular block truncate text-[12px]">
+                                                {formatBytes(item.size_bytes)}
+                                                {item.processing.pages !=
+                                                    null &&
+                                                    ` · ${plural(item.processing.pages, 'página')}`}
+                                                {' · '}
+                                                {plural(
+                                                    fields.filter(
+                                                        (field) =>
+                                                            (field.document_id ??
+                                                                firstDocumentId) ===
+                                                            item.id,
+                                                    ).length,
+                                                    'campo',
+                                                )}
+                                            </span>
+                                        </span>
+                                    </li>
+                                ))}
+                            </ol>
+                        </>
+                    ) : document ? (
                         <div className="flex items-center gap-3">
                             <span className="bg-danger-bg text-danger flex size-10 shrink-0 items-center justify-center rounded-lg text-[10px] font-extrabold">
                                 PDF
@@ -121,7 +205,7 @@ export function WizardStepReview({
                         variant="small"
                         title={
                             <>
-                                Signatários{' '}
+                                {showRoles ? 'Participantes' : 'Signatários'}{' '}
                                 <span className="text-muted-foreground font-medium">
                                     ·{' '}
                                     {signingOrderLabels[
@@ -142,11 +226,14 @@ export function WizardStepReview({
                     />
                     {recipients.map((recipient, index) => {
                         const color = recipientColor(index);
+                        const participantRole = roleOf(recipient);
+                        const viewer = participantRole === 'viewer';
                         const count = fields.filter(
                             (field) =>
                                 field.recipient_client_id ===
                                 recipient.client_id,
                         ).length;
+                        const position = viewer ? null : ++turn;
 
                         return (
                             <div
@@ -160,11 +247,30 @@ export function WizardStepReview({
                                     }}
                                     className="tabular flex size-8 shrink-0 items-center justify-center rounded-lg text-[12px] font-bold"
                                 >
-                                    {index + 1}
+                                    {showRoles ? (
+                                        viewer ? (
+                                            <Eye className="size-3.5" />
+                                        ) : (
+                                            position
+                                        )
+                                    ) : (
+                                        index + 1
+                                    )}
                                 </span>
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate text-[13.5px] font-semibold">
                                         {recipient.name || '(sem nome)'}
+                                        {showRoles &&
+                                            participantRole !== 'signer' && (
+                                                <span className="text-primary font-semibold">
+                                                    {' '}
+                                                    ·{' '}
+                                                    {recipient.participant_role_label ??
+                                                        participantRoleLabels[
+                                                            participantRole
+                                                        ]}
+                                                </span>
+                                            )}
                                         {recipient.role && (
                                             <span className="text-muted-foreground font-medium">
                                                 {' '}
@@ -175,7 +281,11 @@ export function WizardStepReview({
                                     <span className="text-text-secondary block truncate text-[12.5px]">
                                         {recipient.email || '(sem e-mail)'} ·
                                         e-mail com código de verificação ·{' '}
-                                        {plural(count, 'campo')}
+                                        {viewer
+                                            ? 'recebe cópia para acompanhamento'
+                                            : participantRole === 'approver'
+                                              ? `aprova sem assinatura visual · ${plural(count, 'campo')}`
+                                              : plural(count, 'campo')}
                                     </span>
                                 </span>
                             </div>
@@ -228,9 +338,19 @@ export function WizardStepReview({
             <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
                 <div className="border-border bg-card shadow-card flex flex-col gap-1 rounded-xl border p-5">
                     <Heading variant="small" title="Resumo" />
+                    {multi && (
+                        <SummaryRow
+                            label="Arquivos"
+                            value={plural(documents.length, 'arquivo')}
+                        />
+                    )}
                     <SummaryRow
                         label="Campos"
-                        value={`${plural(fields.length, 'campo')} em ${plural(pagesWithFields.size, 'página')}${initialsOnAllPages ? ' + rubricas' : ''}`}
+                        value={
+                            multi
+                                ? `${plural(fields.length, 'campo')} em ${plural(documentsWithFields.size, 'arquivo')}${initialsOnAllPages ? ' + rubricas' : ''}`
+                                : `${plural(fields.length, 'campo')} em ${plural(pagesWithFields.size, 'página')}${initialsOnAllPages ? ' + rubricas' : ''}`
+                        }
                     />
                     <SummaryRow
                         label="Ordem"
@@ -240,6 +360,12 @@ export function WizardStepReview({
                         label="Validade"
                         value={`${expiresInDays} dias (até ${expiresOn(expiresInDays)})`}
                     />
+                    {reminderSettings && (
+                        <SummaryRow
+                            label="Lembretes"
+                            value={reminderSummary(reminderSettings)}
+                        />
+                    )}
                     <SummaryRow
                         label="Consumo do plano"
                         value={
@@ -266,14 +392,16 @@ export function WizardStepReview({
                     </div>
                 )}
 
+                {scheduleSlot}
+
                 <div className="border-primary-soft-border bg-primary-soft text-primary flex gap-2 rounded-xl border p-3.5 text-[12.5px] leading-[1.55]">
                     <Info className="mt-0.5 size-4 shrink-0" />
                     <span>
-                        Ao enviar, cada signatário recebe um link exclusivo por
-                        e-mail. O documento fica bloqueado para edição e cada
-                        evento passa a ser registrado na trilha de auditoria. O
-                        aceite eletrônico é vinculado à versão exata do arquivo
-                        que você está enviando.
+                        {multi
+                            ? 'Ao enviar, cada participante recebe um link exclusivo por e-mail. Os arquivos ficam bloqueados para edição e cada evento passa a ser registrado na trilha de auditoria. O aceite de cada participante é vinculado à versão exata de cada arquivo, com o resumo SHA-256 de cada um.'
+                            : showRoles
+                              ? 'Ao enviar, cada participante recebe um link exclusivo por e-mail. O documento fica bloqueado para edição e cada evento passa a ser registrado na trilha de auditoria. Aceites e aprovações ficam vinculados à versão exata do arquivo que você está enviando; quem só acompanha não registra aceite.'
+                              : 'Ao enviar, cada signatário recebe um link exclusivo por e-mail. O documento fica bloqueado para edição e cada evento passa a ser registrado na trilha de auditoria. O aceite eletrônico é vinculado à versão exata do arquivo que você está enviando.'}
                     </span>
                 </div>
             </div>

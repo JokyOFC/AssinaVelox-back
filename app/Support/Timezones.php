@@ -28,6 +28,22 @@ final class Timezones
     ];
 
     /**
+     * Rótulo curto em PT-BR para frases ("horário de Brasília (GMT-3)"), no lugar do
+     * identificador IANA. Fuso fora da lista: o identificador, para nunca esconder a
+     * informação.
+     */
+    public static function humanLabel(?string $identifier): string
+    {
+        $label = self::BRAZIL[$identifier ?? ''] ?? null;
+
+        if ($label === null) {
+            return 'fuso '.($identifier !== null && $identifier !== '' ? $identifier : 'America/Sao_Paulo');
+        }
+
+        return 'horário de '.trim(explode(' — ', $label)[0]);
+    }
+
+    /**
      * @return array<int, string>
      */
     public static function identifiers(): array

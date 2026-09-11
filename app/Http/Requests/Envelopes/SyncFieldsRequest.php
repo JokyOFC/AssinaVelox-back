@@ -38,6 +38,8 @@ class SyncFieldsRequest extends FormRequest
             'fields.*.auto' => ['nullable', 'boolean'],
             'fields.*.recipient_id' => ['nullable', 'string', 'size:26'],
             'fields.*.recipient_client_id' => ['nullable', 'string', 'max:64'],
+            // Fase 2 §2.3: ULID do documento onde o campo fica. Ausente = primeiro documento.
+            'fields.*.document_id' => ['nullable', 'string', 'size:26'],
             'fields.*.type' => ['required', Rule::in(array_column(FieldType::cases(), 'value'))],
             'fields.*.page' => ['required'],
             'fields.*.x' => ['required', 'numeric'],

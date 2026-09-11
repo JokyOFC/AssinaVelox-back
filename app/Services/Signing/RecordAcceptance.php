@@ -2,12 +2,15 @@
 
 namespace App\Services\Signing;
 
+use App\Enums\AcceptanceAction;
 use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
 use App\Enums\FieldType;
 use App\Enums\RecipientStatus;
 use App\Enums\SignatureKind;
 use App\Events\EnvelopeReadyForFinalization;
+use App\Models\AcceptanceDocument;
+use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Recipient;
@@ -15,6 +18,7 @@ use App\Models\SignatureAcceptance;
 use App\Models\SigningField;
 use App\Models\SigningFieldValue;
 use App\Models\SigningSession;
+use App\Models\SigningSessionDocument;
 use App\Services\Signing\Exceptions\SigningRejectedException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -38,6 +42,21 @@ use Illuminate\Support\Str;
  * A duplicidade tem duas defesas: a checagem sob lock e o `UNIQUE(recipient_id)` de
  * `signature_acceptances`. A segunda é a que vale quando dois processos passam pela primeira
  * ao mesmo tempo em um banco onde o lock não serializa — a violação vira 409, nunca dois aceites.
+ *
+ * ## Vários documentos (Fase 2 §2.3)
+ *
+ * UM aceite por participante cobre o CONJUNTO de documentos do envelope. Ele só é gravado se
+ * todos os documentos foram entregues à sessão (`signing_session_documents`) e se os campos
+ * obrigatórios de todos os documentos em que a pessoa tem campos foram preenchidos. Para cada
+ * documento fica uma linha em `acceptance_documents` (versão, SHA-256, campos e valores).
+ * `signature_acceptances.document_version_id`/`document_sha256` continuam apontando para o
+ * primeiro documento (compatibilidade com a Fase 1).
+ *
+ * ## Papéis (Fase 2 §2.4)
+ *
+ * `signer` → action `sign`; `witness` → `witness` (mesmo fluxo, declaração própria);
+ * `approver` → `approve` (sem representação visual de assinatura). O `viewer` não registra
+ * aceite: a tentativa é recusada.
  *
  * ## O que é do servidor, não do cliente
  *
@@ -68,9 +87,20 @@ final class RecordAcceptance
      */
     public function handle(SignerContext $context, SigningSession $session, Request $request, array $payload): SignatureAcceptance
     {
-        $version = $context->sentVersion();
+        $action = $context->action();
 
-        if ($version === null) {
+        // Visualizador: só recebe cópia. Não há aceite a registrar (Fase 2 §2.4).
+        if ($action === null) {
+            throw SigningRejectedException::conflict(
+                'not_signable',
+                'Você recebeu este documento apenas para acompanhar: não há aceite a registrar.',
+            );
+        }
+
+        $version = $context->sentVersion();
+        $sent = $context->sentDocuments();
+
+        if ($version === null || $sent === [] || (int) $sent[0]['version']->getKey() !== (int) $version->getKey()) {
             throw SigningRejectedException::conflict('missing_sent_version', 'Este documento não está disponível para assinatura.');
         }
 
@@ -88,6 +118,11 @@ final class RecordAcceptance
             );
         }
 
+        // Vários documentos: TODOS precisam ter sido entregues a esta sessão.
+        if (count($sent) > 1) {
+            $this->assertAllPresented($session, $sent);
+        }
+
         if ($session->document_version_id !== $version->getKey()) {
             throw SigningRejectedException::conflict(
                 'stale_session_version',
@@ -95,9 +130,19 @@ final class RecordAcceptance
             );
         }
 
-        $fields = $this->presentation->myFields($context, $version);
-        $consentText = ConsentText::statement($context->envelope, $context->recipient, $context->organization, $version->sha256);
-        $snapshot = $this->presentation->snapshot($context, $version, $fields, $consentText);
+        $fields = count($sent) > 1
+            ? $this->presentation->myFieldsForDocuments($context, $sent)
+            : $this->presentation->myFields($context, $version);
+
+        $consentText = ConsentText::statement(
+            $context->envelope,
+            $context->recipient,
+            $context->organization,
+            $version->sha256,
+            null,
+            $sent,
+        );
+        $snapshot = $this->presentation->snapshotFor($context, $sent, $fields, $consentText);
         $snapshotHash = SignerPresentation::hash($snapshot);
 
         if (! $this->sessions->authorizationMatches($session, $payload['authorization'], $snapshotHash)) {
@@ -113,7 +158,10 @@ final class RecordAcceptance
         // recusar e não faz sentido segurar o lock do envelope enquanto se decide isso.
         $values = $this->resolveFieldValues($fields, $context, $payload['fields'] ?? [], $now);
 
-        $visual = $this->resolveVisual($context, $payload, $fields);
+        // Aprovador não tem representação visual: nada do que vier em `signature` é gravado.
+        $visual = $action->requiresVisualSignature()
+            ? $this->resolveVisual($context, $payload, $fields)
+            : self::noVisual();
 
         $correlationId = SignerTokens::correlationId();
 
@@ -122,6 +170,8 @@ final class RecordAcceptance
                 $context,
                 $session,
                 $version,
+                $sent,
+                $action,
                 $fields,
                 $values,
                 $visual,
@@ -156,18 +206,50 @@ final class RecordAcceptance
         return $acceptance;
     }
 
+    /**
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
+     *
+     * @throws SigningRejectedException
+     */
+    private function assertAllPresented(SigningSession $session, array $sent): void
+    {
+        $presented = SigningSessionDocument::withoutOrganizationScope()
+            ->where('signing_session_id', $session->getKey())
+            ->get(['document_id', 'document_version_id'])
+            ->mapWithKeys(fn (SigningSessionDocument $row): array => [(int) $row->document_id => (int) $row->document_version_id])
+            ->all();
+
+        foreach ($sent as $row) {
+            $documentId = (int) $row['document']->getKey();
+
+            if (($presented[$documentId] ?? null) !== (int) $row['version']->getKey()) {
+                throw SigningRejectedException::conflict(
+                    'document_not_presented',
+                    sprintf(
+                        'Abra e confira todos os arquivos antes de assinar: o arquivo "%s" ainda não foi carregado nesta sessão.',
+                        $row['document']->name,
+                    ),
+                    ['document' => $row['document']->ulid],
+                );
+            }
+        }
+    }
+
     // -- Persistência ------------------------------------------------------------------
 
     /**
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
      * @param  Collection<int, SigningField>  $fields
      * @param  array<string, array{text: string|null, bool: bool|null}>  $values
-     * @param  array{kind: SignatureKind, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
+     * @param  array{kind: SignatureKind|null, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
      * @param  array<string, mixed>  $snapshot
      */
     private function persist(
         SignerContext $context,
         SigningSession $session,
         DocumentVersion $version,
+        array $sent,
+        AcceptanceAction $action,
         Collection $fields,
         array $values,
         array $visual,
@@ -179,7 +261,7 @@ final class RecordAcceptance
     ): SignatureAcceptance {
         try {
             return DB::transaction(function () use (
-                $context, $session, $version, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId
+                $context, $session, $version, $sent, $action, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId
             ): SignatureAcceptance {
                 /** @var Envelope|null $envelope */
                 $envelope = Envelope::withoutOrganizationScope()
@@ -211,11 +293,12 @@ final class RecordAcceptance
                     'signing_session_id' => $session->getKey(),
                     'auth_challenge_id' => $challengeId,
                     'organization_id' => $envelope->organization_id,
+                    'action' => $action,
                     'accepted_at' => $now,
                     'ip_address' => SignerRequestFacts::ip($request),
                     'user_agent' => SignerRequestFacts::userAgent($request),
                     'auth_method' => $recipient->auth_method,
-                    'terms_version' => ConsentText::versionFor($envelope),
+                    'terms_version' => ConsentText::versionFor($envelope, $recipient, count($sent)),
                     'consent_statement' => $consentText,
                     'document_sha256' => $version->sha256,
                     'fields_snapshot' => $snapshot + ['values' => $this->snapshotValues($fields, $values, $visual)],
@@ -244,6 +327,26 @@ final class RecordAcceptance
                     ]);
                 }
 
+                // O que o aceite cobriu, documento a documento (Fase 2 §2.3).
+                foreach ($sent as $row) {
+                    $documentFields = $fields
+                        ->filter(fn (SigningField $field): bool => (int) $field->document_version_id === (int) $row['version']->getKey())
+                        ->values();
+
+                    AcceptanceDocument::query()->create([
+                        'signature_acceptance_id' => $acceptance->getKey(),
+                        'document_id' => $row['document']->getKey(),
+                        'document_version_id' => $row['version']->getKey(),
+                        'organization_id' => $envelope->organization_id,
+                        'position' => (int) $row['document']->position,
+                        'document_sha256' => $row['version']->sha256,
+                        'fields_snapshot' => [
+                            'fields' => $documentFields->map(fn (SigningField $field): array => SignerPresentation::fieldSnapshot($field))->all(),
+                            'values' => $this->snapshotValues($documentFields, $values, $visual),
+                        ],
+                    ]);
+                }
+
                 // pending → notified → viewed → signed: um POST direto (sem GET) pula
                 // `viewed`, e a máquina de estados não permite. O aceite é a prova de que a
                 // pessoa viu; o passo intermediário é registrado para manter a trilha coerente.
@@ -255,15 +358,33 @@ final class RecordAcceptance
                 $recipient->signed_at = $now;
                 $recipient->save();
 
-                SignerAudit::record($envelope, $recipient, AuditEventType::AcceptanceRecorded, [
+                $payload = [
                     'acceptance_ulid' => $acceptance->ulid,
                     'document_version_ulid' => $version->ulid,
                     'document_sha256' => $version->sha256,
                     'terms_version' => $acceptance->terms_version,
                     'auth_method' => $recipient->auth_method->value,
-                    'signature_kind' => $visual['kind']->value,
+                    'signature_kind' => $visual['kind']?->value,
                     'fields' => $fields->count(),
-                ], $correlationId);
+                ];
+
+                // Chaves da Fase 2 só quando há o que dizer: o payload de um signatário com
+                // um documento continua o da Fase 1.
+                if ($action !== AcceptanceAction::Sign || count($sent) > 1) {
+                    $payload['action'] = $action->value;
+                    $payload['documents'] = array_map(static fn (array $row): array => [
+                        'document_ulid' => $row['document']->ulid,
+                        'sha256' => $row['version']->sha256,
+                    ], $sent);
+                }
+
+                SignerAudit::record(
+                    $envelope,
+                    $recipient,
+                    $action === AcceptanceAction::Approve ? AuditEventType::ApprovalRecorded : AuditEventType::AcceptanceRecorded,
+                    $payload,
+                    $correlationId,
+                );
 
                 return $acceptance;
             });
@@ -283,6 +404,10 @@ final class RecordAcceptance
      */
     private function assertStillSignable(Envelope $envelope, Recipient $recipient, DocumentVersion $version): void
     {
+        if (! $recipient->participates()) {
+            throw SigningRejectedException::conflict('not_signable', 'Você recebeu este documento apenas para acompanhar: não há aceite a registrar.');
+        }
+
         if ($envelope->status !== EnvelopeStatus::InProgress) {
             throw SigningRejectedException::conflict('not_signable', 'Este documento não está mais disponível para assinatura.');
         }
@@ -416,6 +541,22 @@ final class RecordAcceptance
     // -- Representação visual -----------------------------------------------------------
 
     /**
+     * Sem representação visual (aprovador, Fase 2 §2.4).
+     *
+     * @return array{kind: null, image_path: null, initials_image_path: null, typed_name: null, typed_font: null}
+     */
+    private static function noVisual(): array
+    {
+        return [
+            'kind' => null,
+            'image_path' => null,
+            'initials_image_path' => null,
+            'typed_name' => null,
+            'typed_font' => null,
+        ];
+    }
+
+    /**
      * Normaliza a representação visual conforme o método escolhido.
      *
      * @param  array<string, mixed>  $payload
@@ -489,7 +630,7 @@ final class RecordAcceptance
      *
      * @param  Collection<int, SigningField>  $fields
      * @param  array<string, array{text: string|null, bool: bool|null}>  $values
-     * @param  array{kind: SignatureKind, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
+     * @param  array{kind: SignatureKind|null, image_path: string|null, initials_image_path: string|null, typed_name: string|null, typed_font: string|null}  $visual
      * @return list<array<string, mixed>>
      */
     private function snapshotValues(Collection $fields, array $values, array $visual): array
@@ -522,6 +663,9 @@ final class RecordAcceptance
     /**
      * Avança a ordem (sequencial) ou dispara a finalização quando ninguém mais falta.
      *
+     * Só quem PARTICIPA (signatário, testemunha, aprovador) é pendência; o visualizador
+     * nunca impede a conclusão (Fase 2 §2.4).
+     *
      * Roda **depois** do commit do aceite e em transação própria: notificar o próximo é
      * consequência do aceite, não parte dele. Se falhar aqui, o aceite continua gravado e a
      * trilha mostra o que aconteceu.
@@ -540,7 +684,7 @@ final class RecordAcceptance
                 ->orderBy('id')
                 ->get();
 
-            $pending = $recipients->filter(fn (Recipient $r): bool => $r->status->isPendingSignature());
+            $pending = $recipients->filter(fn (Recipient $r): bool => $r->isPendingParticipant());
 
             if ($pending->isEmpty()) {
                 if ($envelope->status === EnvelopeStatus::InProgress) {

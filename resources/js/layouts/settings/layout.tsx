@@ -17,9 +17,11 @@ import { index as plansIndex } from '@/routes/plans';
 import { edit as profileEdit } from '@/routes/profile';
 import { edit as securityEdit } from '@/routes/security';
 import {
+    audit as settingsAudit,
     general as settingsGeneral,
     notifications as settingsNotifications,
     signing as settingsSigning,
+    tags as settingsTags,
 } from '@/routes/settings';
 
 type RailItem = {
@@ -47,7 +49,7 @@ export default function SettingsLayout({
     children,
     header,
 }: SettingsLayoutProps) {
-    const { organization } = usePage().props;
+    const { organization, features } = usePage().props;
     const { isCurrentOrParentUrl, currentUrl } = useCurrentUrl();
     const permissions = organization?.permissions;
 
@@ -82,6 +84,23 @@ export default function SettingsLayout({
                     key: 'notifications',
                     title: 'Notificações',
                     href: settingsNotifications(),
+                },
+                // Fase 2 §2.14: só com a flag; a lista de etiquetas é visível a todo membro
+                // (criar/editar exige `manage_tags` na própria tela).
+                {
+                    key: 'tags',
+                    title: 'Etiquetas',
+                    href: settingsTags(),
+                    hidden: !(features?.tags ?? false),
+                },
+                {
+                    key: 'audit',
+                    title: 'Registro de atividades',
+                    href: settingsAudit(),
+                    hidden: !(
+                        (features?.audit_log ?? false) &&
+                        (permissions?.view_audit_log ?? false)
+                    ),
                 },
                 {
                     key: 'billing',

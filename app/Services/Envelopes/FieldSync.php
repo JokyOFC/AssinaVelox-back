@@ -4,10 +4,12 @@ namespace App\Services\Envelopes;
 
 use App\Enums\AuditEventType;
 use App\Enums\FieldType;
+use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\SigningField;
+use App\Services\Documents\EnvelopeDocuments;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -23,11 +25,17 @@ use Illuminate\Validation\ValidationException;
  *  - `page_width_pt`, `page_height_pt`, `page_rotation` e `box_type` vêm SEMPRE do
  *    `pages_meta`; qualquer valor de página enviado pelo cliente é ignorado.
  *
+ * Fase 2 (docs/fase-2/multi-documento-e-papeis.md):
+ *  - §2.3 — cada campo pertence a UM documento (`fields.*.document_id`, ULID; ausente = o
+ *    primeiro) e referencia a versão exibível exata daquele documento;
+ *  - §2.4 — visualizador não recebe campo nenhum; aprovador não recebe assinatura nem
+ *    rubrica. A rubrica automática só é gerada para quem assina (signatário/testemunha).
+ *
  * Rubrica automática (RECONCILIACAO §4 Q10): com `initials_on_all_pages`, o serviço grava
- * campos `initials` REAIS, um por página e por destinatário, na posição padrão
- * (x 0.86, y 0.94, w 0.10, h 0.04), pulando as páginas em que já existe uma rubrica
- * posicionada à mão para aquele destinatário. Os campos gerados carregam
- * `options.auto = true` e são descartados/regerados a cada sync.
+ * campos `initials` REAIS, um por página, por documento e por destinatário que assina, na
+ * posição padrão, pulando as páginas em que já existe uma rubrica posicionada à mão para
+ * aquele destinatário. Os campos gerados carregam `options.auto = true` e são
+ * descartados/regerados a cada sync.
  */
 final class FieldSync
 {
@@ -46,8 +54,8 @@ final class FieldSync
      */
     public function handle(Envelope $envelope, array $data): array
     {
-        $version = $this->versionFor($envelope);
-        $pageCount = $this->pageCount($envelope, $version);
+        $targets = $this->targets($envelope);
+        $firstUlid = (string) array_key_first($targets);
         $recipients = $envelope->recipients()->get();
 
         if ($recipients->isEmpty()) {
@@ -76,6 +84,12 @@ final class FieldSync
                 continue;
             }
 
+            $target = $this->resolveTarget($raw, $targets, $firstUlid, $index, $errors);
+
+            if ($target === null) {
+                continue;
+            }
+
             $recipient = $this->resolveRecipient($raw, $recipientsByUlid);
 
             if ($recipient === null) {
@@ -92,7 +106,23 @@ final class FieldSync
                 continue;
             }
 
-            $pages = $this->resolvePages($raw, $type, $pageCount, $index, $errors);
+            // Papel (Fase 2 §2.4) — mesma regra da prontidão, recusada já aqui para que o
+            // remetente veja o erro no campo e não só como pendência no passo 4.
+            if (! $recipient->role->allowsFields()) {
+                $errors["fields.{$index}.recipient_id"] = 'Visualizadores só recebem cópia do documento e não podem ter campos.';
+
+                continue;
+            }
+
+            if ($type->isImageBased() && ! $recipient->role->allowsVisualSignature()) {
+                $errors["fields.{$index}.type"] = 'Aprovadores aprovam o conteúdo sem assinar: não podem ter campo de assinatura ou rubrica.';
+
+                continue;
+            }
+
+            /** @var DocumentVersion $version */
+            $version = $target['version'];
+            $pages = $this->resolvePages($raw, $type, $target['pages'], $index, $errors);
 
             if ($pages === []) {
                 continue;
@@ -127,6 +157,7 @@ final class FieldSync
                     // existente, as demais são novas.
                     'ulid' => $offset === 0 ? $this->incomingUlid($raw) : null,
                     'recipient' => $recipient,
+                    'version' => $version,
                     'type' => $type,
                     'page' => $page,
                     'geometry' => $geometry,
@@ -165,17 +196,27 @@ final class FieldSync
             ]);
         }
 
-        if ($initialsOnAllPages && count($rows) + ($recipients->count() * $pageCount) > self::MAX_FIELDS) {
+        // A rubrica automática vale para quem ASSINA: aprovador e visualizador não rubricam.
+        $initialing = $recipients
+            ->filter(fn (Recipient $recipient): bool => $recipient->role->allowsVisualSignature())
+            ->values();
+
+        $totalPages = array_sum(array_map(
+            static fn (array $target): int => $target['version'] === null ? 0 : $target['pages'],
+            $targets,
+        ));
+
+        if ($initialsOnAllPages && count($rows) + ($initialing->count() * $totalPages) > self::MAX_FIELDS) {
             throw ValidationException::withMessages([
                 'initials_on_all_pages' => 'A rubrica em todas as páginas ultrapassa o limite de '.self::MAX_FIELDS.' campos. Reduza a quantidade de campos ou de signatários.',
             ]);
         }
 
         $autoRows = $initialsOnAllPages
-            ? $this->autoInitialsRows($rows, $recipients, $pageCount)
+            ? $this->autoInitialsRows($rows, $initialing, $targets)
             : [];
 
-        $this->persist($envelope, $version, array_merge($rows, $autoRows));
+        $this->persist($envelope, array_merge($rows, $autoRows));
 
         $settings = $envelope->settings ?? [];
         $settings['initials_on_all_pages'] = $initialsOnAllPages;
@@ -183,12 +224,21 @@ final class FieldSync
 
         $envelope->unsetRelation('fields');
 
-        EnvelopeAudit::record($envelope, AuditEventType::FieldsUpdated, [
-            'document_version' => $version->ulid,
+        /** @var DocumentVersion $firstVersion */
+        $firstVersion = $targets[$firstUlid]['version'];
+
+        $payload = [
+            'document_version' => $firstVersion->ulid,
             'count' => count($rows) + count($autoRows),
             'auto_initials' => count($autoRows),
             'initials_on_all_pages' => $initialsOnAllPages,
-        ]);
+        ];
+
+        if (count($targets) > 1) {
+            $payload['documents'] = count($targets);
+        }
+
+        EnvelopeAudit::record($envelope, AuditEventType::FieldsUpdated, $payload);
 
         EnvelopeReadiness::refresh($envelope);
 
@@ -200,9 +250,9 @@ final class FieldSync
     /**
      * @param  list<array<string, mixed>>  $rows
      */
-    private function persist(Envelope $envelope, DocumentVersion $version, array $rows): void
+    private function persist(Envelope $envelope, array $rows): void
     {
-        DB::transaction(function () use ($envelope, $version, $rows): void {
+        DB::transaction(function () use ($envelope, $rows): void {
             // Sob lock, dentro da transação: entre o carregamento do envelope e este
             // ponto o envio pode ter acontecido, e apagar campos de um envelope enviado
             // apagaria em cascata os `signing_field_values` de aceites já gravados.
@@ -216,6 +266,8 @@ final class FieldSync
             foreach ($rows as $row) {
                 /** @var Recipient $recipient */
                 $recipient = $row['recipient'];
+                /** @var DocumentVersion $version */
+                $version = $row['version'];
                 $page = (int) $row['page'];
                 $box = $this->pageBox($version, $page);
 
@@ -232,7 +284,8 @@ final class FieldSync
                     $field->organization_id = $envelope->organization_id;
                 }
 
-                $sortOrder[$page] = ($sortOrder[$page] ?? 0) + 1;
+                $slot = $version->getKey().':'.$page;
+                $sortOrder[$slot] = ($sortOrder[$slot] ?? 0) + 1;
 
                 $field->forceFill([
                     'document_version_id' => $version->getKey(),
@@ -251,7 +304,7 @@ final class FieldSync
                     'required' => $row['required'],
                     'label' => $row['label'],
                     'options' => $row['options'],
-                    'sort_order' => $sortOrder[$page],
+                    'sort_order' => $sortOrder[$slot],
                 ])->save();
 
                 $keptIds[] = $field->getKey();
@@ -266,14 +319,15 @@ final class FieldSync
     // -- Rubrica automática ------------------------------------------------------------
 
     /**
-     * Uma rubrica por página e por destinatário, pulando as páginas em que já existe uma
-     * rubrica manual daquele destinatário.
+     * Uma rubrica por página, por documento e por destinatário que assina, pulando as
+     * páginas em que já existe uma rubrica manual daquele destinatário.
      *
      * @param  list<array<string, mixed>>  $manualRows
      * @param  Collection<int, Recipient>  $recipients
+     * @param  array<string, array{document: Document, version: DocumentVersion|null, pages: int}>  $targets
      * @return list<array<string, mixed>>
      */
-    private function autoInitialsRows(array $manualRows, $recipients, int $pageCount): array
+    private function autoInitialsRows(array $manualRows, Collection $recipients, array $targets): array
     {
         $manual = [];
 
@@ -281,7 +335,9 @@ final class FieldSync
             if ($row['type'] === FieldType::Initials) {
                 /** @var Recipient $recipient */
                 $recipient = $row['recipient'];
-                $manual[$recipient->getKey().':'.$row['page']] = true;
+                /** @var DocumentVersion $version */
+                $version = $row['version'];
+                $manual[$recipient->getKey().':'.$version->getKey().':'.$row['page']] = true;
             }
         }
 
@@ -294,58 +350,111 @@ final class FieldSync
             // vizinho — ver {@see FieldGeometry::autoInitialsSlot()}.
             $geometry = FieldGeometry::autoInitialsSlot($slot++);
 
-            for ($page = 1; $page <= $pageCount; $page++) {
-                if (isset($manual[$recipient->getKey().':'.$page])) {
+            foreach ($targets as $target) {
+                $version = $target['version'];
+
+                if ($version === null) {
                     continue;
                 }
 
-                $rows[] = [
-                    'ulid' => null,
-                    'recipient' => $recipient,
-                    'type' => FieldType::Initials,
-                    'page' => $page,
-                    'geometry' => $geometry,
-                    'required' => true,
-                    'label' => null,
-                    'options' => ['auto' => true],
-                ];
+                for ($page = 1; $page <= $target['pages']; $page++) {
+                    if (isset($manual[$recipient->getKey().':'.$version->getKey().':'.$page])) {
+                        continue;
+                    }
+
+                    $rows[] = [
+                        'ulid' => null,
+                        'recipient' => $recipient,
+                        'version' => $version,
+                        'type' => FieldType::Initials,
+                        'page' => $page,
+                        'geometry' => $geometry,
+                        'required' => true,
+                        'label' => null,
+                        'options' => ['auto' => true],
+                    ];
+                }
             }
         }
 
         return $rows;
     }
 
-    // -- Leitura do documento ----------------------------------------------------------
+    // -- Leitura dos documentos --------------------------------------------------------
 
-    private function versionFor(Envelope $envelope): DocumentVersion
+    /**
+     * Documentos do envelope (ordem de apresentação) com a versão exibível e o total de
+     * páginas. O PRIMEIRO precisa estar processado — é a regra da Fase 1; os demais são
+     * conferidos por campo, em {@see self::resolveTarget()}.
+     *
+     * @return array<string, array{document: Document, version: DocumentVersion|null, pages: int}>
+     */
+    private function targets(Envelope $envelope): array
     {
-        $document = $envelope->document;
+        $documents = EnvelopeDocuments::ordered($envelope);
+        $targets = [];
 
-        $version = $document?->current_version_id !== null
-            ? DocumentVersion::query()->whereKey($document->current_version_id)->first()
-            : null;
+        foreach ($documents as $document) {
+            $version = $document->current_version_id !== null
+                ? DocumentVersion::query()->whereKey($document->current_version_id)->first()
+                : null;
 
-        if ($version === null) {
+            $targets[$document->ulid] = [
+                'document' => $document,
+                'version' => $version,
+                'pages' => $version === null ? 0 : (int) ($version->page_count ?? $document->page_count),
+            ];
+        }
+
+        $first = $targets === [] ? null : reset($targets);
+
+        if ($first === null || $first['version'] === null) {
             throw ValidationException::withMessages([
                 'fields' => 'Envie e processe o documento antes de posicionar os campos.',
             ]);
         }
 
-        return $version;
-    }
-
-    private function pageCount(Envelope $envelope, DocumentVersion $version): int
-    {
-        $document = $envelope->document;
-        $pageCount = (int) ($version->page_count ?? ($document === null ? 0 : $document->page_count));
-
-        if ($pageCount < 1) {
+        if ($first['pages'] < 1) {
             throw ValidationException::withMessages([
                 'fields' => 'O documento ainda não tem páginas conhecidas. Aguarde o processamento terminar.',
             ]);
         }
 
-        return $pageCount;
+        return $targets;
+    }
+
+    /**
+     * Documento de destino do campo. Sem `document_id`, o primeiro (contrato da Fase 1).
+     *
+     * @param  array<string, mixed>  $raw
+     * @param  array<string, array{document: Document, version: DocumentVersion|null, pages: int}>  $targets
+     * @param  array<string, string>  $errors
+     * @return array{document: Document, version: DocumentVersion, pages: int}|null
+     */
+    private function resolveTarget(array $raw, array $targets, string $firstUlid, int $index, array &$errors): ?array
+    {
+        $ulid = $raw['document_id'] ?? null;
+        $ulid = is_string($ulid) && $ulid !== '' ? $ulid : $firstUlid;
+
+        $target = $targets[$ulid] ?? null;
+
+        if ($target === null) {
+            $errors["fields.{$index}.document_id"] = 'Este arquivo não pertence ao documento.';
+
+            return null;
+        }
+
+        if ($target['version'] === null || $target['pages'] < 1) {
+            $errors["fields.{$index}.document_id"] = sprintf(
+                'O arquivo "%s" ainda não foi processado. Aguarde antes de posicionar campos nele.',
+                $target['document']->original_filename,
+            );
+
+            return null;
+        }
+
+        /** @var array{document: Document, version: DocumentVersion, pages: int} $target */
+        return $target;
     }
 
     /**

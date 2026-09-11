@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Envelopes;
 
 use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
+use App\Enums\Permission;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Templates\TemplateUseController;
 use App\Http\Requests\Envelopes\UpdateEnvelopeRequest;
 use App\Http\Resources\AuditEventResource;
 use App\Http\Resources\DocumentResource;
@@ -24,6 +27,10 @@ use App\Models\Membership;
 use App\Models\Recipient;
 use App\Models\SigningField;
 use App\Models\User;
+use App\Services\Documents\DocumentIntake;
+use App\Services\Documents\EnvelopeDocuments;
+use App\Services\Documents\Exceptions\UploadRejectedException;
+use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\DuplicateEnvelope;
 use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Envelopes\EnvelopeReadiness;
@@ -31,8 +38,11 @@ use App\Services\Envelopes\FieldGeometry;
 use App\Services\Envelopes\FieldSync;
 use App\Services\Envelopes\PageBox;
 use App\Services\Envelopes\RecipientSync;
+use App\Services\Envelopes\Reminders\ReminderProps;
 use App\Services\Envelopes\Sending\CancelEnvelope;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\Tags\EnvelopeTagIndex;
+use App\Services\Templates\TemplatesFeature;
 use App\Support\CurrentOrganization;
 use App\Support\OrganizationSettings;
 use Illuminate\Database\Eloquent\Builder;
@@ -81,6 +91,10 @@ class EnvelopeController extends Controller
 
         $folder = ! empty($validated['folder']) ? Folder::query()->where('ulid', $validated['folder'])->first() : null;
 
+        // Fase 2 §2.14 — etiquetas (flag `tags`): só estreita o que a visibilidade já liberou.
+        // Desligada, `constrain()` não altera a consulta e `props()` devolve `enabled: false`.
+        $tagging = EnvelopeTagIndex::for($membership, $request->query('tag'));
+
         $filters = [
             'status' => $validated['status'] ?? 'all',
             'folder' => $folder?->ulid,
@@ -92,7 +106,9 @@ class EnvelopeController extends Controller
             'sort' => $validated['sort'] ?? 'updated_desc',
         ];
 
-        $base = fn (): Builder => $this->applyFilters(EnvelopeVisibility::envelopes($membership), $filters, $folder, withStatus: false);
+        $base = fn (): Builder => $tagging->constrain(
+            $this->applyFilters(EnvelopeVisibility::envelopes($membership), $filters, $folder, withStatus: false)
+        );
 
         $tabs = [];
         foreach (self::TABS as $tab) {
@@ -118,7 +134,8 @@ class EnvelopeController extends Controller
         $all = EnvelopeVisibility::envelopes($membership);
 
         return Inertia::render('envelopes/index', [
-            'filters' => $filters,
+            'filters' => [...$filters, 'tag' => $tagging->tagUlid()],
+            'tagging' => $tagging->props($envelopes->getCollection()),
             'summary' => [
                 'total' => (clone $all)->count(),
                 'awaiting' => (clone $all)->where('status', EnvelopeStatus::InProgress->value)->count(),
@@ -130,7 +147,8 @@ class EnvelopeController extends Controller
             'envelopes' => EnvelopeResource::collection($envelopes),
             'can' => [
                 'create_folder' => $request->user()->can('create', Folder::class),
-                'bulk_cancel' => $membership->role->canManageMembers(),
+                // Papéis de sistema: owner/admin, como na Fase 1 (Permission::systemGrants).
+                'bulk_cancel' => $membership->hasPermission(Permission::CancelAnyEnvelope),
             ],
         ]);
     }
@@ -179,7 +197,7 @@ class EnvelopeController extends Controller
         });
 
         $fields = SigningField::query()
-            ->with(['recipient', 'value'])
+            ->with(['recipient', 'value', 'documentVersion.document'])
             ->where('envelope_id', $envelope->getKey())
             ->orderBy('page')
             ->orderBy('sort_order')
@@ -193,6 +211,9 @@ class EnvelopeController extends Controller
             'folders' => FolderResource::collection(Folder::query()->whereNull('parent_id')->orderBy('name')->get())->resolve($request),
             'sent' => filter_var($validated['sent'] ?? false, FILTER_VALIDATE_BOOL),
             'tab' => $validated['tab'] ?? 'signers',
+            // Fase 2 §2.5 (docs/fase-2/lembretes-e-agendamento.md): `available=false` com a
+            // flag desligada — o front mantém a tela da Fase 1.
+            'reminders' => app(ReminderProps::class)->forEnvelope($envelope),
         ]);
     }
 
@@ -201,12 +222,22 @@ class EnvelopeController extends Controller
     /**
      * Nova solicitação: cria um Envelope(draft) vazio com os padrões da organização e
      * redireciona para o wizard (garante autosave e ID desde o primeiro clique).
+     *
+     * Fase 2 §2.1: com `?template={ulid}` e a flag `templates` ligada, mostra o formulário
+     * "Usar modelo" (página templates/use) em vez de criar o rascunho vazio. Com a flag
+     * desligada o parâmetro é ignorado — exatamente o comportamento da Fase 1.
      */
-    public function create(Request $request): RedirectResponse
+    public function create(Request $request): Response|RedirectResponse
     {
         Gate::authorize('create', Envelope::class);
 
         $organization = CurrentOrganization::instance()->get();
+
+        $template = $request->query('template');
+
+        if (is_string($template) && $template !== '' && TemplatesFeature::enabled($organization)) {
+            return app(TemplateUseController::class)->form($request, $template);
+        }
         $settings = OrganizationSettings::of($organization);
 
         // "Nova solicitação" está em três lugares e é um GET: cada clique (ou pré-busca do
@@ -268,6 +299,7 @@ class EnvelopeController extends Controller
             'recipients',
             'document.currentVersion',
             'fields.recipient',
+            'fields.documentVersion.document',
         ]);
 
         $completeness = EnvelopeReadiness::completeness($envelope);
@@ -277,6 +309,16 @@ class EnvelopeController extends Controller
             'envelope' => EnvelopeWizardResource::make($envelope)->resolve($request),
             'step' => $step,
             'document' => $this->documentProps($request, $envelope),
+            // Fase 2 §2.3: todos os arquivos, na ordem de apresentação (o primeiro é o
+            // mesmo de `document`). Contrato em docs/fase-2/multi-documento-e-papeis.md.
+            'documents' => $this->documentsProps($request, $envelope),
+            // Flags de domínio desta organização (derivadas de config + plano). Aditivo:
+            // `features` compartilhado continua sendo a fonte do shell.
+            'domain_features' => DomainFeatures::forOrganization($organization),
+            'participant_roles' => array_map(
+                static fn (RecipientRole $role): array => ['value' => $role->value, 'label' => $role->label()],
+                RecipientRole::cases(),
+            ),
             'recipients' => $envelope->recipients->values()
                 ->map(fn (Recipient $recipient, int $index): array => RecipientWizardResource::make($recipient)
                     ->withColorIndex($index)
@@ -301,6 +343,8 @@ class EnvelopeController extends Controller
                 'accepted_mimes' => (array) config('assinavelox.upload.accepted_mimes', []),
                 'max_fields' => FieldSync::MAX_FIELDS,
                 'max_recipients' => 20,
+                // 1 com a flag `multi_document` desligada (Fase 1).
+                'max_documents' => DomainFeatures::maxDocuments($organization),
                 // Mínimos por tipo, em pontos da página exibida: o editor divide pela
                 // dimensão da página para obter a fração (docs/campos-e-geometria.md §3).
                 'field_minimums' => FieldGeometry::minimumsForProps(),
@@ -308,6 +352,8 @@ class EnvelopeController extends Controller
             'completeness' => $completeness,
             // Pendências em PT-BR para o passo 4 (EnvelopeReadiness).
             'issues' => EnvelopeReadiness::issues($envelope),
+            // Fase 2 §2.5: lembretes e envio agendado (`available=false` com a flag desligada).
+            'reminders' => app(ReminderProps::class)->forEnvelope($envelope),
         ]);
     }
 
@@ -346,6 +392,16 @@ class EnvelopeController extends Controller
         }
 
         $envelope->forceFill($attributes)->save();
+
+        // Fase 2 §2.3: nova ordem dos arquivos. A coerência (cada documento do envelope
+        // exatamente uma vez) e o lock ficam em DocumentIntake::reorder.
+        if (array_key_exists('document_order', $validated)) {
+            try {
+                app(DocumentIntake::class)->reorder($envelope, array_values((array) $validated['document_order']), $request->user(), $request);
+            } catch (UploadRejectedException $exception) {
+                return back()->withErrors(['document_order' => $exception->getMessage()]);
+            }
+        }
 
         // A ordem de assinatura vive em dois lugares: `envelopes.signing_order` (aqui) e
         // `recipients.order_index` (RecipientSync, passo 2). Este autosave sai sozinho — o
@@ -497,6 +553,32 @@ class EnvelopeController extends Controller
         return DocumentResource::make($document)->resolve($request) + ['pages_meta' => $pagesMeta];
     }
 
+    /**
+     * `WizardProps.documents` (Fase 2 §2.3): um item por arquivo, na ordem de apresentação,
+     * com o mesmo formato de `document` (+ `position`).
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function documentsProps(Request $request, Envelope $envelope): array
+    {
+        $props = [];
+
+        foreach (EnvelopeDocuments::ordered($envelope) as $document) {
+            $document->setRelation('envelope', $envelope);
+
+            $version = $document->currentVersion;
+            $pagesMeta = [];
+
+            foreach ($version === null ? [] : ($version->pages_meta ?? []) as $index => $meta) {
+                $pagesMeta[] = ['page' => $index + 1] + PageBox::fromPageMeta($meta)->toArray();
+            }
+
+            $props[] = DocumentResource::make($document)->resolve($request) + ['pages_meta' => $pagesMeta];
+        }
+
+        return $props;
+    }
+
     // -- Helpers -----------------------------------------------------------------------
 
     /**
@@ -591,7 +673,25 @@ class EnvelopeController extends Controller
     protected function creators(Membership $membership): array
     {
         if (! EnvelopeVisibility::canViewAll($membership)) {
-            return [UserRefResource::ref($membership->user)];
+            // Fase 2 §2.14: com acesso por pasta, quem não vê tudo também vê documentos de
+            // outros autores — o filtro lista os autores do que a pessoa já vê (e ela mesma).
+            // Sem acesso por pasta o resultado é o da Fase 1: só a própria pessoa.
+            $ids = EnvelopeVisibility::envelopes($membership)
+                ->reorder()
+                ->distinct()
+                ->pluck('created_by_user_id')
+                ->map(static fn ($id): int => (int) $id)
+                ->reject(static fn (int $id): bool => $id === (int) $membership->user_id)
+                ->values();
+
+            if ($ids->isEmpty()) {
+                return [UserRefResource::ref($membership->user)];
+            }
+
+            return User::query()->whereIn('id', [...$ids->all(), (int) $membership->user_id])->orderBy('name')->get()
+                ->map(fn (User $u) => UserRefResource::ref($u))
+                ->values()
+                ->all();
         }
 
         $ids = Envelope::query()->distinct()->pluck('created_by_user_id');

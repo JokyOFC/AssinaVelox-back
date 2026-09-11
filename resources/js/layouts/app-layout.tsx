@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppSidebar, type SidebarMode } from '@/components/app-sidebar';
 import { AppTopbar } from '@/components/app-topbar';
 import { FlashToaster } from '@/components/flash-toaster';
+import { ImpersonationBanner } from '@/components/impersonation/impersonation-banner';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { setTimeZone } from '@/lib/format';
@@ -46,6 +47,8 @@ export default function AppLayout({
         <SidebarProvider defaultOpen={sidebarOpen ?? true}>
             <AppSidebar mode={mode} />
             <SidebarInset className="bg-background min-w-0 overflow-x-clip">
+                {/* Fase 2 — "acessar como": banner persistente (só com a prop `impersonation`). */}
+                <ImpersonationBanner />
                 <AppTopbar
                     breadcrumbs={breadcrumbs}
                     mode={mode}

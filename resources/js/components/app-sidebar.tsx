@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
+    BarChart3,
     Building2,
     Code,
     CreditCard,
@@ -50,11 +51,14 @@ import { index as membersIndex } from '@/routes/members';
 import { index as plansIndex } from '@/routes/plans';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as recipientsIndex } from '@/routes/recipients';
+import { index as reportsIndex } from '@/routes/reports';
 import { edit as securityEdit } from '@/routes/security';
 import {
+    audit as settingsAudit,
     general as settingsGeneral,
     notifications as settingsNotifications,
     signing as settingsSigning,
+    tags as settingsTags,
 } from '@/routes/settings';
 import { index as templatesIndex } from '@/routes/templates';
 
@@ -140,7 +144,7 @@ function NavItem({
  * atual (`/admin/*` → admin). Vira Sheet abaixo de `md` (shadcn Sidebar).
  */
 export function AppSidebar({ mode }: { mode: SidebarMode }) {
-    const { auth, organization, counts } = usePage().props;
+    const { auth, organization, counts, features } = usePage().props;
     const { isMobile, setOpenMobile } = useSidebar();
     const onNavigate = () => {
         if (isMobile) {
@@ -179,7 +183,19 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     title: 'Modelos',
                     href: templatesIndex(),
                     icon: LayoutTemplate,
-                    phase2: true,
+                    // Com a flag ligada o item deixa de ser placeholder.
+                    phase2: !(features?.templates ?? false),
+                },
+                {
+                    key: 'reports',
+                    title: 'Relatórios',
+                    href: reportsIndex(),
+                    icon: BarChart3,
+                    // Fase 2 §2.14: só com a flag `reports` e a permissão `view_reports`.
+                    hidden: !(
+                        (features?.reports ?? false) &&
+                        (permissions?.view_reports ?? false)
+                    ),
                 },
             ],
         },
@@ -211,6 +227,8 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                         settingsGeneral.url(),
                         settingsSigning.url(),
                         settingsNotifications.url(),
+                        settingsTags.url(),
+                        settingsAudit.url(),
                         billingIndex.url(),
                         plansIndex.url(),
                         profileEdit.url(),
@@ -244,16 +262,16 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     title: 'Usuários da plataforma',
                     href: adminUsers(),
                     icon: Users,
-                    phase2: true,
-                    disabled: true,
+                    phase2: !(features?.admin_users ?? false),
+                    disabled: !(features?.admin_users ?? false),
                 },
                 {
                     key: 'admin-audit',
                     title: 'Logs e auditoria',
                     href: adminAudit(),
                     icon: History,
-                    phase2: true,
-                    disabled: true,
+                    phase2: !(features?.admin_audit ?? false),
+                    disabled: !(features?.admin_audit ?? false),
                 },
             ],
         },

@@ -2,11 +2,15 @@
 
 namespace App\Services\Signing;
 
+use App\Enums\AcceptanceAction;
+use App\Enums\RecipientRole;
+use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Organization;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
+use App\Services\Documents\EnvelopeDocuments;
 
 /**
  * Resultado da resolução do link, injetado na requisição pelo middleware
@@ -89,6 +93,35 @@ final class SignerContext
         return DocumentVersion::withoutOrganizationScope()
             ->whereKey($this->envelope->sent_document_version_id)
             ->first();
+    }
+
+    /**
+     * TODOS os documentos do envelope com a versão congelada de cada um, na ordem de
+     * apresentação (Fase 2 §2.3). Com um documento só, a lista tem um item e a versão é a
+     * mesma de {@see self::sentVersion()}.
+     *
+     * @return list<array{document: Document, version: DocumentVersion}>
+     */
+    public function sentDocuments(): array
+    {
+        return EnvelopeDocuments::sent($this->envelope);
+    }
+
+    /**
+     * Visualizador (Fase 2 §2.4): vê o documento depois do código, não registra aceite.
+     */
+    public function isViewer(): bool
+    {
+        return $this->recipient->role === RecipientRole::Viewer;
+    }
+
+    /**
+     * O que o aceite desta pessoa registra (sign | witness | approve); `null` para o
+     * visualizador.
+     */
+    public function action(): ?AcceptanceAction
+    {
+        return $this->recipient->role->acceptanceAction();
     }
 
     /**

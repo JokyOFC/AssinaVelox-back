@@ -49,6 +49,8 @@ export interface FileCheckManual {
     result: {
         matches: 'signed' | 'original' | 'none';
         checked_sha256: string;
+        /** Fase 2 §2.3: com vários arquivos, qual deles conferiu. */
+        document?: { position: number; name: string } | null;
     } | null;
 }
 
@@ -433,6 +435,10 @@ function ManualHashCheck({
     startOpen: boolean;
 }) {
     const result = manual.result;
+    // Fase 2 §2.3: com vários arquivos o servidor diz qual conferiu.
+    const matchedFile = result?.document
+        ? ` — arquivo ${result.document.position}. ${result.document.name}`
+        : '';
     const matched =
         result && result.matches !== 'none'
             ? (targets.find((target) =>
@@ -499,14 +505,17 @@ function ManualHashCheck({
                     {result.matches === 'signed' && (
                         <>
                             <b>Confere.</b> O resumo informado é o do arquivo
-                            final registrado.
+                            final registrado{matchedFile}.
                         </>
                     )}
                     {result.matches === 'original' && (
                         <>
                             <b>
                                 Confere com o{' '}
-                                {matched?.label ?? 'documento enviado'}.
+                                {result.document
+                                    ? `documento enviado${matchedFile}`
+                                    : (matched?.label ?? 'documento enviado')}
+                                .
                             </b>{' '}
                             Não é o arquivo final publicado nesta página.
                         </>

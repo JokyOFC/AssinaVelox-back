@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\MembershipInvitation;
 use App\Support\MailText;
+use App\Support\PermissionsInvitationGrants;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,7 +48,7 @@ class MembershipInvitationNotification extends Notification implements ShouldBeE
         return (new MailMessage)
             ->subject('Convite para participar de '.$organization->name.' no AssinaVelox')
             ->greeting('Olá!')
-            ->line(MailText::escape($inviter->name ?? 'Um administrador').' convidou você para participar da organização **'.MailText::escape($organization->name).'** como '.$this->invitation->role->label().'.')
+            ->line(MailText::escape($inviter->name ?? 'Um administrador').' convidou você para participar da organização **'.MailText::escape($organization->name).'** como '.MailText::escape(PermissionsInvitationGrants::roleLabel($this->invitation)).'.')
             ->action('Aceitar convite', $this->acceptUrl())
             ->line('Este convite expira em '.$expiresAt.'.')
             ->line('Se você não esperava este convite, ignore este e-mail.')

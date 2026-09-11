@@ -3,6 +3,7 @@
 namespace Tests;
 
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Vite;
 use Pest\Browser\Playwright\Playwright;
 
 /**
@@ -39,6 +40,15 @@ abstract class BrowserTestCase extends TestCase
 
         // O gerenciador pode já ter criado o driver `array` durante o boot.
         Session::forgetDrivers();
+
+        // Os testes de navegador exercitam o build de produção (public/build). Com um
+        // `public/hot` presente — de um `npm run dev` aberto ou, pior, órfão depois que o
+        // servidor foi encerrado — o helper do Vite passa a apontar para o servidor de
+        // desenvolvimento: as páginas carregam sem JavaScript e cada asserção espera o
+        // teto de 20 s abaixo, o que se parece com um travamento da suíte. Apontar o hot
+        // file para um caminho inexistente isola a suíte disso sem apagar o arquivo de
+        // quem está desenvolvendo (mesma técnica de tests/Feature/Smoke/CspAndBuildAssetsTest).
+        Vite::useHotFile(storage_path('framework/testing/vite-hot-disabled'));
 
         // O padrão do plugin (5 s) é curto para as telas pesadas desta
         // aplicação: o editor de campos e a página do signatário só ficam

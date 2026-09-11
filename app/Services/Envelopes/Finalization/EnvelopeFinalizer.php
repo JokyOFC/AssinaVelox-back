@@ -14,7 +14,9 @@ use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\VerificationRecord;
+use App\Models\VerificationRecordDocument;
 use App\Services\Documents\DocumentStorage;
+use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Envelopes\Finalization\Exceptions\FinalizationException;
 use App\Services\Envelopes\Sending\CompletionNotifier;
 use App\Services\Pdf\Dto\ValidationResult;
@@ -118,6 +120,14 @@ class EnvelopeFinalizer
             // Recusado, expirado ou cancelado entre o disparo e o processamento. Não é erro:
             // é o estado do envelope, e ele manda.
             return FinalizationOutcome::skipped('not_finalizing', $envelope);
+        }
+
+        // Fase 2 §2.3: vários documentos — o pipeline roda POR DOCUMENTO, sob a mesma
+        // `finalization_key`, e o envelope só conclui quando todos estão finais.
+        $sent = EnvelopeDocuments::sent($envelope);
+
+        if (count($sent) > 1) {
+            return $this->handleMulti($envelope, $sent, $correlationId);
         }
 
         $document = $envelope->document;
@@ -254,8 +264,14 @@ class EnvelopeFinalizer
             $steps,
         );
 
+        // Resumos também na tabela filha (Fase 2 §2.3): a verificação pública lê os
+        // documentos de um lugar só, com um ou com vários arquivos.
+        $this->verificationDocuments($record, [['document' => $document, 'version' => $sentVersion]], [$consolidated], [['final' => $final]]);
+
         // -- g. Conclusão ----------------------------------------------------------------
-        $completed = $this->complete($envelope, $final, $record, $signatureStatus, $correlationId, $steps);
+        $completed = $this->complete($envelope, $final, $record, $signatureStatus, $correlationId, $steps, [
+            (int) $document->getKey() => (int) $final->getKey(),
+        ]);
 
         return new FinalizationOutcome(
             $completed ? 'completed' : 'already_completed',
@@ -265,6 +281,316 @@ class EnvelopeFinalizer
             $signatureStatus,
             $steps,
         );
+    }
+
+    // -- Vários documentos (Fase 2 §2.3) --------------------------------------------------
+
+    /**
+     * Pipeline para N documentos.
+     *
+     * Mesmas etapas e mesmas garantias do caminho de um documento, aplicadas por documento:
+     *
+     * a. consolida CADA documento (reaproveitando o que já existe no disco com o hash certo);
+     * b. gera a página de evidências de CADA documento — ela lista todos os documentos do
+     *    envelope com seus resumos e quem aceitou cada um. Por listar os resumos consolidados
+     *    de todos, qualquer consolidação refeita invalida TODAS as páginas; a marca
+     *    `documents_digest` na trilha garante a mesma coisa numa retomada;
+     * c/d/e. junta, assina (quando configurado) e valida o arquivo final de CADA documento;
+     * f. um `verification_records` para o envelope (colunas = primeiro documento) e uma linha
+     *    em `verification_record_documents` por documento;
+     * g. `completed` só depois de TODOS os finais existirem, sob lock.
+     *
+     * Retomável por documento: uma falha no documento 3 deixa os artefatos dos documentos 1 e
+     * 2 no disco, e a próxima execução os reaproveita (`steps` diz o que foi `created` e o que
+     * foi `reused`). Cada documento usa um diretório temporário próprio.
+     *
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
+     *
+     * @throws FinalizationException
+     */
+    private function handleMulti(Envelope $envelope, array $sent, string $correlationId): FinalizationOutcome
+    {
+        if ($envelope->verification_code === null) {
+            throw FinalizationException::missingVerificationCode();
+        }
+
+        // Falha rápida e sem trabalho parcial: todos os bytes congelados precisam existir.
+        foreach ($sent as $row) {
+            if (! $this->storage->exists($row['version'])) {
+                throw FinalizationException::sourceUnavailable();
+            }
+        }
+
+        $this->ensureFinalizationKey($envelope);
+
+        $steps = [];
+        $consolidated = [];
+        $rebuilt = [];
+        $rebuiltAny = false;
+
+        // -- a. Consolidação de cada documento -----------------------------------------
+        foreach ($sent as $index => $row) {
+            $key = self::documentStepKey($index);
+            $existing = $this->artifacts->existing($row['document'], DocumentVersionKind::Consolidated);
+
+            if ($existing === null) {
+                $existing = $this->withWorkDir(fn (TemporaryDirectory $dir): DocumentVersion => $this->consolidate(
+                    $envelope, $row['document'], $row['version'], $dir, $correlationId, self::documentAudit($row['document']),
+                ));
+
+                $steps[$key.'.consolidated'] = 'created';
+                $rebuilt[$index] = true;
+                $rebuiltAny = true;
+            } else {
+                $steps[$key.'.consolidated'] = 'reused';
+                $rebuilt[$index] = false;
+            }
+
+            $consolidated[$index] = $existing;
+        }
+
+        // -- b. Página de evidências de cada documento ----------------------------------
+        $configuredCertificate = $this->signsFor($envelope)
+            ? $this->signature->configuredCertificate($correlationId)
+            : null;
+
+        $manifest = $this->documentsManifest($sent, $consolidated);
+        $variant = $this->evidenceVariant($envelope, $configuredCertificate) + [
+            'documents_digest' => self::documentsDigest($manifest),
+        ];
+
+        $evidences = [];
+
+        foreach ($sent as $index => $row) {
+            $key = self::documentStepKey($index);
+            $evidence = $this->artifacts->existing($row['document'], DocumentVersionKind::Evidence);
+
+            if ($evidence !== null && ($rebuiltAny || ! $this->evidenceMatchesVariant($envelope, $evidence, $variant))) {
+                $this->artifacts->discard($evidence, $rebuiltAny
+                    ? 'um documento consolidado do envelope foi refeito nesta execução'
+                    : 'a página de evidências descreve outra configuração de assinatura ou outro conjunto de documentos');
+
+                $evidence = null;
+            }
+
+            if ($evidence === null) {
+                $evidence = $this->withWorkDir(fn (TemporaryDirectory $dir): DocumentVersion => $this->generateEvidence(
+                    $envelope, $row['document'], $row['version'], $consolidated[$index], $configuredCertificate, $variant, $dir, $correlationId,
+                    $manifest, (int) $row['document']->position,
+                ));
+
+                $steps[$key.'.evidence'] = 'created';
+                $rebuilt[$index] = true;
+            } else {
+                $steps[$key.'.evidence'] = 'reused';
+            }
+
+            $evidences[$index] = $evidence;
+        }
+
+        // -- c/d/e. Arquivo final de cada documento --------------------------------------
+        $results = [];
+
+        foreach ($sent as $index => $row) {
+            $key = self::documentStepKey($index);
+
+            $results[$index] = $this->withWorkDir(function (TemporaryDirectory $dir) use ($envelope, $row, $index, $key, $rebuilt, $consolidated, $evidences, $correlationId, &$steps): array {
+                $final = $this->reusableFinal($envelope, $row['document'], $dir, $correlationId);
+
+                if ($final !== null && $rebuilt[$index]) {
+                    $this->artifacts->discard($final, 'o arquivo final embute artefatos refeitos nesta execução');
+
+                    $final = null;
+                }
+
+                if ($final === null) {
+                    [$final, $signatureStatus, $profile, $validation, $certificate] = $this->buildFinal(
+                        $envelope, $row['document'], $consolidated[$index], $evidences[$index], $dir, $correlationId, self::documentAudit($row['document']),
+                    );
+
+                    $steps[$key.'.final'] = 'created';
+                    $steps[$key.'.signature'] = $signatureStatus === SignatureStatus::CompanyA1 ? 'created' : 'skipped';
+
+                    SignerAudit::system($envelope, AuditEventType::DocumentFinalized, self::documentAudit($row['document']) + [
+                        'final_document_version_ulid' => $final->ulid,
+                        'final_sha256' => $final->sha256,
+                        'signature_status' => $signatureStatus->value,
+                    ], null, $correlationId);
+                } else {
+                    [$signatureStatus, $profile, $validation, $certificate] = $this->recoverSignatureState($envelope, $final, $dir, $correlationId);
+                    $steps[$key.'.final'] = 'reused';
+                    $steps[$key.'.signature'] = 'reused';
+                }
+
+                return [
+                    'final' => $final,
+                    'status' => $signatureStatus,
+                    'profile' => $profile,
+                    'validation' => $validation,
+                    'certificate' => $certificate,
+                ];
+            });
+        }
+
+        // -- f. Registro de verificação (um por envelope + um por documento) -------------
+        $first = $results[0];
+
+        $record = $this->verificationRecord(
+            $envelope,
+            $sent[0]['document'],
+            $sent[0]['version'],
+            $consolidated[0],
+            $first['final'],
+            $first['status'],
+            $first['profile'],
+            $first['validation'],
+            $first['certificate'],
+            $steps,
+        );
+
+        $steps['verification_documents'] = $this->verificationDocuments($record, $sent, $consolidated, $results);
+
+        // -- g. Conclusão: só com TODOS os finais ----------------------------------------
+        $documentFinals = [];
+        $summary = [];
+
+        foreach ($sent as $index => $row) {
+            $documentFinals[(int) $row['document']->getKey()] = (int) $results[$index]['final']->getKey();
+            $summary[] = [
+                'document_ulid' => $row['document']->ulid,
+                'final_sha256' => $results[$index]['final']->sha256,
+            ];
+        }
+
+        $completed = $this->complete($envelope, $first['final'], $record, $first['status'], $correlationId, $steps, $documentFinals, [
+            'documents' => $summary,
+        ]);
+
+        return new FinalizationOutcome(
+            $completed ? 'completed' : 'already_completed',
+            $envelope->refresh(),
+            $first['final'],
+            $record,
+            $first['status'],
+            $steps,
+        );
+    }
+
+    /**
+     * Grava (ou confirma) uma linha de `verification_record_documents` por documento.
+     * Devolve `written` quando algo mudou e `reused` quando tudo já descrevia esta execução.
+     *
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
+     * @param  array<int, DocumentVersion>  $consolidated
+     * @param  array<int, array{final: DocumentVersion}>  $results
+     */
+    private function verificationDocuments(VerificationRecord $record, array $sent, array $consolidated, array $results): string
+    {
+        $changed = false;
+
+        foreach ($sent as $index => $row) {
+            /** @var DocumentVersion $final */
+            $final = $results[$index]['final'];
+
+            /** @var VerificationRecordDocument $child */
+            $child = VerificationRecordDocument::query()->firstOrNew([
+                'verification_record_id' => $record->getKey(),
+                'position' => (int) $row['document']->position,
+            ]);
+
+            $child->fill([
+                'document_id' => $row['document']->getKey(),
+                'name' => $row['document']->name,
+                'original_sha256' => $this->originalSha256($row['document']),
+                'sent_sha256' => $row['version']->sha256,
+                'consolidated_sha256' => $consolidated[$index]->sha256,
+                'final_sha256' => $final->sha256,
+                'final_document_version_id' => $final->getKey(),
+                'page_count' => (int) ($row['version']->page_count ?? 0),
+            ]);
+
+            if (! $child->exists || $child->isDirty()) {
+                $child->save();
+                $changed = true;
+            }
+        }
+
+        return $changed ? 'written' : 'reused';
+    }
+
+    /**
+     * O que a página de evidências de cada documento lista sobre TODOS os documentos.
+     *
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
+     * @param  array<int, DocumentVersion>  $consolidated
+     * @return list<array{document: Document, position: int, name: string, page_count: int, hashes: array{original: string|null, sent: string, consolidated: string}}>
+     */
+    private function documentsManifest(array $sent, array $consolidated): array
+    {
+        $manifest = [];
+
+        foreach ($sent as $index => $row) {
+            $manifest[] = [
+                'document' => $row['document'],
+                'position' => (int) $row['document']->position,
+                'name' => $row['document']->name,
+                'page_count' => (int) ($row['version']->page_count ?? 0),
+                'hashes' => [
+                    'original' => $this->originalSha256($row['document']),
+                    'sent' => $row['version']->sha256,
+                    'consolidated' => $consolidated[$index]->sha256,
+                ],
+            ];
+        }
+
+        return $manifest;
+    }
+
+    /**
+     * Marca do conjunto de documentos impresso nas páginas de evidências: se qualquer resumo
+     * mudar, a marca muda e as páginas gravadas deixam de servir.
+     *
+     * @param  list<array{position: int, hashes: array{original: string|null, sent: string, consolidated: string}}>  $manifest
+     */
+    private static function documentsDigest(array $manifest): string
+    {
+        return hash('sha256', (string) json_encode(array_map(
+            static fn (array $row): array => [$row['position'], $row['hashes']['original'], $row['hashes']['sent'], $row['hashes']['consolidated']],
+            $manifest,
+        ), JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @return array{document_ulid: string, position: int}
+     */
+    private static function documentAudit(Document $document): array
+    {
+        return ['document_ulid' => $document->ulid, 'position' => (int) $document->position];
+    }
+
+    private static function documentStepKey(int $index): string
+    {
+        return 'documents.'.($index + 1);
+    }
+
+    /**
+     * Executa `$callback` num diretório temporário exclusivo, removido ao final — um por
+     * documento, para que artefatos de um nunca sejam lidos por engano no outro.
+     *
+     * @template T
+     *
+     * @param  callable(TemporaryDirectory): T  $callback
+     * @return T
+     */
+    private function withWorkDir(callable $callback): mixed
+    {
+        $workDir = TemporaryDirectory::create($this->client->temporaryRoot(), 'finalize-');
+
+        try {
+            return $callback($workDir);
+        } finally {
+            $workDir->delete();
+        }
     }
 
     /**
@@ -291,12 +617,16 @@ class EnvelopeFinalizer
 
     // -- Etapa a ---------------------------------------------------------------------
 
+    /**
+     * @param  array<string, mixed>  $auditExtra  identificação do documento (vários documentos)
+     */
     private function consolidate(
         Envelope $envelope,
         Document $document,
         DocumentVersion $sentVersion,
         TemporaryDirectory $workDir,
         string $correlationId,
+        array $auditExtra = [],
     ): DocumentVersion {
         $source = $this->artifacts->copyToTemporary($sentVersion, $workDir, 'enviado.pdf');
         $output = $workDir->path('consolidado.pdf');
@@ -316,7 +646,7 @@ class EnvelopeFinalizer
             'fields_planned' => $fields,
             'footers' => $footers,
             'skipped' => $result->skipped,
-        ], null, $correlationId);
+        ] + $auditExtra, null, $correlationId);
 
         return $version;
     }
@@ -324,7 +654,8 @@ class EnvelopeFinalizer
     // -- Etapa b ---------------------------------------------------------------------
 
     /**
-     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null}  $variant
+     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null, documents_digest?: string}  $variant
+     * @param  list<array<string, mixed>>  $documents  todos os documentos do envelope (vários documentos)
      */
     private function generateEvidence(
         Envelope $envelope,
@@ -335,6 +666,8 @@ class EnvelopeFinalizer
         array $variant,
         TemporaryDirectory $workDir,
         string $correlationId,
+        array $documents = [],
+        ?int $position = null,
     ): DocumentVersion {
         // A variante do bloco de assinatura descreve o que ESTA finalização vai fazer: se o
         // adaptador está configurado, a assinatura será aplicada logo adiante; senão, o
@@ -356,13 +689,24 @@ class EnvelopeFinalizer
             certificate: $willSign ? $certificate : null,
             validationResult: null,
             generatedAt: Carbon::now(),
+            documents: $documents,
+            position: $position,
         );
 
         $output = $this->evidenceRenderer->render($data, $workDir->path('evidencias.pdf'));
 
         $version = $this->artifacts->store($envelope, $document, DocumentVersionKind::Evidence, $output, $correlationId);
 
-        SignerAudit::system($envelope, AuditEventType::EnvelopeEvidenceGenerated, [
+        $extra = [];
+
+        if ($documents !== []) {
+            $extra = self::documentAudit($document) + [
+                'documents' => count($documents),
+                'documents_digest' => $variant['documents_digest'] ?? null,
+            ];
+        }
+
+        SignerAudit::system($envelope, AuditEventType::EnvelopeEvidenceGenerated, $extra + [
             'document_version_ulid' => $version->ulid,
             'sha256' => $version->sha256,
             'page_count' => $version->page_count,
@@ -400,7 +744,10 @@ class EnvelopeFinalizer
      * versão anterior do pipeline) conta como divergência: regerar custa um render; publicar
      * uma afirmação de assinatura que não corresponde ao arquivo não tem conserto.
      *
-     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null}  $variant
+     * Com vários documentos, a marca inclui também `documents_digest` (os resumos de todos os
+     * documentos que a página lista).
+     *
+     * @param  array{signature_status: string, certificate_fingerprint_sha256: string|null, documents_digest?: string}  $variant
      */
     private function evidenceMatchesVariant(Envelope $envelope, DocumentVersion $evidence, array $variant): bool
     {
@@ -419,7 +766,9 @@ class EnvelopeFinalizer
             }
 
             return ($payload['signature_status'] ?? null) === $variant['signature_status']
-                && ($payload['certificate_fingerprint_sha256'] ?? null) === $variant['certificate_fingerprint_sha256'];
+                && ($payload['certificate_fingerprint_sha256'] ?? null) === $variant['certificate_fingerprint_sha256']
+                && (! array_key_exists('documents_digest', $variant)
+                    || ($payload['documents_digest'] ?? null) === $variant['documents_digest']);
         }
 
         return false;
@@ -428,6 +777,7 @@ class EnvelopeFinalizer
     // -- Etapas c, d, e ---------------------------------------------------------------
 
     /**
+     * @param  array<string, mixed>  $auditExtra  identificação do documento (vários documentos)
      * @return array{0: DocumentVersion, 1: SignatureStatus, 2: string|null, 3: array<string, mixed>, 4: CertificateReference|null}
      *
      * @throws FinalizationException
@@ -439,6 +789,7 @@ class EnvelopeFinalizer
         DocumentVersion $evidence,
         TemporaryDirectory $workDir,
         string $correlationId,
+        array $auditExtra = [],
     ): array {
         $base = $this->artifacts->copyToTemporary($consolidated, $workDir, 'base.pdf');
         $extra = $this->artifacts->copyToTemporary($evidence, $workDir, 'evidencias-anexo.pdf');
@@ -477,7 +828,7 @@ class EnvelopeFinalizer
                 'all_valid' => $validation->allValid,
                 'all_trusted' => $validation->allTrusted(),
                 'revocation' => $validation->revocation,
-            ], null, $correlationId);
+            ] + $auditExtra, null, $correlationId);
 
             return [$version, SignatureStatus::CompanyA1, $signed['profile'], $payload, $certificate];
         }
@@ -696,7 +1047,12 @@ class EnvelopeFinalizer
      * Transição para `completed` sob lock, com tudo já persistido. Devolve false quando
      * outro processo concluiu antes (idempotência).
      *
+     * `$documentFinals` (documento → versão final) é gravado em `documents.final_version_id`
+     * na MESMA transação da conclusão: não existe envelope concluído com documento sem final.
+     *
      * @param  array<string, string>  $steps
+     * @param  array<int, int>  $documentFinals
+     * @param  array<string, mixed>  $extraPayload
      */
     private function complete(
         Envelope $envelope,
@@ -705,8 +1061,10 @@ class EnvelopeFinalizer
         SignatureStatus $signatureStatus,
         string $correlationId,
         array &$steps,
+        array $documentFinals = [],
+        array $extraPayload = [],
     ): bool {
-        $completed = DB::transaction(function () use ($envelope, $final, $record, $signatureStatus, $correlationId): bool {
+        $completed = DB::transaction(function () use ($envelope, $final, $record, $signatureStatus, $correlationId, $documentFinals, $extraPayload): bool {
             /** @var Envelope|null $locked */
             $locked = Envelope::withoutOrganizationScope()
                 ->whereKey($envelope->getKey())
@@ -715,6 +1073,13 @@ class EnvelopeFinalizer
 
             if ($locked === null || $locked->status !== EnvelopeStatus::Finalizing) {
                 return false;
+            }
+
+            foreach ($documentFinals as $documentId => $finalId) {
+                Document::withoutOrganizationScope()
+                    ->whereKey($documentId)
+                    ->where('envelope_id', $locked->getKey())
+                    ->update(['final_version_id' => $finalId]);
             }
 
             $locked->transitionTo(EnvelopeStatus::Completed);
@@ -729,7 +1094,7 @@ class EnvelopeFinalizer
                 'signature_status' => $signatureStatus->value,
                 'signature_profile' => $record->signature_profile,
                 'verification_code' => $locked->verification_code,
-            ], null, $correlationId);
+            ] + $extraPayload, null, $correlationId);
 
             return true;
         });

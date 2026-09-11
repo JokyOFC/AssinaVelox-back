@@ -9,7 +9,11 @@ use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\AdminLog\ToolFlags;
+use App\Services\Envelopes\DomainFeatures;
+use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Organizations\EnvelopeVisibility;
+use App\Services\Templates\TemplatesFeature;
 use App\Support\CurrentOrganization;
 use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Builder;
@@ -57,26 +61,44 @@ class HandleInertiaRequests extends Middleware
                 'info' => $request->session()->get('info'),
                 'status' => $request->session()->get('status'),
             ],
-            'features' => self::features(),
+            // Closure: depende da organização corrente, definida pelo middleware `org`.
+            'features' => fn (): array => self::features(
+                CurrentOrganization::instance()->get() ?? $this->shellMembership($request)?->organization,
+            ),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
 
     /**
-     * Flags de fase (todas false na Fase 1). Placeholders leem estas chaves.
+     * Flags de fase. As sete chaves da Fase 1 continuam; as da Fase 2 (onda A) vêm dos
+     * resolvedores de cada área — interruptor global `assinavelox.features.*` E plano da
+     * organização (roadmap §1 T8). Com tudo desligado (o padrão), todas são `false` e o
+     * front mostra os placeholders da Fase 1. A flag liga a interface; a autorização
+     * continua nas Policies.
      *
      * @return array<string, bool>
      */
-    public static function features(): array
+    public static function features(?Organization $organization = null): array
     {
+        $tools = ToolFlags::forOrganization($organization);
+
         return [
-            'templates' => false,
+            'templates' => TemplatesFeature::enabled($organization),
             'api_integrations' => false,
-            'reminders' => false,
+            'reminders' => app(RemindersFeature::class)->enabledFor($organization),
             'sms_whatsapp' => false,
             'branding' => false,
-            'multi_document' => false,
+            'multi_document' => DomainFeatures::multiDocument($organization),
             'certificate_login' => false,
+            'participant_roles' => DomainFeatures::participantRoles($organization),
+            'custom_roles' => Permissions::customRolesEnabled($organization),
+            'tags' => $tools[ToolFlags::TAGS],
+            'reports' => $tools[ToolFlags::REPORTS],
+            'audit_log' => $tools[ToolFlags::AUDIT_LOG],
+            // Plataforma: só o interruptor global (o painel interno não tem organização).
+            'admin_users' => ToolFlags::adminUsers(),
+            'admin_audit' => ToolFlags::adminAudit(),
+            'impersonation' => ToolFlags::impersonation(),
         ];
     }
 
@@ -219,7 +241,8 @@ class HandleInertiaRequests extends Middleware
                 'name' => $plan->name ?? 'Grátis',
                 'status' => $subscription?->status->value ?? 'active',
             ],
-            'permissions' => Permissions::forRole($membership->role),
+            // Fase 2: derivadas da função efetiva (papel de sistema ou personalizada).
+            'permissions' => Permissions::sharedMap($membership, $organization, $plan),
         ];
     }
 

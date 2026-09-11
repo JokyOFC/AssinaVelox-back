@@ -61,8 +61,10 @@ class EnvelopeNotifications implements SignerNotifications
             return;
         }
 
-        $total = $envelope->recipients()->count();
-        $signed = $envelope->recipients()->where('status', RecipientStatus::Signed->value)->count();
+        // "2 de 3 assinaram": o denominador é quem tem aceite a dar. O visualizador
+        // (Fase 2 §2.4) nunca assina — contá-lo deixaria o contador sempre incompleto.
+        $total = $envelope->recipients()->participating()->count();
+        $signed = $envelope->recipients()->participating()->where('status', RecipientStatus::Signed->value)->count();
 
         $creator->notify(
             (new RecipientSignedNotification($envelope, $signedBy, (string) Str::ulid(), $signed, $total))

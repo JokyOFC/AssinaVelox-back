@@ -3,6 +3,7 @@
 namespace App\Services\Envelopes;
 
 use App\Enums\AuditEventType;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Enums\SigningOrder;
 use App\Models\Envelope;
@@ -41,7 +42,10 @@ final class RecipientSync
             return $left <=> $right;
         });
 
-        $result = DB::transaction(function () use ($envelope, $incoming, $signingOrder): array {
+        // Papel de domínio de cada linha (Fase 2 §2.4), decidido ANTES de tocar no banco.
+        $roles = self::resolveRoles($envelope, $incoming);
+
+        $result = DB::transaction(function () use ($envelope, $incoming, $signingOrder, $roles): array {
             // Sob lock, dentro da transação: `signature_acceptances.recipient_id` é
             // ON DELETE CASCADE, então remover um destinatário de envelope enviado
             // destruiria o aceite de quem já assinou.
@@ -92,20 +96,34 @@ final class RecipientSync
 
             $created = 0;
             $updated = 0;
+            $turn = 0;
 
             foreach ($incoming as $position => $row) {
                 $recipient = $kept[$position] ?? null;
+                $role = $roles[$position];
 
                 // Sequencial: order_index = posição na lista. Paralelo: todos na mesma vez
                 // (arquitetura §3.2 — no sequencial só é notificado quem está em
                 // `envelope.current_order`; no paralelo todos entram de uma vez).
-                $orderIndex = $signingOrder === SigningOrder::Sequential ? $position + 1 : 1;
+                //
+                // Fase 2 §2.4: só quem PARTICIPA (signatário, testemunha, aprovador) tem vez.
+                // O visualizador fica em 0 — não bloqueia a ordem, não é convidado "na vez"
+                // de ninguém e recebe a cópia no envio e na conclusão.
+                if ($role->participates()) {
+                    $turn++;
+                    $orderIndex = $signingOrder === SigningOrder::Sequential ? $turn : 1;
+                } else {
+                    $orderIndex = 0;
+                }
 
                 $attributes = [
                     'name' => trim($row['name']),
                     'email' => self::normalizeEmail($row['email']),
+                    'role' => $role,
                     'role_label' => self::roleLabel($row['role'] ?? null),
                     'order_index' => $orderIndex,
+                    // Ordem em que o remetente montou a lista — é a que as telas mostram.
+                    'position' => $position + 1,
                 ];
 
                 if ($recipient === null) {
@@ -155,8 +173,9 @@ final class RecipientSync
      * volta a valer, com a MESMA regra de `handle()`: sequencial → 1..N na ordem da lista;
      * paralelo → todos em 1.
      *
-     * A ordem da lista é `order_index` e, para desempatar, o `id` — a ordem em que os
-     * signatários foram criados, que é a ordem que o wizard mostra.
+     * A ordem da lista é `position` (gravada pelo passo 2) e, para desempatar, o `id`.
+     * Ordenar pela vez (`order_index`) perderia a ordem arrumada pelo remetente: em
+     * paralelo todos ficam na vez 1, e o visualizador fica sempre na 0.
      *
      * @return int quantidade de destinatários cuja vez mudou
      */
@@ -168,14 +187,21 @@ final class RecipientSync
             /** @var Collection<int, Recipient> $recipients */
             $recipients = Recipient::withoutOrganizationScope()
                 ->where('envelope_id', $locked->getKey())
-                ->orderBy('order_index')
+                ->orderBy('position')
                 ->orderBy('id')
                 ->get();
 
             $changed = 0;
+            $turn = 0;
 
-            foreach ($recipients->values() as $position => $recipient) {
-                $orderIndex = $locked->signing_order === SigningOrder::Sequential ? $position + 1 : 1;
+            foreach ($recipients->values() as $recipient) {
+                // Mesma regra de `handle()`: visualizador não tem vez (0).
+                if ($recipient->participates()) {
+                    $turn++;
+                    $orderIndex = $locked->signing_order === SigningOrder::Sequential ? $turn : 1;
+                } else {
+                    $orderIndex = 0;
+                }
 
                 if ((int) $recipient->order_index !== $orderIndex) {
                     $recipient->forceFill(['order_index' => $orderIndex])->save();
@@ -274,6 +300,67 @@ final class RecipientSync
     private static function placeholderEmail(Recipient $recipient): string
     {
         return 'sync-'.$recipient->getKey().'-'.Str::lower(Str::random(8)).'@invalid.assinavelox';
+    }
+
+    /**
+     * Papel de domínio de cada linha (`recipients.*.participant_role`, Fase 2 §2.4).
+     *
+     * - ausente: mantém o papel de quem já existe; linha nova é `signer` (Fase 1);
+     * - papel diferente de `signer` só com a flag `participant_roles` ligada para a
+     *   organização — com ela desligada o wizard continua exatamente como na Fase 1;
+     * - um papel já gravado (a flag foi desligada depois) é preservado: desligar a flag
+     *   impede criar papéis novos, não reescreve o que existe.
+     *
+     * @param  list<array<string, mixed>>  $incoming
+     * @return array<int, RecipientRole>
+     *
+     * @throws ValidationException
+     */
+    private static function resolveRoles(Envelope $envelope, array $incoming): array
+    {
+        $allowed = DomainFeatures::participantRoles($envelope->organization);
+
+        /** @var array<string, RecipientRole> $existing */
+        $existing = $envelope->recipients()->get()
+            ->mapWithKeys(fn (Recipient $recipient): array => [$recipient->ulid => $recipient->role])
+            ->all();
+
+        $roles = [];
+        $errors = [];
+
+        foreach ($incoming as $position => $row) {
+            $ulid = isset($row['id']) && is_string($row['id']) ? $row['id'] : null;
+            $current = $ulid !== null ? ($existing[$ulid] ?? null) : null;
+            $raw = $row['participant_role'] ?? null;
+
+            if ($raw === null || $raw === '') {
+                $roles[$position] = $current ?? RecipientRole::Signer;
+
+                continue;
+            }
+
+            $role = RecipientRole::tryFrom((string) $raw);
+
+            if ($role === null) {
+                $errors["recipients.{$position}.participant_role"] = 'Papel inválido. Use signatário, testemunha, aprovador ou visualizador.';
+
+                continue;
+            }
+
+            if ($role !== RecipientRole::Signer && $role !== $current && ! $allowed) {
+                $errors["recipients.{$position}.participant_role"] = 'Os papéis de testemunha, aprovador e visualizador ainda não estão disponíveis para esta organização.';
+
+                continue;
+            }
+
+            $roles[$position] = $role;
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $roles;
     }
 
     private static function roleLabel(?string $role): ?string

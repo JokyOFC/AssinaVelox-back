@@ -3,9 +3,15 @@ import {
     DocumentDropzone,
     type DropzoneLimits,
 } from '@/components/envelopes/document-dropzone';
+import { RemindersControl } from '@/components/envelopes/reminders-control';
+import {
+    fileBadge,
+    WizardDocumentList,
+} from '@/components/envelopes/wizard-document-list';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Phase2EmptyState } from '@/components/phase2-empty-state';
+import { TemplatePicker } from '@/components/templates/template-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +27,12 @@ import { Switch } from '@/components/ui/switch';
 import { formatBytes, formatDateMedium, plural } from '@/lib/format';
 import { documentProcessingLabels } from '@/lib/labels';
 import { cn } from '@/lib/utils';
-import type { EnvelopeDocument, FolderRef } from '@/types/models';
+import type {
+    EnvelopeDocument,
+    EnvelopeReminders,
+    FolderRef,
+    ReminderSettings,
+} from '@/types/models';
 
 const NO_FOLDER = 'none';
 
@@ -32,22 +43,6 @@ function expirationLabel(days: number): string {
     target.setDate(target.getDate() + days);
 
     return `${days} dias (até ${formatDateMedium(target.toISOString())})`;
-}
-
-function fileBadge(document: EnvelopeDocument): string {
-    if (document.mime === 'application/pdf') {
-        return 'PDF';
-    }
-
-    if (document.mime.includes('word')) {
-        return 'DOCX';
-    }
-
-    if (document.mime.startsWith('image/')) {
-        return 'IMG';
-    }
-
-    return 'ARQ';
 }
 
 export interface WizardMetadata {
@@ -61,33 +56,63 @@ export interface WizardMetadata {
 /**
  * Passo 1 — Documento (DESIGN §6.5). Dropzone com validação no cliente,
  * cartão do arquivo com o estado do processamento e metadados do envelope.
+ *
+ * Fase 2 (cada bloco só aparece com a sua flag; sem elas o passo é o da Fase 1):
+ * - `multiDocument` (§2.3): lista ordenável de arquivos, remoção por arquivo e dropzone
+ *   que aceita vários de uma vez, até `maxDocuments`;
+ * - `reminders.available` (§2.5): lembretes automáticos reais no lugar do switch "Fase 2";
+ * - `templatesEnabled` (§2.1): o cartão "Ou comece por um modelo" vira o seletor de modelos.
  */
 export function WizardStepDocument({
     document,
+    documents = [],
+    multiDocument = false,
+    maxDocuments = 1,
     folders,
     limits,
     metadata,
     onMetadataChange,
     onUpload,
+    onUploadMany,
     onUploadReject,
     onRemove,
+    onRemoveDocument,
+    onMoveDocument,
     uploadProgress,
+    uploadLabel,
     uploadError,
     errors,
     disabled,
+    reminders,
+    reminderSettings,
+    onRemindersChange,
+    templatesEnabled = false,
 }: {
     document: EnvelopeDocument | null;
+    /** Todos os arquivos (Fase 2); usado só com `multiDocument`. */
+    documents?: EnvelopeDocument[];
+    multiDocument?: boolean;
+    maxDocuments?: number;
     folders: FolderRef[];
     limits: DropzoneLimits;
     metadata: WizardMetadata;
     onMetadataChange: (patch: Partial<WizardMetadata>) => void;
     onUpload: (file: File) => void;
+    onUploadMany?: (files: File[]) => void;
     onUploadReject: (message: string) => void;
     onRemove: () => void;
+    onRemoveDocument?: (document: EnvelopeDocument) => void;
+    onMoveDocument?: (from: number, to: number) => void;
     uploadProgress: number | null;
+    /** "Enviando arquivo 2 de 3…" durante uma fila de uploads. */
+    uploadLabel?: string | null;
     uploadError: string | null;
     errors: Record<string, string>;
     disabled?: boolean;
+    reminders?: EnvelopeReminders | null;
+    reminderSettings?: ReminderSettings | null;
+    onRemindersChange?: (next: ReminderSettings) => void;
+    templatesEnabled?: boolean;
 }) {
     const processing = document?.processing;
     const busy = processing
@@ -96,23 +121,68 @@ export function WizardStepDocument({
     const failed =
         processing?.status === 'failed' || processing?.status === 'blocked';
 
+    const remaining = Math.max(0, maxDocuments - documents.length);
+    const showList = multiDocument && documents.length > 0;
+
     return (
         <div className="flex flex-wrap items-start gap-5">
             <div className="flex min-w-0 flex-[1.3_1_380px] flex-col gap-4">
                 <div className="border-border bg-card shadow-card flex flex-col gap-4 rounded-xl border p-5">
-                    {!document && (
-                        <DocumentDropzone
-                            limits={limits}
-                            onFile={onUpload}
-                            onReject={onUploadReject}
-                            disabled={disabled || uploadProgress !== null}
-                        />
+                    {showList && (
+                        <>
+                            <Heading
+                                variant="small"
+                                title={`Arquivos (${documents.length} de ${maxDocuments})`}
+                                description="Os participantes veem os arquivos nesta ordem e conferem todos antes de assinar."
+                            />
+                            <WizardDocumentList
+                                documents={documents}
+                                onMove={(from, to) =>
+                                    onMoveDocument?.(from, to)
+                                }
+                                onRemove={(item) => onRemoveDocument?.(item)}
+                                disabled={disabled || uploadProgress !== null}
+                            />
+                            <InputError message={errors.document_order} />
+                        </>
+                    )}
+
+                    {multiDocument
+                        ? remaining > 0 && (
+                              <DocumentDropzone
+                                  limits={limits}
+                                  multiple
+                                  maxFiles={remaining}
+                                  compact={documents.length > 0}
+                                  onFile={onUpload}
+                                  onFiles={onUploadMany}
+                                  onReject={onUploadReject}
+                                  disabled={disabled || uploadProgress !== null}
+                              />
+                          )
+                        : !document && (
+                              <DocumentDropzone
+                                  limits={limits}
+                                  onFile={onUpload}
+                                  onReject={onUploadReject}
+                                  disabled={disabled || uploadProgress !== null}
+                              />
+                          )}
+
+                    {multiDocument && remaining === 0 && (
+                        <p className="text-muted-foreground text-[12.5px]">
+                            Limite de {plural(maxDocuments, 'arquivo')} por
+                            documento atingido. Remova um arquivo para enviar
+                            outro.
+                        </p>
                     )}
 
                     {uploadProgress !== null && (
                         <div className="flex flex-col gap-1.5">
                             <div className="text-text-secondary flex justify-between text-[12.5px]">
-                                <span>Enviando arquivo…</span>
+                                <span>
+                                    {uploadLabel ?? 'Enviando arquivo…'}
+                                </span>
                                 <span className="tabular">
                                     {uploadProgress}%
                                 </span>
@@ -134,7 +204,7 @@ export function WizardStepDocument({
 
                     <InputError message={uploadError ?? errors.file} />
 
-                    {document && (
+                    {!multiDocument && document && (
                         <div
                             className={cn(
                                 'flex items-center gap-3 rounded-[10px] border p-3',
@@ -195,7 +265,7 @@ export function WizardStepDocument({
                         </div>
                     )}
 
-                    {failed && processing && (
+                    {!multiDocument && failed && processing && (
                         <p className="text-danger text-[12.5px] leading-[1.5]">
                             {processing.error ??
                                 (processing.status === 'blocked'
@@ -308,34 +378,59 @@ export function WizardStepDocument({
                         </div>
                     </div>
 
-                    <label className="border-border flex items-center justify-between gap-3 rounded-[10px] border p-3.5">
-                        <span>
-                            <span className="flex items-center gap-2 text-[13.5px] font-semibold">
-                                Lembretes automáticos
-                                <Badge variant="phase">Fase 2</Badge>
-                            </span>
-                            <span className="text-muted-foreground block text-[12.5px]">
-                                Reenvie convites manualmente pelo detalhe do
-                                documento.
-                            </span>
-                        </span>
-                        <Switch
-                            checked={false}
-                            disabled
-                            aria-label="Lembretes automáticos (Fase 2)"
+                    {reminders?.available &&
+                    reminderSettings &&
+                    onRemindersChange ? (
+                        <RemindersControl
+                            reminders={reminders}
+                            value={reminderSettings}
+                            onChange={onRemindersChange}
+                            errors={errors}
+                            disabled={disabled}
                         />
-                    </label>
+                    ) : (
+                        <label className="border-border flex items-center justify-between gap-3 rounded-[10px] border p-3.5">
+                            <span>
+                                <span className="flex items-center gap-2 text-[13.5px] font-semibold">
+                                    Lembretes automáticos
+                                    <Badge variant="phase">Fase 2</Badge>
+                                </span>
+                                <span className="text-muted-foreground block text-[12.5px]">
+                                    Reenvie convites manualmente pelo detalhe do
+                                    documento.
+                                </span>
+                            </span>
+                            <Switch
+                                checked={false}
+                                disabled
+                                aria-label="Lembretes automáticos (Fase 2)"
+                            />
+                        </label>
+                    )}
                 </div>
             </div>
 
             <div className="min-w-0 flex-[1_1_280px]">
-                <Phase2EmptyState
-                    title="Ou comece por um modelo"
-                    description="Modelos guardam campos e signatários já configurados para enviar em segundos."
-                />
+                {templatesEnabled ? (
+                    <div className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-5">
+                        <Heading
+                            variant="small"
+                            title="Ou comece por um modelo"
+                            description="Campos e participantes já configurados."
+                        />
+                        <TemplatePicker />
+                    </div>
+                ) : (
+                    <Phase2EmptyState
+                        title="Ou comece por um modelo"
+                        description="Modelos guardam campos e signatários já configurados para enviar em segundos."
+                    />
+                )}
                 <p className="text-muted-foreground mt-3 flex items-center gap-2 text-[12.5px]">
-                    <FileText className="size-3.5" />
-                    Um documento por solicitação nesta fase.
+                    <FileText className="size-3.5 shrink-0" />
+                    {multiDocument
+                        ? `Até ${plural(maxDocuments, 'arquivo')} por solicitação, com um único aceite de cada participante sobre o conjunto.`
+                        : 'Um documento por solicitação nesta fase.'}
                 </p>
             </div>
         </div>

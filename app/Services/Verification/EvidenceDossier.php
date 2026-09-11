@@ -3,9 +3,14 @@
 namespace App\Services\Verification;
 
 use App\Enums\AuditEventType;
+use App\Enums\DocumentVersionKind;
+use App\Enums\EnvelopeStatus;
+use App\Models\AcceptanceDocument;
 use App\Models\AuditEvent;
+use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Recipient;
+use App\Services\Documents\EnvelopeDocuments;
 use App\Support\IpDisplay;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -79,9 +84,94 @@ final class EvidenceDossier
                     'document_sha256' => $acceptance?->document_sha256,
                     'terms_version' => $acceptance?->terms_version,
                     'consent_text' => $acceptance?->consent_statement,
+                    // Fase 2 (aditivos): papel de domínio, o que o aceite registrou e sobre
+                    // quais documentos.
+                    'participant_role' => $recipient->role->value,
+                    'participant_role_label' => $recipient->role->label(),
+                    'acceptance_action' => $acceptance?->action->value,
+                    'acceptance_action_label' => $acceptance?->action->label(),
+                    'accepted_documents' => $acceptance === null ? [] : $acceptance->documents()
+                        ->with('document:id,ulid,name')
+                        ->get()
+                        ->map(fn (AcceptanceDocument $row): array => [
+                            'document_id' => $row->document?->ulid,
+                            'position' => (int) $row->position,
+                            'name' => $row->document?->name,
+                            'sha256' => $row->document_sha256,
+                        ])
+                        ->values()
+                        ->all(),
                 ];
             })
             ->all());
+    }
+
+    /**
+     * Documentos do envelope para a página de evidências (Fase 2 §2.3): os quatro resumos
+     * de cada arquivo (quem lê já pode ver o documento), a página de evidências e quem
+     * registrou aceite sobre ele.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function documents(Envelope $envelope, bool $canDownload): array
+    {
+        $completed = $envelope->status === EnvelopeStatus::Completed;
+        $documents = EnvelopeDocuments::ordered($envelope);
+
+        if ($documents->isEmpty()) {
+            return [];
+        }
+
+        $versions = DocumentVersion::withoutOrganizationScope()
+            ->whereIn('document_id', $documents->pluck('id')->all())
+            ->orderBy('version_number')
+            ->get(['id', 'document_id', 'kind', 'sha256', 'version_number'])
+            ->groupBy('document_id');
+
+        $items = [];
+
+        foreach ($documents as $document) {
+            $mine = $versions->get($document->getKey(), collect());
+
+            $latest = fn (DocumentVersionKind $kind): ?string => $mine->where('kind', $kind)->last()?->sha256;
+
+            $accepted = AcceptanceDocument::withoutOrganizationScope()
+                ->with('acceptance.recipient')
+                ->where('document_id', $document->getKey())
+                ->orderBy('id')
+                ->get()
+                ->map(fn (AcceptanceDocument $row): array => [
+                    'name' => $row->acceptance?->recipient?->name,
+                    'participant_role' => $row->acceptance?->recipient?->role->value,
+                    'action' => $row->acceptance?->action->value,
+                    'action_label' => $row->acceptance?->action->label(),
+                    'accepted_at' => $row->acceptance?->accepted_at->toIso8601String(),
+                    'document_sha256' => $row->document_sha256,
+                ])
+                ->values()
+                ->all();
+
+            $items[] = [
+                'id' => $document->ulid,
+                'position' => (int) $document->position,
+                'name' => $document->name,
+                'original_name' => $document->original_filename,
+                'hashes' => [
+                    'original_sha256' => $mine->where('kind', DocumentVersionKind::Original)->first()?->sha256,
+                    'sent_sha256' => $document->sent_version_id === null ? null : $mine->firstWhere('id', $document->sent_version_id)?->sha256,
+                    'consolidated_sha256' => $latest(DocumentVersionKind::Consolidated),
+                    'evidence_sha256' => $latest(DocumentVersionKind::Evidence),
+                    'final_sha256' => $document->final_version_id === null ? null : $mine->firstWhere('id', $document->final_version_id)?->sha256,
+                ],
+                'accepted_by' => $accepted,
+                'downloads' => [
+                    'signed' => $completed && $canDownload ? route('envelopes.download', ['envelope' => $envelope->ulid, 'type' => 'signed', 'document' => $document->ulid]) : null,
+                    'evidence' => $completed && $canDownload ? route('envelopes.download', ['envelope' => $envelope->ulid, 'type' => 'evidence', 'document' => $document->ulid]) : null,
+                ],
+            ];
+        }
+
+        return $items;
     }
 
     /**

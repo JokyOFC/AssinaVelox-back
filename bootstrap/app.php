@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\EnforceImpersonationReadOnly;
 use App\Http\Middleware\EnforceSessionIdleTimeout;
 use App\Http\Middleware\EnforceTwoFactorForOrganization;
+use App\Http\Middleware\EnsureAccountNotBlocked;
 use App\Http\Middleware\EnsureCurrentOrganization;
 use App\Http\Middleware\EnsureMembershipRole;
 use App\Http\Middleware\EnsurePlatformAdmin;
@@ -70,6 +72,11 @@ return Application::configure(basePath: dirname(__DIR__))
             EnforceSessionIdleTimeout::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            // Fase 2 (docs/fase-2/tags-relatorios-e-logs.md): conta bloqueada pelo painel interno
+            // e sessão de "acessar como" somente leitura. Sem bloqueio nem impersonation na
+            // sessão, os dois não fazem nada.
+            EnsureAccountNotBlocked::class,
+            EnforceImpersonationReadOnly::class,
         ]);
 
         // Webhook do Mercado Pago: sem CSRF (autenticado por assinatura do provedor).

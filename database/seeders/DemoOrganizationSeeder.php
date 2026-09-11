@@ -8,7 +8,9 @@ use App\Enums\DeliveryPurpose;
 use App\Enums\DocumentSourceType;
 use App\Enums\DocumentVersionKind;
 use App\Enums\EnvelopeStatus;
+use App\Enums\FolderAccessLevel;
 use App\Enums\MembershipRole;
+use App\Enums\Permission;
 use App\Enums\RecipientStatus;
 use App\Enums\SigningOrder;
 use App\Enums\SigningSessionStatus;
@@ -20,6 +22,7 @@ use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
 use App\Models\Folder;
+use App\Models\FolderPermission;
 use App\Models\Membership;
 use App\Models\MembershipInvitation;
 use App\Models\Organization;
@@ -28,13 +31,20 @@ use App\Models\Plan;
 use App\Models\PlanConsumption;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
+use App\Models\Role;
 use App\Models\SignatureAcceptance;
 use App\Models\SigningField;
 use App\Models\SigningFieldValue;
 use App\Models\SigningSession;
 use App\Models\Subscription;
+use App\Models\Team;
 use App\Models\User;
 use App\Models\VerificationRecord;
+use App\Services\Tags\TagColor;
+use App\Services\Tags\TagManager;
+use App\Services\Templates\TemplateManager;
+use App\Support\CurrentOrganization;
+use App\Support\PermissionsSystemRoles;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -64,6 +74,12 @@ class DemoOrganizationSeeder extends Seeder
         ['name' => 'Henrique Alves Castro', 'email' => 'henrique.castro@exemplo.com.br'],
     ];
 
+    /** Chaves de `plans.features` da onda A (Fase 2). */
+    private const PHASE2_PLAN_FEATURES = [
+        'templates', 'multi_document', 'participant_roles', 'reminders',
+        'custom_roles', 'tags', 'reports', 'audit_log',
+    ];
+
     private int $signerCursor = 0;
 
     public function run(): void
@@ -78,6 +94,13 @@ class DemoOrganizationSeeder extends Seeder
 
         $free = Plan::query()->where('code', Plan::CODE_FREE)->firstOrFail();
         $professional = Plan::query()->where('code', Plan::CODE_PROFESSIONAL)->firstOrFail();
+
+        // Fase 2, onda A (roadmap §1 T8): o plano da Horizonte (Profissional sandbox) inclui
+        // os itens da onda A; o da Vega (Grátis) não. O recurso só aparece quando o
+        // interruptor GLOBAL também está ligado (`ASSINAVELOX_FEATURE_*` no .env) — desligado,
+        // que é o padrão e o que os testes usam, a demonstração é exatamente a da Fase 1.
+        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true))])->save();
+        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false))])->save();
 
         DB::transaction(function () use ($free, $professional): void {
             $hasPlatformCertificate = CertificateReference::query()
@@ -112,6 +135,10 @@ class DemoOrganizationSeeder extends Seeder
         $this->attach($org, $owner, MembershipRole::Owner);
         $this->attach($org, $admin, MembershipRole::Admin);
         $this->attach($org, $member, MembershipRole::Member);
+
+        // Fase 2 §2.14: as três funções de sistema existem como linhas (o mesmo que
+        // CreateOrganization faz); as memberships continuam no papel de sistema.
+        PermissionsSystemRoles::ensureFor($org);
 
         MembershipInvitation::factory()->create([
             'organization_id' => $org->id,
@@ -164,6 +191,147 @@ class DemoOrganizationSeeder extends Seeder
             ->where('subscription_id', $subscription->id)
             ->where('status', 'committed')
             ->sum('quantity')]);
+
+        $this->seedHorizontePhase2($org, $owner, $admin, $locacoes, $vendas);
+    }
+
+    /**
+     * Dados de demonstração da Fase 2, onda A (docs/fase-2/onda-a-relatorio.md §6): papéis de
+     * sistema, uma função personalizada com acesso por pasta, um time, dois modelos HTML e
+     * etiquetas. Nada disso muda o que owner/admin/operador veem na Fase 1: a função e o time
+     * ficam com um usuário NOVO (gerente@horizonte.demo) e com o admin, que já vê tudo.
+     */
+    private function seedHorizontePhase2(Organization $org, User $owner, User $admin, Folder $locacoes, Folder $vendas): void
+    {
+        $manager = $this->user('Otávio Gerente', 'gerente@horizonte.demo');
+
+        $role = new Role;
+        $role->forceFill([
+            'organization_id' => $org->id,
+            'name' => 'Gerente de locações',
+            'description' => 'Prepara e acompanha os contratos das pastas liberadas.',
+            'is_system' => false,
+            'created_by_user_id' => $owner->id,
+        ])->save();
+        $role->syncPermissions([
+            Permission::CreateEnvelopes, Permission::SendEnvelopes, Permission::ManageTemplates,
+            Permission::ManageTags, Permission::ViewReports, Permission::ExportData,
+        ]);
+
+        Membership::query()->updateOrCreate(
+            ['organization_id' => $org->id, 'user_id' => $manager->id],
+            ['role' => MembershipRole::Member, 'role_id' => $role->id, 'status' => 'active'],
+        );
+
+        if ($manager->current_organization_id === null) {
+            $manager->forceFill(['current_organization_id' => $org->id])->save();
+        }
+
+        FolderPermission::query()->create([
+            'organization_id' => $org->id,
+            'folder_id' => $locacoes->id,
+            'role_id' => $role->id,
+            'level' => FolderAccessLevel::Manage,
+            'granted_by_user_id' => $owner->id,
+        ]);
+
+        $team = Team::query()->create([
+            'organization_id' => $org->id,
+            'name' => 'Equipe comercial',
+            'description' => 'Vendas e locações comerciais.',
+            'created_by_user_id' => $owner->id,
+        ]);
+        $team->memberships()->attach(Membership::query()
+            ->where('organization_id', $org->id)
+            ->whereIn('user_id', [$admin->id, $manager->id])
+            ->pluck('id')
+            ->all());
+
+        FolderPermission::query()->create([
+            'organization_id' => $org->id,
+            'folder_id' => $vendas->id,
+            'team_id' => $team->id,
+            'level' => FolderAccessLevel::View,
+            'granted_by_user_id' => $owner->id,
+        ]);
+
+        $ownerMembership = Membership::query()->where('organization_id', $org->id)->where('user_id', $owner->id)->firstOrFail();
+
+        CurrentOrganization::instance()->runAs($org, function () use ($org, $owner): void {
+            $templates = app(TemplateManager::class);
+
+            foreach ([
+                [
+                    'name' => 'Contrato de locação residencial',
+                    'category' => 'Locação',
+                    'html' => '<h1>Contrato de locação residencial</h1><p>Locador: {{locador}}. Locatário: {{locatario}}, CPF {{cpf_locatario}}.</p><p>Imóvel: {{endereco}}. Aluguel mensal de {{valor}}, com início em {{inicio}}.</p>',
+                    'variables' => [
+                        ['key' => 'locador', 'label' => 'Locador', 'type' => 'text', 'required' => true],
+                        ['key' => 'locatario', 'label' => 'Locatário', 'type' => 'text', 'required' => true],
+                        ['key' => 'cpf_locatario', 'label' => 'CPF do locatário', 'type' => 'cpf', 'required' => true],
+                        ['key' => 'endereco', 'label' => 'Endereço do imóvel', 'type' => 'text', 'required' => true],
+                        ['key' => 'valor', 'label' => 'Valor do aluguel', 'type' => 'currency', 'required' => true],
+                        ['key' => 'inicio', 'label' => 'Início da locação', 'type' => 'date', 'required' => true],
+                    ],
+                    'roles' => [
+                        ['ref' => 'locador', 'name' => 'Locador', 'participant_role' => 'signer'],
+                        ['ref' => 'locatario', 'name' => 'Locatário', 'participant_role' => 'signer'],
+                    ],
+                ],
+                [
+                    'name' => 'Termo de entrega de chaves',
+                    'category' => 'Vistoria',
+                    'html' => '<h1>Termo de entrega de chaves</h1><p>Recebi de {{imobiliaria}} as chaves do imóvel {{endereco}} em {{data_entrega}}.</p>',
+                    'variables' => [
+                        ['key' => 'imobiliaria', 'label' => 'Imobiliária', 'type' => 'text', 'required' => true, 'default_value' => 'Imobiliária Horizonte Demo'],
+                        ['key' => 'endereco', 'label' => 'Endereço do imóvel', 'type' => 'text', 'required' => true],
+                        ['key' => 'data_entrega', 'label' => 'Data da entrega', 'type' => 'date', 'required' => true],
+                    ],
+                    'roles' => [
+                        ['ref' => 'locatario', 'name' => 'Locatário', 'participant_role' => 'signer'],
+                    ],
+                ],
+            ] as $spec) {
+                $template = $templates->create($org, $owner, [
+                    'name' => $spec['name'],
+                    'category' => $spec['category'],
+                    'source_type' => 'html',
+                    'html_body' => $spec['html'],
+                ], null);
+
+                $templates->update($template, $owner, [
+                    'html_body' => $spec['html'],
+                    'variables' => $spec['variables'],
+                    'roles' => $spec['roles'],
+                    'fields' => [],
+                ]);
+            }
+
+            $tags = app(TagManager::class);
+            $residencial = $tags->create($org->id, 'Residencial', TagColor::Blue, $owner);
+            $comercial = $tags->create($org->id, 'Comercial', TagColor::Amber, $owner);
+            $tags->create($org->id, 'Urgente', TagColor::Red, $owner);
+
+            $byTitle = Envelope::query()->where('organization_id', $org->id)->pluck('id', 'title');
+            $now = now();
+
+            foreach ([
+                'Contrato de locação residencial — Rua das Acácias, 120' => $residencial,
+                'Contrato de locação residencial — Rua Jasmim, 88' => $residencial,
+                'Contrato de locação comercial — Av. Paulista, 1500' => $comercial,
+                'Contrato de locação comercial — Galpão 3' => $comercial,
+            ] as $title => $tag) {
+                if (isset($byTitle[$title])) {
+                    DB::table('envelope_tag')->insert([
+                        'organization_id' => $org->id,
+                        'envelope_id' => $byTitle[$title],
+                        'tag_id' => $tag->id,
+                        'added_by_user_id' => $owner->id,
+                        'created_at' => $now,
+                    ]);
+                }
+            }
+        }, $ownerMembership);
     }
 
     // -- Organização 2: Consultoria Vega (Grátis) --------------------------------------
@@ -181,6 +349,7 @@ class DemoOrganizationSeeder extends Seeder
 
         $this->attach($org, $owner, MembershipRole::Owner);
         $this->attach($org, $member, MembershipRole::Member);
+        PermissionsSystemRoles::ensureFor($org);
 
         $subscription = Subscription::factory()->forOrganization($org)->ofPlan($plan)->active()->create();
 

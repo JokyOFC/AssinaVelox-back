@@ -73,19 +73,34 @@ export function validateUploadFile(
 /**
  * Dropzone de upload (DESIGN §4.13): arraste e solte ou clique para escolher.
  * A validação de tipo e tamanho acontece no cliente antes de qualquer envio.
+ *
+ * `multiple` (Fase 2 §2.3, flag `multi_document`): aceita vários arquivos de uma vez,
+ * até `maxFiles` (o que ainda cabe no envelope). Se qualquer um for inválido, nenhum é
+ * enviado — a mensagem diz qual e por quê. Sem `multiple`, o comportamento é o da Fase 1.
  */
 export function DocumentDropzone({
     limits,
     onFile,
+    onFiles,
     onReject,
     disabled,
     className,
+    multiple = false,
+    maxFiles = 1,
+    compact = false,
 }: {
     limits: DropzoneLimits;
     onFile: (file: File) => void;
+    /** Com `multiple`: recebe todos os arquivos já validados, na ordem escolhida. */
+    onFiles?: (files: File[]) => void;
     onReject?: (message: string) => void;
     disabled?: boolean;
     className?: string;
+    multiple?: boolean;
+    /** Quantos arquivos ainda cabem (só com `multiple`). */
+    maxFiles?: number;
+    /** Versão baixa, para ficar abaixo da lista de arquivos já enviados. */
+    compact?: boolean;
 }) {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [dragging, setDragging] = useState(false);
@@ -96,10 +111,46 @@ export function DocumentDropzone({
         ...extensionsFor(limits.accepted_mimes),
     ].join(',');
 
+    const handleMany = (files: File[]): void => {
+        if (files.length > maxFiles) {
+            onReject?.(
+                maxFiles <= 0
+                    ? 'Este documento já tem o máximo de arquivos permitido.'
+                    : `Você pode enviar mais ${maxFiles === 1 ? '1 arquivo' : `${maxFiles} arquivos`} neste documento.`,
+            );
+
+            return;
+        }
+
+        for (const file of files) {
+            const problem = validateUploadFile(file, limits);
+
+            if (problem) {
+                onReject?.(`${file.name}: ${problem}`);
+
+                return;
+            }
+        }
+
+        if (onFiles) {
+            onFiles(files);
+
+            return;
+        }
+
+        files.forEach((file) => onFile(file));
+    };
+
     const handleFiles = (files: FileList | null): void => {
         const file = files?.[0];
 
         if (!file) {
+            return;
+        }
+
+        if (multiple && files) {
+            handleMany(Array.from(files));
+
             return;
         }
 
@@ -135,9 +186,14 @@ export function DocumentDropzone({
             role="button"
             tabIndex={disabled ? -1 : 0}
             aria-disabled={disabled}
-            aria-label="Enviar documento: arraste o arquivo ou selecione no computador"
+            aria-label={
+                multiple
+                    ? 'Enviar arquivos: arraste os arquivos ou selecione no computador'
+                    : 'Enviar documento: arraste o arquivo ou selecione no computador'
+            }
             className={cn(
-                'focus-ring flex flex-col items-center gap-2.5 rounded-xl border-[1.5px] border-dashed px-5 py-9 text-center transition-colors',
+                'focus-ring flex flex-col items-center gap-2.5 rounded-xl border-[1.5px] border-dashed px-5 text-center transition-colors',
+                compact ? 'py-5' : 'py-9',
                 disabled
                     ? 'border-border bg-muted cursor-not-allowed opacity-70'
                     : 'border-border-dashed bg-background hover:border-primary hover:bg-accent-subtle cursor-pointer',
@@ -175,17 +231,26 @@ export function DocumentDropzone({
             }}
             onClick={open}
         >
-            <span className="bg-primary-soft text-primary flex size-11 items-center justify-center rounded-xl">
-                <Upload className="size-5" />
-            </span>
+            {!compact && (
+                <span className="bg-primary-soft text-primary flex size-11 items-center justify-center rounded-xl">
+                    <Upload className="size-5" />
+                </span>
+            )}
             <span className="text-[13.5px] font-semibold">
-                Arraste o arquivo aqui ou{' '}
+                {compact && (
+                    <Upload className="text-primary mr-1.5 inline size-4" />
+                )}
+                {multiple
+                    ? 'Arraste os arquivos aqui ou '
+                    : 'Arraste o arquivo aqui ou '}
                 <span className="text-primary">selecione no computador</span>
             </span>
             <p className="text-muted-foreground text-[12.5px]">
                 {shortLabels(limits.accepted_mimes).join(', ')} · até{' '}
-                {formatBytes(limits.max_upload_bytes)} · um arquivo por
-                documento
+                {formatBytes(limits.max_upload_bytes)}
+                {multiple
+                    ? ` por arquivo · ${maxFiles === 1 ? 'mais 1 arquivo' : `mais ${maxFiles} arquivos`}`
+                    : ' · um arquivo por documento'}
             </p>
             <input
                 ref={inputRef}
@@ -195,6 +260,7 @@ export function DocumentDropzone({
                 aria-hidden
                 className="sr-only"
                 accept={accept}
+                multiple={multiple}
                 disabled={disabled}
                 onChange={(event) => {
                     handleFiles(event.target.files);

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -103,6 +104,17 @@ class VerificationRecord extends Model
     public function certificateReference(): BelongsTo
     {
         return $this->belongsTo(CertificateReference::class);
+    }
+
+    /**
+     * Resumos publicados por documento (Fase 2 §2.3). Vazio para envelopes finalizados antes
+     * da Fase 2 — nesses, as colunas do próprio registro descrevem o documento único.
+     *
+     * @return HasMany<VerificationRecordDocument, $this>
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(VerificationRecordDocument::class)->orderBy('position');
     }
 
     /** @return Attribute<string, never> */

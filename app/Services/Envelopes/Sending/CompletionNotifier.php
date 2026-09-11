@@ -4,6 +4,7 @@ namespace App\Services\Envelopes\Sending;
 
 use App\Enums\AccessLinkPurpose;
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Notifications\Envelopes\EnvelopeCompletedNotification;
@@ -56,7 +57,17 @@ class CompletionNotifier
         $expiresAt = Carbon::now()->addDays(self::DOWNLOAD_LINK_DAYS);
         $notified = 0;
 
-        foreach ($envelope->recipients()->where('status', RecipientStatus::Signed->value)->get() as $recipient) {
+        // Fase 2 §2.4 (B-DOM, alteração mínima): além de quem assinou/aprovou, o
+        // visualizador ainda ativo recebe a cópia final.
+        $recipients = $envelope->recipients()
+            ->where(fn ($query) => $query
+                ->where('status', RecipientStatus::Signed->value)
+                ->orWhere(fn ($viewer) => $viewer
+                    ->where('role', RecipientRole::Viewer->value)
+                    ->whereIn('status', [RecipientStatus::Pending->value, RecipientStatus::Notified->value, RecipientStatus::Viewed->value])))
+            ->get();
+
+        foreach ($recipients as $recipient) {
             $issued = $this->links->issue($recipient, AccessLinkPurpose::Download, $expiresAt, $envelope);
 
             Notification::route('mail', $recipient->email)->notify(

@@ -11,7 +11,10 @@ import { index as verifyIndex } from '@/routes/verify';
  * sentido para quem está autenticado; para os demais o texto e as ações mudam.
  */
 export default function Forbidden({ message }: { message?: string | null }) {
-    const { auth } = usePage().props;
+    // Sem as props compartilhadas (resposta de erro fora do grupo `web`), `auth` pode faltar.
+    const signedIn = Boolean(
+        (usePage().props as { auth?: { user?: unknown } }).auth?.user,
+    );
 
     return (
         <>
@@ -22,12 +25,12 @@ export default function Forbidden({ message }: { message?: string | null }) {
                     title="Você não tem permissão para acessar esta página"
                     description={
                         message ??
-                        (auth.user
+                        (signedIn
                             ? 'Peça a um administrador da organização para liberar o acesso ou abra o painel.'
                             : 'Este endereço exige uma permissão que esta sessão não tem. Se você recebeu um link para assinar, abra o link do e-mail mais recente.')
                     }
                     action={
-                        auth.user ? (
+                        signedIn ? (
                             <Button asChild>
                                 <Link href={dashboard()}>Abrir o painel</Link>
                             </Button>

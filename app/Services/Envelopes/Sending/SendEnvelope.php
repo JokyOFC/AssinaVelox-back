@@ -11,6 +11,8 @@ use App\Models\Recipient;
 use App\Services\Documents\EnvelopeReadiness as DocumentReadiness;
 use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Envelopes\EnvelopeReadiness;
+use App\Services\Envelopes\Reminders\ReminderSettings;
+use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
 use App\Services\Plans\Exceptions\SendingBlockedException;
 use App\Services\Plans\PlanLedger;
@@ -54,14 +56,15 @@ class SendEnvelope
     ) {}
 
     /**
+     * @param  CarbonInterface|null  $scheduledFor  preenchido quando o envio vem de um agendamento (Fase 2 §2.5)
      * @return array{envelope: Envelope, invitations: int}
      *
      * @throws SendingException|SendingBlockedException
      */
-    public function handle(Envelope $envelope): array
+    public function handle(Envelope $envelope, ?CarbonInterface $scheduledFor = null): array
     {
         try {
-            [$envelope, $consumption] = $this->commitSend($envelope);
+            [$envelope, $consumption] = $this->commitSend($envelope, $scheduledFor);
         } catch (SendingException $exception) {
             // A transação foi desfeita junto com o recálculo feito sob lock. Sem gravar de
             // novo, a lista continuaria mostrando "Pronto para enviar" um documento que já
@@ -107,9 +110,9 @@ class SendEnvelope
      *
      * @return array{0: Envelope, 1: PlanConsumption}
      */
-    private function commitSend(Envelope $envelope): array
+    private function commitSend(Envelope $envelope, ?CarbonInterface $scheduledFor = null): array
     {
-        return DB::transaction(function () use ($envelope): array {
+        return DB::transaction(function () use ($envelope, $scheduledFor): array {
             /** @var Envelope $locked */
             $locked = Envelope::withoutOrganizationScope()
                 ->whereKey($envelope->getKey())
@@ -167,15 +170,22 @@ class SendEnvelope
                 'verification_code' => $locked->verification_code ?? $this->uniqueVerificationCode(),
             ])->save();
 
+            // Fase 2 §2.5 — só com a flag `features.reminders` ligada; desligada, nada muda.
+            $this->snapshotReminders($locked);
+
+            // Um envio encerra qualquer agendamento pendente ("Enviar agora" com envio
+            // agendado). No disparo agendado a coluna já foi limpa pela reivindicação.
+            ScheduledSend::clearWithinLock($locked, 'sent_now');
+
             $consumption = $this->ledger->reserve($locked, $subscription);
 
-            EnvelopeAudit::record($locked, AuditEventType::EnvelopeSent, [
+            EnvelopeAudit::record($locked, AuditEventType::EnvelopeSent, array_merge([
                 'signing_order' => $locked->signing_order->value,
                 'recipients' => $locked->recipients()->count(),
                 'document_version' => $versionId,
                 'expires_at' => $locked->expires_at?->toIso8601String(),
                 'verification_code' => $locked->verification_code,
-            ]);
+            ], $scheduledFor !== null ? ['scheduled_for' => $scheduledFor->toIso8601String()] : []));
 
             return [$locked, $consumption];
         }, 3);
@@ -234,6 +244,30 @@ class SendEnvelope
         });
 
         $envelope->refresh();
+    }
+
+    /**
+     * Fase 2 §2.5: congela no envelope a cadência de lembretes em vigor no envio.
+     *
+     * Se o wizard gravou `settings.reminders`, ela vale; senão, copia o padrão da
+     * organização. Mudar o padrão depois não altera envelopes já enviados. Com a flag
+     * desligada o envelope é gravado exatamente como na Fase 1.
+     */
+    private function snapshotReminders(Envelope $locked): void
+    {
+        if (! app(RemindersFeature::class)->enabledFor((int) $locked->organization_id)) {
+            return;
+        }
+
+        $settings = $locked->settings ?? [];
+
+        if (is_array($settings['reminders'] ?? null)) {
+            return;
+        }
+
+        $settings['reminders'] = ReminderSettings::forOrganization($locked->organization)->toArray();
+
+        $locked->forceFill(['settings' => $settings])->save();
     }
 
     /**

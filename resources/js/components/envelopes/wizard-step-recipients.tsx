@@ -1,4 +1,5 @@
 import {
+    CheckCircle2,
     ChevronDown,
     ChevronUp,
     Eye,
@@ -22,15 +23,49 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { signingOrderLabels } from '@/lib/labels';
+import {
+    participantRoleDescriptions,
+    participantRoleLabels,
+    signingOrderLabels,
+} from '@/lib/labels';
 import { cn } from '@/lib/utils';
-import type { SigningOrder } from '@/types/enums';
-import type { WizardRecipient } from '@/types/models';
+import type { ParticipantRole, SigningOrder } from '@/types/enums';
+import type { ParticipantRoleOption, WizardRecipient } from '@/types/models';
 
 const ORDER_HINTS: Record<SigningOrder, string> = {
     sequential: 'Cada signatário recebe o documento após o anterior assinar.',
     parallel: 'Todos recebem o documento imediatamente.',
 };
+
+/** Com papéis (Fase 2 §2.4) a ordem vale para quem participa; visualizadores não têm vez. */
+const ORDER_HINTS_WITH_ROLES: Record<SigningOrder, string> = {
+    sequential:
+        'Cada participante recebe o documento após o anterior concluir. Visualizadores recebem no envio.',
+    parallel:
+        'Todos recebem o documento imediatamente, inclusive os visualizadores.',
+};
+
+/** O campo "Nome completo" diz de quem é o nome (testemunha, aprovador e visualizador não assinam). */
+const NAME_PLACEHOLDER: Record<ParticipantRole, string> = {
+    signer: 'Nome do signatário',
+    witness: 'Nome da testemunha',
+    approver: 'Nome do aprovador',
+    viewer: 'Nome de quem vai acompanhar',
+};
+
+const ROLE_ORDER: ParticipantRole[] = [
+    'signer',
+    'witness',
+    'approver',
+    'viewer',
+];
+
+/** Papel efetivo: ausente é `signer` (contrato da Fase 1). */
+export function roleOf(recipient: {
+    participant_role?: ParticipantRole;
+}): ParticipantRole {
+    return recipient.participant_role ?? 'signer';
+}
 
 /**
  * Passo 2 — Signatários (DESIGN §6.5). Lista reordenável (arraste ou setas),
@@ -38,6 +73,11 @@ const ORDER_HINTS: Record<SigningOrder, string> = {
  *
  * Canal e autenticação ficam fixos em e-mail nesta fase (RECONCILIACAO §2):
  * os chips aparecem desabilitados para deixar claro o que está em uso.
+ *
+ * Fase 2 §2.4 (`participantRoles`): cada linha ganha o "Tipo de participante"
+ * (Signatário, Testemunha, Aprovador, Visualizador) com a explicação do efeito. O
+ * `role` continua sendo o rótulo livre ("Locatária"). Visualizadores não entram na ordem
+ * e aparecem com o ícone de olho no lugar do número. Sem a flag, o passo é o da Fase 1.
  */
 export function WizardStepRecipients({
     recipients,
@@ -47,6 +87,8 @@ export function WizardStepRecipients({
     onSigningOrderChange,
     errors,
     disabled,
+    participantRoles = false,
+    roleOptions,
 }: {
     recipients: WizardRecipient[];
     signingOrder: SigningOrder;
@@ -55,8 +97,18 @@ export function WizardStepRecipients({
     onSigningOrderChange: (order: SigningOrder) => void;
     errors: Record<string, string>;
     disabled?: boolean;
+    participantRoles?: boolean;
+    roleOptions?: ParticipantRoleOption[];
 }) {
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+
+    const options: ParticipantRoleOption[] =
+        roleOptions && roleOptions.length > 0
+            ? roleOptions
+            : ROLE_ORDER.map((value) => ({
+                  value,
+                  label: participantRoleLabels[value],
+              }));
 
     const withOrder = (list: WizardRecipient[]): WizardRecipient[] =>
         list.map((recipient, index) => ({
@@ -90,7 +142,7 @@ export function WizardStepRecipients({
         onChange(withOrder(next));
     };
 
-    const add = (role: string): void => {
+    const add = (role: string, participantRole?: ParticipantRole): void => {
         onChange(
             withOrder([
                 ...recipients,
@@ -104,10 +156,26 @@ export function WizardStepRecipients({
                     color_index: recipients.length % 4,
                     channel: 'email',
                     auth_methods: ['email_otp'],
+                    ...(participantRoles && participantRole
+                        ? {
+                              participant_role: participantRole,
+                              participant_role_label:
+                                  participantRoleLabels[participantRole],
+                          }
+                        : {}),
                 },
             ]),
         );
     };
+
+    // Posição na vez (só quem participa): o visualizador não tem número.
+    let turn = 0;
+    const turnOf = recipients.map((recipient) =>
+        participantRoles && roleOf(recipient) === 'viewer' ? null : ++turn,
+    );
+
+    const hints = participantRoles ? ORDER_HINTS_WITH_ROLES : ORDER_HINTS;
+    const full = recipients.length >= 20;
 
     return (
         <div className="flex flex-col gap-4">
@@ -117,7 +185,7 @@ export function WizardStepRecipients({
                         Ordem de assinatura
                     </div>
                     <div className="text-muted-foreground mt-0.5 text-[12.5px]">
-                        {ORDER_HINTS[signingOrder]}
+                        {hints[signingOrder]}
                     </div>
                 </div>
                 <SegmentedControl
@@ -141,6 +209,11 @@ export function WizardStepRecipients({
 
             {recipients.map((recipient, index) => {
                 const color = recipientColor(index);
+                const participantRole = roleOf(recipient);
+                const viewer = participantRoles && participantRole === 'viewer';
+                const fallbackName = participantRoles
+                    ? `${participantRoleLabels[participantRole]} ${index + 1}`
+                    : `Signatário ${index + 1}`;
 
                 return (
                     <div
@@ -181,19 +254,40 @@ export function WizardStepRecipients({
                                     backgroundColor: color.soft,
                                     color: color.text,
                                 }}
+                                title={
+                                    viewer
+                                        ? 'Visualizador: não entra na ordem'
+                                        : undefined
+                                }
                                 className="tabular flex size-7 shrink-0 items-center justify-center rounded-lg text-[12.5px] font-bold"
                             >
-                                {index + 1}
+                                {viewer ? (
+                                    <Eye className="size-3.5" />
+                                ) : participantRoles ? (
+                                    turnOf[index]
+                                ) : (
+                                    index + 1
+                                )}
                             </span>
                             <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">
-                                {recipient.name || `Signatário ${index + 1}`}
+                                {recipient.name || fallbackName}
+                                {participantRoles &&
+                                    participantRole !== 'signer' && (
+                                        <span className="text-muted-foreground font-medium">
+                                            {' '}
+                                            ·{' '}
+                                            {participantRoleLabels[
+                                                participantRole
+                                            ].toLowerCase()}
+                                        </span>
+                                    )}
                             </span>
 
                             <div className="flex items-center gap-1">
                                 <Button
                                     variant="ghost"
                                     size="icon-xs"
-                                    aria-label={`Mover ${recipient.name || `signatário ${index + 1}`} para cima`}
+                                    aria-label={`Mover ${recipient.name || fallbackName.toLowerCase()} para cima`}
                                     disabled={disabled || index === 0}
                                     onClick={() => moveTo(index, index - 1)}
                                 >
@@ -202,7 +296,7 @@ export function WizardStepRecipients({
                                 <Button
                                     variant="ghost"
                                     size="icon-xs"
-                                    aria-label={`Mover ${recipient.name || `signatário ${index + 1}`} para baixo`}
+                                    aria-label={`Mover ${recipient.name || fallbackName.toLowerCase()} para baixo`}
                                     disabled={
                                         disabled ||
                                         index === recipients.length - 1
@@ -223,7 +317,11 @@ export function WizardStepRecipients({
                                 <SelectTrigger
                                     size="sm"
                                     className="h-[30px] w-auto min-w-[120px] text-[12.5px] font-semibold"
-                                    aria-label="Papel do signatário"
+                                    aria-label={
+                                        participantRoles
+                                            ? 'Papel no documento (rótulo livre)'
+                                            : 'Papel do signatário'
+                                    }
                                 >
                                     <SelectValue />
                                 </SelectTrigger>
@@ -247,7 +345,7 @@ export function WizardStepRecipients({
                                 variant="ghost"
                                 size="icon-xs"
                                 title="Remover"
-                                aria-label={`Remover ${recipient.name || `signatário ${index + 1}`}`}
+                                aria-label={`Remover ${recipient.name || fallbackName.toLowerCase()}`}
                                 disabled={disabled || recipients.length <= 1}
                                 onClick={() => remove(index)}
                                 className="hover:bg-danger-bg hover:text-danger"
@@ -255,6 +353,76 @@ export function WizardStepRecipients({
                                 <Trash2 className="size-[15px]" />
                             </Button>
                         </div>
+
+                        {participantRoles && (
+                            <div className="flex flex-wrap items-start gap-3">
+                                <div className="grid w-full gap-1.5 sm:w-[220px]">
+                                    <Label
+                                        htmlFor={`recipient-participant-role-${recipient.client_id}`}
+                                        className="text-[12.5px]"
+                                    >
+                                        Tipo de participante
+                                    </Label>
+                                    <Select
+                                        value={participantRole}
+                                        disabled={disabled}
+                                        onValueChange={(value) =>
+                                            update(index, {
+                                                participant_role:
+                                                    value as ParticipantRole,
+                                                participant_role_label:
+                                                    options.find(
+                                                        (option) =>
+                                                            option.value ===
+                                                            value,
+                                                    )?.label ??
+                                                    participantRoleLabels[
+                                                        value as ParticipantRole
+                                                    ],
+                                            })
+                                        }
+                                    >
+                                        <SelectTrigger
+                                            id={`recipient-participant-role-${recipient.client_id}`}
+                                            size="sm"
+                                            className="w-full"
+                                            aria-invalid={Boolean(
+                                                errors[
+                                                    `recipients.${index}.participant_role`
+                                                ],
+                                            )}
+                                        >
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {options.map((option) => (
+                                                <SelectItem
+                                                    key={option.value}
+                                                    value={option.value}
+                                                >
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <p className="text-muted-foreground min-w-0 flex-1 basis-[240px] pt-0 text-[12.5px] leading-[1.5] sm:pt-6">
+                                    {
+                                        participantRoleDescriptions[
+                                            participantRole
+                                        ]
+                                    }
+                                </p>
+                                <InputError
+                                    className="w-full"
+                                    message={
+                                        errors[
+                                            `recipients.${index}.participant_role`
+                                        ]
+                                    }
+                                />
+                            </div>
+                        )}
 
                         <div
                             className="grid gap-3"
@@ -273,7 +441,12 @@ export function WizardStepRecipients({
                                 <Input
                                     id={`recipient-name-${recipient.client_id}`}
                                     value={recipient.name}
-                                    placeholder="Nome do signatário"
+                                    placeholder={
+                                        NAME_PLACEHOLDER[
+                                            recipient.participant_role ??
+                                                'signer'
+                                        ]
+                                    }
                                     maxLength={120}
                                     disabled={disabled}
                                     aria-invalid={Boolean(
@@ -334,7 +507,9 @@ export function WizardStepRecipients({
                             </div>
                             <div className="flex flex-1 flex-col gap-1.5">
                                 <span className="text-[12.5px] font-semibold">
-                                    Como o signatário se autentica
+                                    {participantRoles
+                                        ? 'Como o participante se autentica'
+                                        : 'Como o signatário se autentica'}
                                 </span>
                                 <div className="flex flex-wrap gap-1.5">
                                     <SelectableChip selected disabled>
@@ -355,25 +530,47 @@ export function WizardStepRecipients({
             <div className="flex flex-wrap gap-2">
                 <Button
                     variant="dashed"
-                    disabled={disabled || recipients.length >= 20}
-                    onClick={() => add('Parte')}
+                    disabled={disabled || full}
+                    onClick={() => add('Parte', 'signer')}
                 >
                     <UserPlus className="size-[15px]" />
                     Adicionar signatário
                 </Button>
                 <Button
                     variant="dashed"
-                    disabled={disabled || recipients.length >= 20}
-                    onClick={() => add('Testemunha')}
+                    disabled={disabled || full}
+                    onClick={() => add('Testemunha', 'witness')}
                 >
                     <Eye className="size-[15px]" />
                     Adicionar testemunha
                 </Button>
+                {participantRoles && (
+                    <>
+                        <Button
+                            variant="dashed"
+                            disabled={disabled || full}
+                            onClick={() => add('Aprovador', 'approver')}
+                        >
+                            <CheckCircle2 className="size-[15px]" />
+                            Adicionar aprovador
+                        </Button>
+                        <Button
+                            variant="dashed"
+                            disabled={disabled || full}
+                            onClick={() => add('Cópia', 'viewer')}
+                        >
+                            <Eye className="size-[15px]" />
+                            Adicionar visualizador
+                        </Button>
+                    </>
+                )}
             </div>
 
-            {recipients.length >= 20 && (
+            {full && (
                 <p className="text-muted-foreground text-[12.5px]">
-                    Máximo de 20 signatários por documento.
+                    {participantRoles
+                        ? 'Máximo de 20 participantes por documento.'
+                        : 'Máximo de 20 signatários por documento.'}
                 </p>
             )}
         </div>

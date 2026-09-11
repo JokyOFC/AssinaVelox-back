@@ -36,5 +36,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- Nunca o dev server: um public/hot (vivo ou obsoleto) não afeta a suíte. -->
+        <env name="VITE_HOT_FILE" value="storage/framework/testing/vite.hot.never"/>
     </php>
 </phpunit>

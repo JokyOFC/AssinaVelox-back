@@ -44,6 +44,8 @@ use Illuminate\Support\Facades\DB;
  * @property string|null $finalization_key
  * @property string|null $terms_version
  * @property array<string, mixed>|null $settings
+ * @property Carbon|null $scheduled_send_at
+ * @property int|null $scheduled_send_audit_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -106,6 +108,9 @@ class Envelope extends Model
             'refused_at' => 'datetime',
             'expired_at' => 'datetime',
             'canceled_at' => 'datetime',
+            // Fase 2 §2.5 — envio agendado (UTC) e o evento `envelope.scheduled` que o criou.
+            'scheduled_send_at' => 'datetime',
+            'scheduled_send_audit_id' => 'integer',
             'settings' => 'array',
             'deleted_at' => 'datetime',
         ];
@@ -117,6 +122,37 @@ class Envelope extends Model
             if (empty($envelope->number) && $envelope->organization_id) {
                 $envelope->number = static::nextNumberFor($envelope->organization_id);
             }
+        });
+
+        /*
+         * Congelamento POR DOCUMENTO (Fase 2 §2.3, docs/fase-2/multi-documento-e-papeis.md).
+         *
+         * `sent_document_version_id` é gravado no envio (SendEnvelope, sob lock, na mesma
+         * transação) e zerado na reversão de um envio que falhou. É o mesmo instante em que
+         * CADA documento precisa ter a sua versão exibível congelada em
+         * `documents.sent_version_id`. Fazer isso aqui, e não no serviço de envio, mantém uma
+         * única verdade: não existe caminho que congele o envelope sem congelar os documentos
+         * — nem o inverso. Depois do envio `current_version_id` não muda mais (o pipeline
+         * documental recusa alterações fora de draft/preparing/ready), então a cópia é exata.
+         */
+        static::saved(function (Envelope $envelope): void {
+            $changed = $envelope->wasRecentlyCreated
+                ? $envelope->sent_document_version_id !== null
+                : $envelope->wasChanged('sent_document_version_id');
+
+            if (! $changed) {
+                return;
+            }
+
+            $documents = Document::withoutOrganizationScope()->where('envelope_id', $envelope->getKey());
+
+            if ($envelope->sent_document_version_id === null) {
+                $documents->whereNotNull('sent_version_id')->update(['sent_version_id' => null]);
+
+                return;
+            }
+
+            $documents->update(['sent_version_id' => DB::raw('current_version_id')]);
         });
     }
 
@@ -205,19 +241,35 @@ class Envelope extends Model
     }
 
     /**
-     * Fase 1: exatamente um documento por envelope.
+     * O PRIMEIRO documento do envelope: menor `position`, desempatado pelo mais antigo.
+     *
+     * Na Fase 1 há um documento só (position 1) e isto é exatamente o `oldestOfMany()` de
+     * antes. Com vários documentos (Fase 2 §2.3) é o que abre a lista — e é dele que saem
+     * `envelopes.sent_document_version_id` e `final_document_version_id`, mantidos para
+     * compatibilidade. Para percorrer todos, use {@see self::orderedDocuments()}.
      *
      * @return HasOne<Document, $this>
      */
     public function document(): HasOne
     {
-        return $this->hasOne(Document::class)->oldestOfMany();
+        return $this->hasOne(Document::class)->ofMany(['position' => 'min', 'id' => 'min']);
     }
 
     /** @return HasMany<Document, $this> */
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
+    }
+
+    /**
+     * Documentos na ordem de apresentação (position, id). Relação só de LEITURA: o
+     * ORDER BY impede usá-la em DELETE no SQLite.
+     *
+     * @return HasMany<Document, $this>
+     */
+    public function orderedDocuments(): HasMany
+    {
+        return $this->hasMany(Document::class)->orderBy('position')->orderBy('id');
     }
 
     /** @return BelongsTo<DocumentVersion, $this> */
@@ -235,7 +287,9 @@ class Envelope extends Model
     /** @return HasMany<Recipient, $this> */
     public function recipients(): HasMany
     {
-        return $this->hasMany(Recipient::class)->orderBy('order_index')->orderBy('id');
+        // Ordem da LISTA (`position`), não a vez de assinar (`order_index`): o visualizador não
+        // tem vez e, ordenado por ela, subia para o topo em todas as telas (Fase 2 §2.4).
+        return $this->hasMany(Recipient::class)->orderBy('position')->orderBy('id');
     }
 
     /** @return HasMany<SigningField, $this> */

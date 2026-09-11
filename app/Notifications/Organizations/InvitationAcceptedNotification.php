@@ -65,7 +65,7 @@ class InvitationAcceptedNotification extends Notification implements ShouldQueue
             ->subject('Novo membro em '.$organization->name)
             ->greeting('Olá!')
             ->line('**'.MailText::escape($member->name ?? $member->email).'** aceitou o convite e agora faz parte de **'
-                .MailText::escape($organization->name).'** como '.$this->membership->role->label().'.')
+                .MailText::escape($organization->name).'** como '.MailText::escape($this->membership->roleLabel()).'.')
             ->action('Ver os membros', route('members.index'))
             ->line('Se não era essa a intenção, remova o acesso em Configurações › Membros.')
             ->salutation('Atenciosamente, AssinaVelox');

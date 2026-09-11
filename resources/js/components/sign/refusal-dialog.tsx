@@ -25,6 +25,7 @@ export function RefusalDialog({
     organizationName,
     minReason = 10,
     maxReason = 500,
+    noun = 'assinatura',
 }: {
     token: string;
     open: boolean;
@@ -33,6 +34,8 @@ export function RefusalDialog({
     /** `limits.refusal_reason` das props. */
     minReason?: number;
     maxReason?: number;
+    /** O que se recusa (Fase 2 §2.4): "assinatura" (padrão) ou "aprovação". */
+    noun?: 'assinatura' | 'aprovação';
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         reason: '',
@@ -55,7 +58,7 @@ export function RefusalDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[440px]">
                 <DialogHeader>
-                    <DialogTitle>Recusar a assinatura?</DialogTitle>
+                    <DialogTitle>Recusar a {noun}?</DialogTitle>
                     <DialogDescription>
                         {organizationName} receberá o motivo informado. A recusa
                         encerra este documento e não pode ser desfeita por você.
@@ -105,7 +108,7 @@ export function RefusalDialog({
                         onClick={submit}
                     >
                         {processing && <Spinner className="size-4" />}
-                        Recusar assinatura
+                        Recusar {noun}
                     </Button>
                 </DialogFooter>
             </DialogContent>

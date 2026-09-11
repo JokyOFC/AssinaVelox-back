@@ -5,10 +5,12 @@ namespace App\Services\Signing;
 use App\Enums\AuthMethod;
 use App\Enums\DocumentVersionKind;
 use App\Enums\EnvelopeStatus;
+use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\Recipient;
 use App\Models\SignatureAcceptance;
 use App\Models\SigningSession;
+use App\Models\SigningSessionDocument;
 use App\Models\User;
 use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
@@ -29,9 +31,18 @@ use Illuminate\Support\Collection;
  * - **`sign`** (depois do código): tudo acima mais a URL do PDF (que ainda exige sessão para
  *   responder), os campos do próprio destinatário, a indicação dos campos de terceiros, o
  *   texto de aceite e o token de autorização.
+ * - **`view`** (Fase 2 §2.4, visualizador depois do código): o(s) documento(s) em modo
+ *   leitura e, depois da conclusão, a cópia final. Sem campos, sem aceite, sem autorização.
  * - **`completed` / `finalizing` / `already_signed_pending_others`**: o comprovante do que
  *   foi registrado.
  * - **`refused` / `expired` / `canceled` / `invalid`**: só o suficiente para explicar.
+ *
+ * ## Fase 2 (aditivo — docs/fase-2/multi-documento-e-papeis.md §8)
+ *
+ * `documents` (um item por arquivo), `action` (o que o botão faz: assinar, assinar como
+ * testemunha, aprovar ou só visualizar), `copy` (cópia do visualizador) e o papel de domínio
+ * em `recipient`/`others`. Com um documento e papel `signer`, os campos da Fase 1 continuam
+ * idênticos.
  *
  * ## O que nunca sai daqui
  *
@@ -72,6 +83,7 @@ final class SignerPageProps
             'signing_order' => 'sequential',
             'otp' => null,
             'document' => null,
+            'documents' => [],
             'my_fields' => [],
             'other_fields' => [],
             'signature_options' => self::signatureOptions(),
@@ -84,6 +96,8 @@ final class SignerPageProps
             'refusal' => null,
             'auth_methods' => [AuthMethod::EmailOtp->value],
             'limits' => self::limits(),
+            'action' => null,
+            'copy' => null,
         ];
     }
 
@@ -111,15 +125,18 @@ final class SignerPageProps
             'signing_order' => $context->envelope->signing_order->value,
             'otp' => $screen === 'identify' ? $this->challenges->props($context) : null,
             'document' => null,
+            'documents' => [],
             'my_fields' => [],
             'other_fields' => [],
             'signature_options' => self::signatureOptions(),
             'consent_text' => '',
             'consent' => null,
             'privacy' => [
-                'version' => ConsentText::PRIVACY_NOTICE_VERSION,
-                'summary' => ConsentText::privacySummary($context->organization),
-                'notice' => ConsentText::privacyNotice($context->organization),
+                // O texto depende do papel: o visualizador não registra aceite e o aprovador
+                // não grava imagem de assinatura (Fase 2 §2.4, T1).
+                'version' => ConsentText::privacyNoticeVersion($context->recipient->role),
+                'summary' => ConsentText::privacySummary($context->organization, $context->recipient->role),
+                'notice' => ConsentText::privacyNotice($context->organization, $context->recipient->role),
             ],
             'authorization' => null,
             'legal' => self::legal(),
@@ -127,10 +144,16 @@ final class SignerPageProps
             'refusal' => $this->refusal($context),
             'auth_methods' => [AuthMethod::EmailOtp->value],
             'limits' => self::limits(),
+            'action' => self::action($context),
+            'copy' => null,
         ];
 
         if ($screen === 'sign' && $session !== null && $version !== null) {
             $props = array_replace($props, $this->signingProps($context, $session, $version));
+        }
+
+        if ($screen === 'view' && $session !== null) {
+            $props = array_replace($props, $this->viewProps($context, $session, $request));
         }
 
         if (in_array($screen, ['completed', 'finalizing', 'already_signed_pending_others'], true)) {
@@ -141,7 +164,8 @@ final class SignerPageProps
     }
 
     /**
-     * `identify` vs `sign` depende da sessão do navegador; os demais vêm do estado do convite.
+     * `identify` vs `sign`/`view` depende da sessão do navegador; os demais vêm do estado do
+     * convite. O visualizador nunca chega a `sign`: depois do código ele vê `view`.
      */
     public function screen(SignerContext $context, ?SigningSession $session): string
     {
@@ -149,21 +173,70 @@ final class SignerPageProps
             return $context->state;
         }
 
-        return $session !== null ? 'sign' : 'identify';
+        if ($session === null) {
+            return 'identify';
+        }
+
+        return $context->isViewer() ? 'view' : 'sign';
     }
 
     // -- Blocos -------------------------------------------------------------------------
+
+    /**
+     * O que o botão principal faz (Fase 2 §2.4).
+     *
+     * @return array{type: string, label: string, button_label: string|null, requires_signature: bool, requires_consent: bool}
+     */
+    public static function action(SignerContext $context): array
+    {
+        $action = $context->action();
+
+        if ($action === null) {
+            return [
+                'type' => 'view',
+                'label' => 'Cópia para acompanhamento',
+                'button_label' => null,
+                'requires_signature' => false,
+                'requires_consent' => false,
+            ];
+        }
+
+        return [
+            'type' => $action->value,
+            'label' => $action->label(),
+            'button_label' => $action->buttonLabel(),
+            'requires_signature' => $action->requiresVisualSignature(),
+            'requires_consent' => true,
+        ];
+    }
 
     /**
      * @return array<string, mixed>
      */
     private function signingProps(SignerContext $context, SigningSession $session, DocumentVersion $version): array
     {
-        $fields = $this->presentation->myFields($context, $version);
-        $consentText = ConsentText::statement($context->envelope, $context->recipient, $context->organization, $version->sha256);
+        $sent = $context->sentDocuments();
+        $multi = count($sent) > 1;
 
-        $snapshot = $this->presentation->snapshot($context, $version, $fields, $consentText);
+        $fields = $multi
+            ? $this->presentation->myFieldsForDocuments($context, $sent)
+            : $this->presentation->myFields($context, $version);
+
+        $consentText = ConsentText::statement(
+            $context->envelope,
+            $context->recipient,
+            $context->organization,
+            $version->sha256,
+            null,
+            $sent,
+        );
+
+        $snapshot = $sent === []
+            ? $this->presentation->snapshot($context, $version, $fields, $consentText)
+            : $this->presentation->snapshotFor($context, $sent, $fields, $consentText);
+
         $authorization = $this->sessions->issueAuthorization($session, SignerPresentation::hash($snapshot));
+        $count = max(1, count($sent));
 
         return [
             'document' => [
@@ -175,12 +248,15 @@ final class SignerPageProps
                 'page_sizes' => $this->pageSizes($version),
                 'sha256' => $version->sha256,
             ],
-            'my_fields' => $this->presentation->myFieldProps($fields, $context),
-            'other_fields' => $this->presentation->otherFields($context, $version),
+            'documents' => $this->documentList($context, $session, $sent),
+            'my_fields' => $this->presentation->myFieldProps($fields, $context, SignerPresentation::documentUlidsByVersion($sent)),
+            'other_fields' => $multi
+                ? $this->presentation->otherFieldsForDocuments($context, $sent)
+                : $this->presentation->otherFields($context, $version),
             'consent_text' => $consentText,
             'consent' => [
-                'version' => ConsentText::versionFor($context->envelope),
-                'checkbox_label' => ConsentText::checkboxLabel($context->envelope),
+                'version' => ConsentText::versionFor($context->envelope, $context->recipient, $count),
+                'checkbox_label' => ConsentText::checkboxLabel($context->envelope, $context->recipient, $count),
                 'statement' => $consentText,
                 'completion_notice' => ConsentText::completionNotice(),
             ],
@@ -189,6 +265,106 @@ final class SignerPageProps
                 'expires_at' => $session->refresh()->authorization_expires_at?->toIso8601String(),
             ],
         ];
+    }
+
+    /**
+     * Tela `view` do visualizador: documentos em modo leitura e, concluído o envelope, a cópia
+     * final. Nada de campos, aceite ou autorização.
+     *
+     * @return array<string, mixed>
+     */
+    private function viewProps(SignerContext $context, SigningSession $session, Request $request): array
+    {
+        $sent = $context->sentDocuments();
+        $first = $sent[0]['version'] ?? null;
+        $completed = $context->envelope->status === EnvelopeStatus::Completed;
+
+        $finals = [];
+
+        if ($completed) {
+            $finalIds = array_values(array_filter(array_map(
+                static fn (array $row): ?int => $row['document']->final_version_id,
+                $sent,
+            )));
+
+            $finals = DocumentVersion::withoutOrganizationScope()
+                ->whereIn('id', $finalIds === [] ? [0] : $finalIds)
+                ->where('kind', DocumentVersionKind::Final->value)
+                ->pluck('id')
+                ->map(static fn ($id): int => (int) $id)
+                ->all();
+        }
+
+        $downloads = [];
+
+        foreach ($sent as $row) {
+            $available = in_array((int) $row['document']->final_version_id, $finals, true);
+
+            $downloads[] = [
+                'document_id' => $row['document']->ulid,
+                'name' => $row['document']->name,
+                'position' => (int) $row['document']->position,
+                'available' => $available,
+                'url' => $available
+                    ? route('sign.download', ['token' => $context->token, 'type' => 'signed', 'document' => $row['document']->ulid])
+                    : null,
+            ];
+        }
+
+        return [
+            'document' => $first === null ? null : [
+                'pdf_url' => route('sign.document', ['token' => $context->token]),
+                'page_thumb_url_template' => null,
+                'page_sizes' => $this->pageSizes($first),
+                'sha256' => $first->sha256,
+            ],
+            'documents' => $this->documentList($context, $session, $sent),
+            'copy' => [
+                'final_available' => $completed && $downloads !== [] && collect($downloads)->every(fn (array $item): bool => $item['available']),
+                'completed_at' => $context->envelope->completed_at?->toIso8601String(),
+                'can_download' => true,
+                'downloads' => $downloads,
+                'notice' => $completed
+                    ? 'Você recebeu uma cópia deste documento para acompanhamento. Os participantes concluíram o processo.'
+                    : 'Você recebeu este documento para acompanhamento. Não é necessário assinar nem aprovar; você receberá a cópia final quando os participantes concluírem.',
+            ],
+        ];
+    }
+
+    /**
+     * Um item por documento apresentado, na ordem do envelope.
+     *
+     * @param  list<array{document: Document, version: DocumentVersion}>  $sent
+     * @return list<array<string, mixed>>
+     */
+    private function documentList(SignerContext $context, SigningSession $session, array $sent): array
+    {
+        $presented = SigningSessionDocument::withoutOrganizationScope()
+            ->where('signing_session_id', $session->getKey())
+            ->pluck('document_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        $items = [];
+
+        foreach ($sent as $index => $row) {
+            $items[] = [
+                'id' => $row['document']->ulid,
+                'position' => (int) $row['document']->position,
+                'name' => $row['document']->name,
+                'pages' => (int) ($row['version']->page_count ?? 0),
+                // O primeiro arquivo usa a URL da Fase 1; os demais, `?document={ulid}`.
+                'pdf_url' => route('sign.document', $index === 0
+                    ? ['token' => $context->token]
+                    : ['token' => $context->token, 'document' => $row['document']->ulid]),
+                'page_sizes' => $this->pageSizes($row['version']),
+                'sha256' => $row['version']->sha256,
+                // Entregue a ESTA sessão? O aceite exige todos (RecordAcceptance).
+                'presented' => in_array((int) $row['document']->getKey(), $presented, true),
+            ];
+        }
+
+        return $items;
     }
 
     /**
@@ -243,29 +419,37 @@ final class SignerPageProps
             'email_masked' => $recipient->masked_email,
             'status' => $recipient->status->value,
             'order' => (int) $recipient->order_index,
+            // Fase 2 §2.4: papel de domínio (o `role` acima é o rótulo livre).
+            'participant_role' => $recipient->role->value,
+            'participant_role_label' => $recipient->role->label(),
         ];
     }
 
     /**
      * Demais participantes: nome, papel, ordem, status e se assinam depois. **Sem e-mail.**
+     * Visualizadores não aparecem: não participam da coleta e não há por que expor seus nomes.
      *
      * @param  Collection<int, Recipient>  $recipients
      * @return list<array<string, mixed>>
      */
     private function others(SignerContext $context, Collection $recipients): array
     {
-        $sequential = $context->envelope->isSequential();
+        // O visualizador não entra na ordem (Fase 2 §2.4): ninguém "assina depois" dele.
+        $sequential = $context->envelope->isSequential() && $context->recipient->participates();
         $myOrder = (int) $context->recipient->order_index;
 
         /** @var list<array<string, mixed>> */
         return $recipients
             ->reject(fn (Recipient $r): bool => $r->getKey() === $context->recipient->getKey())
+            ->filter(fn (Recipient $r): bool => $r->participates())
             ->map(fn (Recipient $r): array => [
                 'name' => $r->name,
                 'role' => SignerPresentation::roleLabel($r),
                 'order' => (int) $r->order_index,
                 'status' => $r->status->value,
                 'signs_after_me' => $sequential && (int) $r->order_index > $myOrder,
+                'participant_role' => $r->role->value,
+                'participant_role_label' => $r->role->label(),
             ])
             ->values()
             ->all();
@@ -335,7 +519,7 @@ final class SignerPageProps
                 || $this->sessions->current($context, $request) !== null,
             'pending_others' => $recipients
                 ->reject(fn (Recipient $r): bool => $r->getKey() === $context->recipient->getKey())
-                ->filter(fn (Recipient $r): bool => $r->status->isPendingSignature())
+                ->filter(fn (Recipient $r): bool => $r->isPendingParticipant())
                 ->count(),
             /*
              * A coleta terminou SEM conclusão? Quem já tinha assinado continua com acesso ao
@@ -365,7 +549,33 @@ final class SignerPageProps
             'completion_notice' => $context->envelope->status->isTerminal()
                 ? SignatureNarrative::for($context->envelope, $context->envelope->verificationRecord)['statement']
                 : ConsentText::completionNotice(),
+            // Fase 2 (aditivos): o que foi registrado e sobre quais documentos.
+            'action' => $acceptance->action->value,
+            'action_label' => $acceptance->action->label(),
+            'documents' => $this->receiptDocuments($context, $acceptance),
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function receiptDocuments(SignerContext $context, SignatureAcceptance $acceptance): array
+    {
+        $completed = $context->envelope->status === EnvelopeStatus::Completed;
+
+        return array_values($acceptance->documents()
+            ->with('document:id,ulid,name,position,final_version_id')
+            ->get()
+            ->map(fn ($row): array => [
+                'id' => $row->document?->ulid,
+                'position' => (int) $row->position,
+                'name' => $row->document?->name,
+                'sha256' => $row->document_sha256,
+                'final_pdf_url' => $completed && $row->document?->final_version_id !== null
+                    ? route('sign.download', ['token' => $context->token, 'type' => 'signed', 'document' => $row->document->ulid])
+                    : null,
+            ])
+            ->all());
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\MembershipInvitation;
 use App\Services\Organizations\Invitations;
 use App\Services\Organizations\SeatUsage;
 use App\Support\CurrentOrganization;
+use App\Support\PermissionsInvitationGrants;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -32,8 +33,17 @@ class InvitationController extends Controller
             ]);
         }
 
+        $customRole = $request->customRole();
+        $folders = $request->folderGrants();
+
         foreach ($emails as $email) {
-            $this->invitations->invite($organization, $request->user(), $email, $request->role());
+            $invitation = $this->invitations->invite($organization, $request->user(), $email, $request->role());
+
+            // Fase 2: função personalizada e "Pastas com acesso" ficam no convite e são
+            // aplicadas no aceite (PermissionsInvitationGrants::apply).
+            if ($customRole !== null || $folders !== []) {
+                PermissionsInvitationGrants::store($invitation, $customRole, $folders);
+            }
         }
 
         $count = count($emails);

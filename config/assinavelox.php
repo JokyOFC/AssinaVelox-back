@@ -13,6 +13,71 @@
 
 return [
 
+    /*
+    |--------------------------------------------------------------------------
+    | Flags da Fase 2 (docs/roadmap.md §1 T8) — interruptor GLOBAL da instalação
+    |--------------------------------------------------------------------------
+    |
+    | Todas nascem DESLIGADAS. Para as flags da organização, o recurso só existe
+    | quando este interruptor E `plans.features.{flag}` do plano vigente dizem sim
+    | (App\Services\Envelopes\DomainFeatures, RemindersFeature, TemplatesFeature,
+    | ToolFlags, Permissions::customRolesEnabled). As três flags da plataforma
+    | (`admin_users`, `admin_audit`, `impersonation`) só dependem daqui: o painel
+    | interno não tem organização corrente.
+    |
+    | A flag liga a INTERFACE e as rotas novas; a autorização continua nas Policies.
+    | Com tudo desligado o comportamento é exatamente o da Fase 1. As chaves são
+    | expostas ao front na prop compartilhada `features` (HandleInertiaRequests).
+    |
+    */
+    'features' => [
+        // Organização (config global E plano).
+        'templates' => filter_var(env('ASSINAVELOX_FEATURE_TEMPLATES', false), FILTER_VALIDATE_BOOLEAN),
+        'multi_document' => filter_var(env('ASSINAVELOX_FEATURE_MULTI_DOCUMENT', false), FILTER_VALIDATE_BOOLEAN),
+        'participant_roles' => filter_var(env('ASSINAVELOX_FEATURE_PARTICIPANT_ROLES', false), FILTER_VALIDATE_BOOLEAN),
+        'reminders' => filter_var(env('ASSINAVELOX_FEATURE_REMINDERS', false), FILTER_VALIDATE_BOOLEAN),
+        'custom_roles' => filter_var(env('ASSINAVELOX_FEATURE_CUSTOM_ROLES', false), FILTER_VALIDATE_BOOLEAN),
+        'tags' => filter_var(env('ASSINAVELOX_FEATURE_TAGS', false), FILTER_VALIDATE_BOOLEAN),
+        'reports' => filter_var(env('ASSINAVELOX_FEATURE_REPORTS', false), FILTER_VALIDATE_BOOLEAN),
+        'audit_log' => filter_var(env('ASSINAVELOX_FEATURE_AUDIT_LOG', false), FILTER_VALIDATE_BOOLEAN),
+        // Plataforma (só a config global).
+        'admin_users' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_USERS', false), FILTER_VALIDATE_BOOLEAN),
+        'admin_audit' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_AUDIT', false), FILTER_VALIDATE_BOOLEAN),
+        'impersonation' => filter_var(env('ASSINAVELOX_FEATURE_IMPERSONATION', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    // Fase 2 §2.3 — teto de arquivos por envelope com `features.multi_document` ligada
+    // (desligada vale 1, a regra da Fase 1).
+    'multi_document' => [
+        'max_documents' => (int) env('ASSINAVELOX_MAX_DOCUMENTS_PER_ENVELOPE', 10),
+    ],
+
+    // Fase 2 §2.5 — lembretes automáticos (docs/fase-2/lembretes-e-agendamento.md).
+    'reminders' => [
+        // Janela de envio no fuso da organização (padrão da organização; a tela pode mudar).
+        'window_start_hour' => (int) env('ASSINAVELOX_REMINDERS_WINDOW_START', 8),
+        'window_end_hour' => (int) env('ASSINAVELOX_REMINDERS_WINDOW_END', 20),
+        // Destinatários selecionados por execução do comando.
+        'batch_size' => (int) env('ASSINAVELOX_REMINDERS_BATCH_SIZE', 500),
+        // Link usado há menos disto: o lembrete é adiado para não derrubar quem assina.
+        'active_grace_minutes' => (int) env('ASSINAVELOX_REMINDERS_ACTIVE_GRACE_MINUTES', 60),
+    ],
+
+    // Fase 2 §2.5 — envio agendado.
+    'scheduled_send' => [
+        'min_lead_minutes' => (int) env('ASSINAVELOX_SCHEDULED_SEND_MIN_LEAD_MINUTES', 5),
+        'max_days' => (int) env('ASSINAVELOX_SCHEDULED_SEND_MAX_DAYS', 60),
+        'batch_size' => (int) env('ASSINAVELOX_SCHEDULED_SEND_BATCH_SIZE', 200),
+    ],
+
+    /*
+    | Arquivo "hot" do Vite. Vazio = `public/hot` (padrão do Laravel). Os testes apontam
+    | para um caminho inexistente (phpunit.xml) para sempre usarem o build, mesmo com um
+    | `npm run dev` rodando — ou com um `public/hot` obsoleto deixado por um dev server
+    | encerrado à força (docs/testes.md §2).
+    */
+    'vite_hot_file' => env('VITE_HOT_FILE'),
+
     // Versão dos Termos de uso aceitos no cadastro e no aceite eletrônico.
     'terms_version' => env('ASSINAVELOX_TERMS_VERSION', '2026-09'),
 
@@ -159,6 +224,8 @@ return [
             'invitation.opened',
             'challenge.verified',
             'acceptance.recorded',
+            // Fase 2 §2.4: aprovação registrada (aprovador).
+            'approval.recorded',
             'recipient.refused',
             'envelope.refused',
             'envelope.finalizing',
@@ -437,6 +504,12 @@ return [
             'signature_acceptances' => 'no_update_no_delete',
             'document_versions' => 'no_update_no_delete',
             'verification_records' => 'no_delete',
+            // Fase 2 §2.3 (docs/fase-2/multi-documento-e-papeis.md): o que cada aceite cobriu e
+            // o que cada sessão recebeu — só INSERT. `verification_record_documents` NÃO entra:
+            // é o resumo por arquivo do registro público, reescrito pela retentativa da
+            // finalização (tem `updated_at`), e sai em cascata com `verification_records`.
+            'acceptance_documents' => 'no_update_no_delete',
+            'signing_session_documents' => 'no_update_no_delete',
         ],
     ],
 

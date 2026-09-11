@@ -14,6 +14,7 @@ use App\Models\Recipient;
 use App\Models\SigningField;
 use App\Models\User;
 use App\Services\Documents\DocumentStorage;
+use App\Services\Documents\EnvelopeDocuments;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -50,7 +51,9 @@ final class DuplicateEnvelope
                 'settings' => $settings,
             ]);
 
-            $version = $this->copyDocument($source, $copy);
+            // Fase 2 §2.3: todos os arquivos, na mesma ordem. `$versionMap` leva qualquer
+            // versão de um documento de origem à versão exibível da cópia desse documento.
+            $versionMap = $this->copyDocuments($source, $copy);
 
             $recipientMap = [];
 
@@ -65,6 +68,7 @@ final class DuplicateEnvelope
                     'role' => $recipient->role,
                     'role_label' => $recipient->role_label,
                     'order_index' => $recipient->order_index,
+                    'position' => $recipient->position,
                     'status' => RecipientStatus::Pending,
                     'auth_method' => $recipient->auth_method,
                     'notification_count' => 0,
@@ -77,11 +81,12 @@ final class DuplicateEnvelope
                 $recipientMap[$recipient->getKey()] = $clone->getKey();
             }
 
-            if ($version !== null) {
+            if ($versionMap !== []) {
                 foreach ($source->fields as $field) {
                     $recipientId = $recipientMap[$field->recipient_id] ?? null;
+                    $versionId = $versionMap[(int) $field->document_version_id] ?? null;
 
-                    if ($recipientId === null) {
+                    if ($recipientId === null || $versionId === null) {
                         continue;
                     }
 
@@ -89,7 +94,7 @@ final class DuplicateEnvelope
                     $clone->forceFill([
                         'envelope_id' => $copy->getKey(),
                         'organization_id' => $copy->organization_id,
-                        'document_version_id' => $version->getKey(),
+                        'document_version_id' => $versionId,
                         'recipient_id' => $recipientId,
                         'type' => $field->type,
                         'page' => $field->page,
@@ -150,13 +155,38 @@ final class DuplicateEnvelope
      *
      * @return DocumentVersion|null a versão exibível da cópia (a que os campos referenciam)
      */
-    private function copyDocument(Envelope $source, Envelope $copy): ?DocumentVersion
+    /**
+     * Copia todos os documentos do envelope de origem, na ordem de apresentação.
+     *
+     * @return array<int, int> id de qualquer versão de um documento de origem => id da versão
+     *                         exibível da cópia desse documento
+     */
+    private function copyDocuments(Envelope $source, Envelope $copy): array
     {
-        $document = $source->document;
+        $map = [];
 
-        if ($document === null) {
-            return null;
+        foreach (EnvelopeDocuments::ordered($source) as $index => $document) {
+            $displayable = $this->copyDocument($document, $copy, $index + 1);
+
+            if ($displayable === null) {
+                continue;
+            }
+
+            $versionIds = DocumentVersion::withoutOrganizationScope()
+                ->where('document_id', $document->getKey())
+                ->pluck('id');
+
+            foreach ($versionIds as $versionId) {
+                $map[(int) $versionId] = (int) $displayable->getKey();
+            }
         }
+
+        return $map;
+    }
+
+    private function copyDocument(Document $document, Envelope $copy, int $position): ?DocumentVersion
+    {
+        $document->loadMissing(['currentVersion', 'originalVersion']);
 
         $displayable = $document->currentVersion;
         $original = $document->originalVersion;
@@ -167,6 +197,7 @@ final class DuplicateEnvelope
         $clone = Document::query()->create([
             'envelope_id' => $copy->getKey(),
             'organization_id' => $copy->organization_id,
+            'position' => $position,
             'name' => $document->name,
             'original_filename' => $document->original_filename,
             'source_type' => $document->source_type,

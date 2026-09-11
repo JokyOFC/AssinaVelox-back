@@ -8,8 +8,12 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Itens do painel interno ainda sem escopo na Fase 1 (ROUTES §1.5 / §2.21): renderiza
+ * Itens do painel interno ainda sem escopo (ROUTES §1.5 / §2.21): renderiza
  * `admin/placeholder` com a feature derivada da rota.
+ *
+ * Fase 2: `admin.users.index` e `admin.audit.index` têm controllers próprios
+ * (UserController, AuditController) que caem aqui enquanto as flags `admin_users` /
+ * `admin_audit` estão desligadas.
  */
 class PlaceholderController extends Controller
 {
@@ -39,8 +43,11 @@ class PlaceholderController extends Controller
 
     public function __invoke(Request $request): Response
     {
-        $page = self::PAGES[$request->route()?->getName() ?? ''] ?? self::PAGES['admin.settings.index'];
+        return self::render($request->route()?->getName() ?? '');
+    }
 
-        return Inertia::render('admin/placeholder', $page);
+    public static function render(string $routeName): Response
+    {
+        return Inertia::render('admin/placeholder', self::PAGES[$routeName] ?? self::PAGES['admin.settings.index']);
     }
 }

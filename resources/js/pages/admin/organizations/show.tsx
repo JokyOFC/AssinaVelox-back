@@ -1,10 +1,12 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Eye } from 'lucide-react';
+import { useState } from 'react';
 import { AvatarInitials } from '@/components/avatar-initials';
 import { CopyButton } from '@/components/copy-button';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
+import { ImpersonateDialog } from '@/components/impersonation/impersonate-dialog';
 import { KpiCard, KpiGrid } from '@/components/kpi-card';
 import { PageHeader } from '@/components/page-header';
 import { ProgressMeter } from '@/components/progress-meter';
@@ -59,6 +61,16 @@ export interface AdminOrganizationShowProps {
     usage: PlanUsage;
     members: Membership[];
     payments: Payment[];
+    /**
+     * Fase 2 — "Acessar como" (flag `impersonation`). Não se chama `impersonation`: esse nome
+     * é da prop compartilhada da sessão de suporte ativa (banner).
+     */
+    impersonation_options?: {
+        enabled: boolean;
+        ttl_minutes: number;
+        /** IDs de membership elegíveis (ativos, sem bloqueio, não platform admin). */
+        eligible: string[];
+    };
 }
 
 const PLAN_BADGE: Record<
@@ -78,7 +90,13 @@ export default function AdminOrganizationShow({
     usage,
     members,
     payments,
+    impersonation_options: impersonation,
 }: AdminOrganizationShowProps) {
+    const [impersonating, setImpersonating] = useState<Membership | null>(null);
+    const canImpersonate = (m: Membership) =>
+        impersonation?.enabled === true &&
+        impersonation.eligible.includes(m.id);
+
     const memberColumns: DataTableColumn<Membership>[] = [
         {
             key: 'user',
@@ -148,6 +166,27 @@ export default function AdminOrganizationShow({
                 </span>
             ),
         },
+        ...(impersonation?.enabled
+            ? [
+                  {
+                      key: 'impersonate',
+                      header: '',
+                      width: '130px',
+                      align: 'right' as const,
+                      cell: (m: Membership) =>
+                          canImpersonate(m) && (
+                              <Button
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => setImpersonating(m)}
+                              >
+                                  <Eye className="size-3.5" />
+                                  Acessar como
+                              </Button>
+                          ),
+                  },
+              ]
+            : []),
     ];
 
     const paymentColumns: DataTableColumn<Payment>[] = [
@@ -403,6 +442,25 @@ export default function AdminOrganizationShow({
                     }
                 />
             </div>
+
+            {impersonation?.enabled && (
+                <ImpersonateDialog
+                    open={impersonating !== null}
+                    onOpenChange={(open) => !open && setImpersonating(null)}
+                    organizationId={customer.id}
+                    organizationName={customer.name}
+                    ttlMinutes={impersonation.ttl_minutes}
+                    target={
+                        impersonating
+                            ? {
+                                  membershipUserId: impersonating.user.id,
+                                  name: impersonating.user.name,
+                                  email: impersonating.user.email,
+                              }
+                            : null
+                    }
+                />
+            )}
         </>
     );
 }

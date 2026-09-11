@@ -2,6 +2,7 @@
 
 namespace App\Services\Signing;
 
+use App\Enums\AcceptanceAction;
 use App\Models\SignatureAcceptance;
 use Illuminate\Support\Carbon;
 
@@ -62,8 +63,7 @@ final class AcceptanceReceipt
             'Navegador: '.($acceptance->user_agent ?? 'não informado'),
             'Versão do texto de aceite: '.($acceptance->terms_version ?? '—'),
             '',
-            'Resumo SHA-256 do documento apresentado a você:',
-            '  '.$acceptance->document_sha256,
+            ...self::documentLines($acceptance),
             'Resumo SHA-256 do arquivo final:',
             '  '.$finalHash,
             '',
@@ -92,5 +92,42 @@ final class AcceptanceReceipt
         ];
 
         return implode("\r\n", $lines)."\r\n";
+    }
+
+    /**
+     * Resumo(s) do que foi apresentado. Um documento de signatário: as duas linhas da Fase 1.
+     * Vários documentos ou papel diferente de signatário (Fase 2): a ação e um resumo por
+     * documento, na ordem do envelope.
+     *
+     * @return list<string>
+     */
+    private static function documentLines(SignatureAcceptance $acceptance): array
+    {
+        $documents = $acceptance->documents()->with('document:id,name')->get();
+
+        if ($documents->count() <= 1 && $acceptance->action === AcceptanceAction::Sign) {
+            return [
+                'Resumo SHA-256 do documento apresentado a você:',
+                '  '.$acceptance->document_sha256,
+            ];
+        }
+
+        $lines = ['Registro: '.$acceptance->action->label()];
+
+        if ($documents->count() <= 1) {
+            $lines[] = 'Resumo SHA-256 do documento apresentado a você:';
+            $lines[] = '  '.$acceptance->document_sha256;
+
+            return $lines;
+        }
+
+        $lines[] = sprintf('Resumos SHA-256 dos %d documentos apresentados a você:', $documents->count());
+
+        foreach ($documents as $index => $row) {
+            $lines[] = sprintf('  %d. %s', $index + 1, (string) ($row->document->name ?? 'Documento '.($index + 1)));
+            $lines[] = '     '.$row->document_sha256;
+        }
+
+        return $lines;
     }
 }

@@ -40,6 +40,9 @@ class RecipientWizardResource extends JsonResource
             'color_index' => $this->colorIndex,
             'channel' => 'email',
             'auth_methods' => [$this->auth_method->value],
+            // Fase 2 §2.4: papel de domínio (o `role` acima é o rótulo livre).
+            'participant_role' => $this->role->value,
+            'participant_role_label' => $this->role->label(),
         ];
     }
 }

@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
     Check,
@@ -14,7 +14,7 @@ import {
     ShieldCheck,
     XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { AvatarInitials, recipientTone } from '@/components/avatar-initials';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -23,6 +23,9 @@ import {
     type LayerField,
 } from '@/components/envelopes/field-layer';
 import { recipientColor } from '@/components/envelopes/recipient-colors';
+import { ScheduleSendCard } from '@/components/envelopes/schedule-send-card';
+import { documentName } from '@/components/envelopes/wizard-document-list';
+import { DocumentSwitcher } from '@/components/pdf/document-switcher';
 import { DEFAULT_ZOOM } from '@/components/pdf/pdf-zoom-controls';
 import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import { CopyButton } from '@/components/copy-button';
@@ -40,6 +43,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -67,6 +71,7 @@ import {
     authMethodLabels,
     deliveryChannelLabels,
     fieldTypeLabels,
+    participantRoleLabels,
     signingOrderLabels,
 } from '@/lib/labels';
 import { cn } from '@/lib/utils';
@@ -89,6 +94,8 @@ import { show as verifyShow } from '@/routes/verify';
 import type {
     AuditEvent,
     Envelope,
+    EnvelopeFile,
+    EnvelopeReminders,
     FolderRef,
     Recipient,
     SignatureStatus,
@@ -120,12 +127,22 @@ export interface EnvelopeShowProps {
     folders: FolderRef[];
     sent: boolean;
     tab: Tab;
+    /**
+     * Fase 2 §2.5 (`ReminderProps::forEnvelope`). Ainda não exposta por
+     * `EnvelopeController::show`; ausente, a aba mostra "Lembretes: manuais" (Fase 1).
+     */
+    reminders?: EnvelopeReminders | null;
 }
 
 /**
  * Detalhe do documento (ROUTES §2.7; DESIGN §6.4): cabeçalho com status,
  * banner por estado, visualizador (placeholder até a integração com PDF.js)
  * e abas Signatários / Trilha / Detalhes.
+ *
+ * Fase 2 (tudo condicionado ao que existe no envelope, não à flag — um envelope
+ * enviado com vários arquivos continua sendo mostrado assim mesmo se a flag desligar):
+ * seletor de arquivo com downloads por arquivo (§2.3), papel de cada participante
+ * (§2.4) e estado dos lembretes/agendamento (§2.5).
  */
 export default function EnvelopeShow({
     envelope,
@@ -134,10 +151,28 @@ export default function EnvelopeShow({
     events,
     sent,
     tab,
+    reminders,
 }: EnvelopeShowProps) {
+    const { errors } = usePage().props;
     const [currentTab, setCurrentTab] = useState<Tab>(tab ?? 'signers');
     const [page, setPage] = useState(1);
     const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+
+    // Fase 2 §2.3: com mais de um arquivo, o visualizador ganha um seletor.
+    const files: EnvelopeFile[] = envelope.documents ?? [];
+    const multi = files.length > 1;
+    const [fileId, setFileId] = useState<string | null>(files[0]?.id ?? null);
+    const currentFile =
+        files.find((file) => file.id === fileId) ?? files[0] ?? null;
+    const fileOf = (field: SigningField): string | null =>
+        field.document_id ?? files[0]?.id ?? null;
+
+    const remindersOn = reminders?.available === true;
+    const rolesInUse = recipients.some(
+        (recipient) =>
+            recipient.participant_role !== undefined &&
+            recipient.participant_role !== 'signer',
+    );
 
     // Campos sobrepostos ao PDF: somente leitura, com a cor do destinatário.
     const recipientById = new Map(
@@ -145,6 +180,7 @@ export default function EnvelopeShow({
     );
     const pageFields: ShowLayerField[] = fields
         .filter((field) => field.page !== 'all' && Number(field.page) === page)
+        .filter((field) => !multi || fileOf(field) === currentFile?.id)
         .map((field) => ({
             client_id: field.id,
             recipient_client_id: field.recipient_id,
@@ -164,8 +200,11 @@ export default function EnvelopeShow({
     const [busy, setBusy] = useState(false);
 
     const isDraft = ['draft', 'preparing', 'ready'].includes(envelope.status);
-    const pendingCount = recipients.filter((r) =>
-        ['pending', 'notified', 'viewed'].includes(r.status),
+    // Visualizador nunca é pendência (Fase 2 §2.4).
+    const pendingCount = recipients.filter(
+        (r) =>
+            r.participant_role !== 'viewer' &&
+            ['pending', 'notified', 'viewed'].includes(r.status),
     ).length;
 
     const resendOne = (recipient: Recipient) => {
@@ -297,46 +336,124 @@ export default function EnvelopeShow({
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    asChild
-                                    disabled={!envelope.downloads.original}
-                                >
-                                    <a
-                                        href={
-                                            envelope.downloads.original ?? '#'
-                                        }
-                                    >
-                                        Documento original
-                                    </a>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    asChild
-                                    disabled={!envelope.downloads.signed}
-                                >
-                                    <a href={envelope.downloads.signed ?? '#'}>
-                                        {/*
-                                         * O rótulo segue o `signature_status`, não o status do
-                                         * envelope: sem certificado da operadora não existe
-                                         * "PDF assinado" para oferecer (arquitetura §2).
-                                         */}
-                                        {envelope.signature_status ===
-                                        'company_a1'
-                                            ? 'PDF final assinado'
-                                            : 'Arquivo final (PDF)'}
-                                    </a>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    asChild
-                                    disabled={!envelope.downloads.evidence}
-                                >
-                                    <a
-                                        href={
-                                            envelope.downloads.evidence ?? '#'
-                                        }
-                                    >
-                                        Relatório de evidências (PDF)
-                                    </a>
-                                </DropdownMenuItem>
+                                {multi ? (
+                                    // Fase 2 §2.3: original, final e evidências de cada arquivo.
+                                    files.map((file, index) => (
+                                        <Fragment key={file.id}>
+                                            {index > 0 && (
+                                                <DropdownMenuSeparator />
+                                            )}
+                                            <DropdownMenuLabel className="text-muted-foreground max-w-[260px] truncate text-[11.5px]">
+                                                {file.position}.{' '}
+                                                {documentName(file)}
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuItem
+                                                asChild
+                                                disabled={
+                                                    !file.downloads.original
+                                                }
+                                            >
+                                                <a
+                                                    href={
+                                                        file.downloads
+                                                            .original ?? '#'
+                                                    }
+                                                >
+                                                    Original
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                asChild
+                                                disabled={
+                                                    !file.downloads.signed
+                                                }
+                                            >
+                                                <a
+                                                    href={
+                                                        file.downloads.signed ??
+                                                        '#'
+                                                    }
+                                                >
+                                                    {envelope.signature_status ===
+                                                    'company_a1'
+                                                        ? 'PDF final assinado'
+                                                        : 'Arquivo final (PDF)'}
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                asChild
+                                                disabled={
+                                                    !file.downloads.evidence
+                                                }
+                                            >
+                                                <a
+                                                    href={
+                                                        file.downloads
+                                                            .evidence ?? '#'
+                                                    }
+                                                >
+                                                    Relatório de evidências
+                                                </a>
+                                            </DropdownMenuItem>
+                                        </Fragment>
+                                    ))
+                                ) : (
+                                    <>
+                                        <DropdownMenuItem
+                                            asChild
+                                            disabled={
+                                                !envelope.downloads.original
+                                            }
+                                        >
+                                            <a
+                                                href={
+                                                    envelope.downloads
+                                                        .original ?? '#'
+                                                }
+                                            >
+                                                Documento original
+                                            </a>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            asChild
+                                            disabled={
+                                                !envelope.downloads.signed
+                                            }
+                                        >
+                                            <a
+                                                href={
+                                                    envelope.downloads.signed ??
+                                                    '#'
+                                                }
+                                            >
+                                                {/*
+                                                 * O rótulo segue o `signature_status`, não o status do
+                                                 * envelope: sem certificado da operadora não existe
+                                                 * "PDF assinado" para oferecer (arquitetura §2).
+                                                 */}
+                                                {envelope.signature_status ===
+                                                'company_a1'
+                                                    ? 'PDF final assinado'
+                                                    : 'Arquivo final (PDF)'}
+                                            </a>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            asChild
+                                            disabled={
+                                                !envelope.downloads.evidence
+                                            }
+                                        >
+                                            <a
+                                                href={
+                                                    envelope.downloads
+                                                        .evidence ?? '#'
+                                                }
+                                            >
+                                                Relatório de evidências (PDF)
+                                            </a>
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                         {envelope.can.resend && pendingCount > 0 && (
@@ -449,6 +566,19 @@ export default function EnvelopeShow({
                         : 'Todos os signatários receberam o convite por e-mail.'}
                 </StatusBanner>
             )}
+            {/* Fase 2 §2.5: envio agendado de um rascunho pronto. */}
+            {remindersOn &&
+                reminders?.scheduled_send &&
+                isDraft &&
+                envelope.can.update && (
+                    <ScheduleSendCard
+                        envelopeId={envelope.id}
+                        reminders={reminders}
+                        canSchedule={false}
+                        allowCreate={false}
+                        errors={errors}
+                    />
+                )}
             {envelope.status === 'finalizing' && (
                 <StatusBanner
                     tone="info"
@@ -497,18 +627,49 @@ export default function EnvelopeShow({
 
             <div className="flex flex-wrap items-start gap-4">
                 <div className="min-w-0 flex-[1.4_1_420px]">
+                    {multi && (
+                        <DocumentSwitcher
+                            className="mb-3"
+                            items={files.map((file) => ({
+                                id: file.id,
+                                position: file.position,
+                                name: documentName(file),
+                                meta: `${plural(file.pages, 'página')} · ${plural(
+                                    fields.filter(
+                                        (field) => fileOf(field) === file.id,
+                                    ).length,
+                                    'campo',
+                                )}`,
+                                tone: file.sha256_final ? 'done' : 'default',
+                            }))}
+                            current={currentFile?.id ?? null}
+                            onSelect={(id) => {
+                                setFileId(id);
+                                setPage(1);
+                            }}
+                        />
+                    )}
                     {envelope.document ? (
                         <PdfViewer
+                            key={multi ? currentFile?.id : undefined}
                             // A versão *exibível* vem de `envelopes.document.preview`;
                             // `downloads.original` entrega o arquivo como foi enviado, que
                             // para DOCX e imagem não é um PDF.
-                            url={documentPreview(envelope.id).url}
+                            url={
+                                multi && currentFile?.pdf_url
+                                    ? currentFile.pdf_url
+                                    : documentPreview(envelope.id).url
+                            }
                             page={page}
                             onPageChange={setPage}
                             zoom={zoom}
                             onZoomChange={setZoom}
                             maxPageWidth={560}
-                            stamp={`${envelope.display_code} · pág. ${page}/${envelope.document.pages}`}
+                            stamp={
+                                multi && currentFile
+                                    ? `${envelope.display_code} · arq. ${currentFile.position}/${files.length} · pág. ${page}/${currentFile.pages}`
+                                    : `${envelope.display_code} · pág. ${page}/${envelope.document.pages}`
+                            }
                             toolbarEnd={
                                 <Link
                                     href={envelopeEvidence(envelope.id)}
@@ -555,7 +716,15 @@ export default function EnvelopeShow({
                             Nenhum arquivo enviado ainda.
                         </div>
                     )}
-                    {envelope.document && (
+                    {multi && (
+                        <FilesPanel
+                            files={files}
+                            signedByOperator={
+                                envelope.signature_status === 'company_a1'
+                            }
+                        />
+                    )}
+                    {!multi && envelope.document && (
                         <p className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
                             <FileText className="size-3.5" />
                             <span className="tabular">
@@ -575,7 +744,9 @@ export default function EnvelopeShow({
                             options={[
                                 {
                                     value: 'signers',
-                                    label: 'Signatários',
+                                    label: rolesInUse
+                                        ? 'Participantes'
+                                        : 'Signatários',
                                     count: recipients.length,
                                 },
                                 {
@@ -603,7 +774,12 @@ export default function EnvelopeShow({
                                 <span>
                                     Lembretes:{' '}
                                     <span className="font-semibold">
-                                        manuais
+                                        {remindersOn && reminders
+                                            ? reminders.summary
+                                                  .charAt(0)
+                                                  .toLowerCase() +
+                                              reminders.summary.slice(1)
+                                            : 'manuais'}
                                     </span>
                                 </span>
                             </p>
@@ -617,6 +793,13 @@ export default function EnvelopeShow({
                                     key={recipient.id}
                                     recipient={recipient}
                                     envelope={envelope}
+                                    automatic={
+                                        remindersOn
+                                            ? (reminders?.recipients?.[
+                                                  recipient.id
+                                              ] ?? null)
+                                            : null
+                                    }
                                     onResend={() => resendOne(recipient)}
                                     onEdit={() => setEditing(recipient)}
                                 />
@@ -668,44 +851,28 @@ export default function EnvelopeShow({
                                 markers="icon"
                                 showNotes
                                 footer={
-                                    envelope.document && (
+                                    multi ? (
                                         <div className="mt-4 flex flex-col gap-2">
-                                            <HashBox
-                                                label="SHA-256 do documento enviado"
-                                                value={
-                                                    envelope.document
-                                                        .sha256_original
-                                                }
-                                                action={
-                                                    <CopyButton
-                                                        value={
-                                                            envelope.document
-                                                                .sha256_original
+                                            {files.map((file) => {
+                                                const value =
+                                                    file.sha256_final ??
+                                                    file.sha256_sent ??
+                                                    file.sha256_original;
+
+                                                return value ? (
+                                                    <HashBox
+                                                        key={file.id}
+                                                        label={`SHA-256 ${file.sha256_final ? 'do PDF final' : file.sha256_sent ? 'do arquivo enviado' : 'do original'} · ${file.position}. ${documentName(file)}`}
+                                                        value={value}
+                                                        action={
+                                                            <CopyButton
+                                                                value={value}
+                                                                className="size-6"
+                                                            />
                                                         }
-                                                        className="size-6"
                                                     />
-                                                }
-                                            />
-                                            {envelope.document
-                                                .sha256_signed && (
-                                                <HashBox
-                                                    label="SHA-256 do PDF final"
-                                                    value={
-                                                        envelope.document
-                                                            .sha256_signed
-                                                    }
-                                                    action={
-                                                        <CopyButton
-                                                            value={
-                                                                envelope
-                                                                    .document
-                                                                    .sha256_signed
-                                                            }
-                                                            className="size-6"
-                                                        />
-                                                    }
-                                                />
-                                            )}
+                                                ) : null;
+                                            })}
                                             <Button
                                                 asChild
                                                 variant="link"
@@ -722,6 +889,63 @@ export default function EnvelopeShow({
                                                 </Link>
                                             </Button>
                                         </div>
+                                    ) : (
+                                        envelope.document && (
+                                            <div className="mt-4 flex flex-col gap-2">
+                                                <HashBox
+                                                    label="SHA-256 do documento enviado"
+                                                    value={
+                                                        envelope.document
+                                                            .sha256_original
+                                                    }
+                                                    action={
+                                                        <CopyButton
+                                                            value={
+                                                                envelope
+                                                                    .document
+                                                                    .sha256_original
+                                                            }
+                                                            className="size-6"
+                                                        />
+                                                    }
+                                                />
+                                                {envelope.document
+                                                    .sha256_signed && (
+                                                    <HashBox
+                                                        label="SHA-256 do PDF final"
+                                                        value={
+                                                            envelope.document
+                                                                .sha256_signed
+                                                        }
+                                                        action={
+                                                            <CopyButton
+                                                                value={
+                                                                    envelope
+                                                                        .document
+                                                                        .sha256_signed
+                                                                }
+                                                                className="size-6"
+                                                            />
+                                                        }
+                                                    />
+                                                )}
+                                                <Button
+                                                    asChild
+                                                    variant="link"
+                                                    size="sm"
+                                                    className="self-start"
+                                                >
+                                                    <Link
+                                                        href={envelopeEvidence(
+                                                            envelope.id,
+                                                        )}
+                                                    >
+                                                        <ShieldCheck className="size-3.5" />
+                                                        Ver página de evidências
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        )
                                     )
                                 }
                             />
@@ -760,10 +984,12 @@ export default function EnvelopeShow({
                                 ],
                                 ['Pasta', envelope.folder?.name ?? '—'],
                                 [
-                                    'Arquivo',
-                                    envelope.document
-                                        ? `${envelope.document.original_name} · ${formatBytes(envelope.document.size_bytes)} · ${plural(envelope.document.pages, 'página')}`
-                                        : '—',
+                                    multi ? 'Arquivos' : 'Arquivo',
+                                    multi
+                                        ? `${plural(files.length, 'arquivo')}: ${files.map((file) => `${file.position}. ${documentName(file)}`).join(' · ')}`
+                                        : envelope.document
+                                          ? `${envelope.document.original_name} · ${formatBytes(envelope.document.size_bytes)} · ${plural(envelope.document.pages, 'página')}`
+                                          : '—',
                                 ],
                                 [
                                     'Ordem',
@@ -774,6 +1000,29 @@ export default function EnvelopeShow({
                                     'Cópia final para todos',
                                     envelope.send_copy_to_all ? 'Sim' : 'Não',
                                 ],
+                                ...((envelope.viewers_count ?? 0) > 0
+                                    ? [
+                                          [
+                                              'Visualizadores',
+                                              plural(
+                                                  envelope.viewers_count ?? 0,
+                                                  'pessoa recebe cópia',
+                                                  'pessoas recebem cópia',
+                                              ),
+                                          ],
+                                      ]
+                                    : []),
+                                ...(remindersOn && reminders
+                                    ? [
+                                          ['Lembretes', reminders.summary],
+                                          [
+                                              'Envio agendado',
+                                              reminders.scheduled_send
+                                                  ? `${reminders.scheduled_send.at_local} (${reminders.scheduled_send.timezone})`
+                                                  : '—',
+                                          ],
+                                      ]
+                                    : []),
                             ].map(([label, value]) => (
                                 <div
                                     key={label}
@@ -853,16 +1102,44 @@ export default function EnvelopeShow({
  * link (arquitetura 4.1). Chamar isso de leitura seria afirmar algo que
  * nenhuma evidencia sustenta.
  */
-function recipientNote(recipient: Recipient, envelope: Envelope): string {
-    const reminder = recipient.last_resent_at
-        ? ` · último lembrete ${formatDateTime(recipient.last_resent_at)}`
-        : '';
+function recipientNote(
+    recipient: Recipient,
+    envelope: Envelope,
+    automatic: { sent: number; last_sent_at: string | null } | null = null,
+): string {
+    const reminder = automatic?.last_sent_at
+        ? ` · último lembrete automático ${formatDateTime(automatic.last_sent_at)}`
+        : recipient.last_resent_at
+          ? ` · último lembrete ${formatDateTime(recipient.last_resent_at)}`
+          : '';
+
+    // Visualizador (Fase 2 §2.4): recebe cópia, não assina — nunca "aguarda a vez".
+    if (recipient.participant_role === 'viewer') {
+        if (recipient.status === 'viewed') {
+            return `Abertura detectada em ${formatDateTime(recipient.viewed_at)} · somente leitura`;
+        }
+
+        if (recipient.status === 'notified') {
+            return `Cópia para acompanhamento enviada em ${formatDateTime(recipient.sent_at)} · sem abertura detectada`;
+        }
+
+        if (recipient.status === 'pending') {
+            return envelope.status === 'in_progress'
+                ? 'Ainda não notificado'
+                : 'Recebe o documento no envio, só para acompanhar';
+        }
+    }
 
     if (recipient.status === 'signed') {
+        const approval =
+            recipient.acceptance_action === 'approve' ||
+            recipient.participant_role === 'approver';
+        const noun = approval ? 'Aprovação registrada' : 'Aceite registrado';
+
         return [
             recipient.signed_at
-                ? `Aceite registrado em ${formatDateTime(recipient.signed_at)}`
-                : 'Aceite registrado',
+                ? `${noun} em ${formatDateTime(recipient.signed_at)}`
+                : noun,
             recipient.evidence?.ip ? `IP ${recipient.evidence.ip}` : null,
             recipient.evidence?.user_agent_label ?? null,
         ]
@@ -906,17 +1183,25 @@ function recipientNote(recipient: Recipient, envelope: Envelope): string {
 function RecipientCard({
     recipient,
     envelope,
+    automatic = null,
     onResend,
     onEdit,
 }: {
     recipient: Recipient;
     envelope: Envelope;
+    /** Lembretes automáticos já enviados a esta pessoa (Fase 2 §2.5). */
+    automatic?: { sent: number; last_sent_at: string | null } | null;
     onResend: () => void;
     onEdit: () => void;
 }) {
+    const viewer = recipient.participant_role === 'viewer';
+    const specialRole =
+        recipient.participant_role !== undefined &&
+        recipient.participant_role !== 'signer';
     // No sequencial, quem ainda não chegou na vez não tem link emitido:
     // reenviar não faria nada (RECONCILIACAO Q11).
     const awaitingTurn =
+        !viewer &&
         recipient.status === 'pending' &&
         envelope.status === 'in_progress' &&
         envelope.signing_order === 'sequential';
@@ -937,10 +1222,19 @@ function RecipientCard({
                         <span className="truncate text-[13.5px] font-semibold">
                             {recipient.name}
                         </span>
+                        {specialRole && recipient.participant_role && (
+                            <span className="border-primary-soft-border bg-primary-soft text-primary rounded-md border px-1.5 py-px text-[11px] font-semibold">
+                                {recipient.participant_role_label ??
+                                    participantRoleLabels[
+                                        recipient.participant_role
+                                    ]}
+                            </span>
+                        )}
                         <span className="text-muted-foreground text-[11.5px]">
                             {[
                                 recipient.role,
-                                envelope.signing_order === 'sequential'
+                                envelope.signing_order === 'sequential' &&
+                                !viewer
                                     ? `${recipient.order}º`
                                     : null,
                             ]
@@ -976,7 +1270,7 @@ function RecipientCard({
 
             <div className="border-muted text-muted-foreground mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5 text-[12px]">
                 <span className="tabular min-w-0">
-                    {recipientNote(recipient, envelope)}
+                    {recipientNote(recipient, envelope, automatic)}
                 </span>
                 <span className="flex shrink-0 gap-1.5">
                     {recipient.status === 'signed' && (
@@ -1232,6 +1526,68 @@ function CompletionPanel({
                 </div>
             )}
         </section>
+    );
+}
+
+/**
+ * Arquivos do envelope sob o visualizador (Fase 2 §2.3): nome, páginas, tamanho e os
+ * downloads de cada um (original; final e evidências só depois da conclusão).
+ */
+function FilesPanel({
+    files,
+    signedByOperator,
+}: {
+    files: EnvelopeFile[];
+    signedByOperator: boolean;
+}) {
+    return (
+        <ol className="border-border bg-card shadow-card mt-3 flex flex-col rounded-xl border px-4 py-1.5 text-[12.5px]">
+            {files.map((file) => (
+                <li
+                    key={file.id}
+                    className="border-muted flex flex-wrap items-center gap-x-3 gap-y-1 border-t py-2 first:border-t-0"
+                >
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <FileText className="text-muted-foreground size-3.5 shrink-0" />
+                        <span className="truncate font-semibold">
+                            {file.position}. {documentName(file)}
+                        </span>
+                        <span className="text-muted-foreground tabular shrink-0">
+                            · {plural(file.pages, 'página')} ·{' '}
+                            {formatBytes(file.size_bytes)}
+                        </span>
+                    </span>
+                    <span className="flex shrink-0 flex-wrap gap-2">
+                        {file.downloads.original && (
+                            <a
+                                href={file.downloads.original}
+                                className="text-primary font-semibold hover:underline"
+                            >
+                                Original
+                            </a>
+                        )}
+                        {file.downloads.signed && (
+                            <a
+                                href={file.downloads.signed}
+                                className="text-primary font-semibold hover:underline"
+                            >
+                                {signedByOperator
+                                    ? 'PDF assinado'
+                                    : 'Arquivo final'}
+                            </a>
+                        )}
+                        {file.downloads.evidence && (
+                            <a
+                                href={file.downloads.evidence}
+                                className="text-primary font-semibold hover:underline"
+                            >
+                                Evidências
+                            </a>
+                        )}
+                    </span>
+                </li>
+            ))}
+        </ol>
     );
 }
 

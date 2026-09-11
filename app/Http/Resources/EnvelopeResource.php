@@ -26,7 +26,9 @@ class EnvelopeResource extends JsonResource
     public function toArray(Request $request): array
     {
         $user = $request->user();
-        $recipients = $this->relationLoaded('recipients') ? $this->recipients : $this->recipients()->get();
+        $all = $this->relationLoaded('recipients') ? $this->recipients : $this->recipients()->get();
+        // Visualizadores (Fase 2 §2.4) não entram no progresso "N de M".
+        $recipients = $all->filter(fn (Recipient $recipient): bool => $recipient->participates())->values();
         $signedCount = $recipients->where('status', RecipientStatus::Signed)->count();
         $document = $this->relationLoaded('document') ? $this->document : null;
 

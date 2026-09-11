@@ -5,9 +5,13 @@ namespace App\Services\Documents;
 use App\Enums\DocumentProcessingStatus;
 use App\Enums\EnvelopeStatus;
 use App\Enums\FieldType;
+use App\Enums\RecipientRole;
 use App\Enums\SigningOrder;
+use App\Models\Document;
 use App\Models\Envelope;
+use App\Models\Recipient;
 use App\Models\SigningField;
+use Illuminate\Support\Collection;
 
 /**
  * Recomputa o status de um envelope EM PREPARAÇÃO (arquitetura §3.2).
@@ -18,7 +22,22 @@ use App\Models\SigningField;
  *
  *   draft      — falta documento pronto, destinatário ou campo válido
  *   preparing  — há documento em processamento (uploaded | converting)
- *   ready      — documento `ready` E ≥ 1 destinatário E campos válidos
+ *   ready      — TODOS os documentos `ready` E participantes coerentes E campos válidos
+ *
+ * ## Papéis (Fase 2 §2.4)
+ *
+ * - é preciso pelo menos um `signer`;
+ * - todo `signer` e `witness` precisa de ≥ 1 campo de assinatura obrigatório;
+ * - `approver` não pode ter campo de assinatura nem de rubrica;
+ * - `viewer` não pode ter campo nenhum e não entra na conta da ordem de assinatura.
+ *
+ * Com todos os participantes `signer` (Fase 1) as regras acima são exatamente as de antes.
+ *
+ * ## Vários documentos (Fase 2 §2.3)
+ *
+ * Todos os documentos precisam estar `ready` com versão exibível; os campos contam em
+ * qualquer um deles (a assinatura de um participante pode estar num só arquivo — o aceite
+ * dele cobre o conjunto).
  *
  * Envelopes já enviados (in_progress em diante) e terminais nunca são tocados: o método
  * devolve o status atual sem gravar nada. Também não lança em transição inválida — ele é
@@ -57,9 +76,10 @@ class EnvelopeReadiness
             return EnvelopeStatus::Ready;
         }
 
-        $document = $envelope->document;
+        $processing = EnvelopeDocuments::ordered($envelope)
+            ->contains(fn (Document $document): bool => ! $document->processing_status->isTerminal());
 
-        if ($document !== null && ! $document->processing_status->isTerminal()) {
+        if ($processing) {
             return EnvelopeStatus::Preparing;
         }
 
@@ -73,23 +93,25 @@ class EnvelopeReadiness
      */
     public function completeness(Envelope $envelope): array
     {
-        $document = $envelope->document;
+        $documents = EnvelopeDocuments::ordered($envelope);
 
-        $documentReady = $document !== null
-            && $document->processing_status === DocumentProcessingStatus::Ready
-            && $document->current_version_id !== null;
+        $documentReady = $documents->isNotEmpty()
+            && $documents->every(fn (Document $document): bool => $document->processing_status === DocumentProcessingStatus::Ready
+                && $document->current_version_id !== null);
 
-        $recipientIds = array_map('intval', $envelope->recipients()->pluck('id')->all());
+        $recipients = $this->recipients($envelope);
+        $participants = $recipients->filter(fn (Recipient $recipient): bool => $recipient->participates())->values();
+        $hasSigner = $participants->contains(fn (Recipient $recipient): bool => $recipient->role === RecipientRole::Signer);
 
         return [
             // A ordem de assinatura faz parte da completude do passo 2: um envelope
             // `sequential` cujos signatários estão todos na mesma vez não cumpre a ordem
             // que a interface promete.
             'document' => $documentReady,
-            'recipients' => $recipientIds !== [] && $this->signingOrderIsCoherent($envelope),
+            'recipients' => $hasSigner && $this->signingOrderIsCoherent($envelope),
             'fields' => $documentReady
-                && $recipientIds !== []
-                && $this->everyRecipientHasSignatureField($envelope, $recipientIds),
+                && $participants->isNotEmpty()
+                && $this->fieldsSatisfyRoles($envelope, $documents, $recipients),
         ];
     }
 
@@ -97,9 +119,10 @@ class EnvelopeReadiness
      * `envelopes.signing_order` e `recipients.order_index` têm de contar a mesma história.
      *
      * Quem grava `order_index` é `Envelopes\RecipientSync` (sequencial: 1..N na ordem da
-     * lista; paralelo: todos em 1). O autosave do passo 1 grava `signing_order` sozinho, e
-     * sem esta invariante um envelope podia ficar `sequential` com todo mundo em 1 — caso
-     * em que `InvitationDispatcher::pendingForCurrentTurn()` convida todos de uma vez e
+     * lista; paralelo: todos em 1; visualizadores ficam em 0 e não entram na conta). O
+     * autosave do passo 1 grava `signing_order` sozinho, e sem esta invariante um envelope
+     * podia ficar `sequential` com todo mundo em 1 — caso em que
+     * `InvitationDispatcher::pendingForCurrentTurn()` convida todos de uma vez e
      * `RecordAcceptance` deixa qualquer um assinar, enquanto as telas continuam dizendo
      * "Assinatura em ordem". O inverso também quebra: `parallel` com 1..N faz o dispatcher
      * convidar só o primeiro e os demais nunca recebem nada.
@@ -111,7 +134,13 @@ class EnvelopeReadiness
     {
         $indexes = array_map(
             'intval',
-            $envelope->recipients()->orderBy('order_index')->orderBy('id')->pluck('order_index')->all(),
+            Recipient::withoutOrganizationScope()
+                ->where('envelope_id', $envelope->getKey())
+                ->participating()
+                ->orderBy('order_index')
+                ->orderBy('id')
+                ->pluck('order_index')
+                ->all(),
         );
 
         if ($indexes === []) {
@@ -126,41 +155,67 @@ class EnvelopeReadiness
     }
 
     /**
-     * Todo destinatário precisa de pelo menos um campo de assinatura na versão exibível
-     * corrente (ROUTES §2.6, passo 3). Campos que apontam para uma versão antiga do
-     * documento não contam — o documento foi substituído e os campos serão descartados.
+     * Regras de campo por papel, sobre as versões exibíveis CORRENTES dos documentos.
+     * Campos que apontam para uma versão antiga não contam — o documento foi substituído e
+     * os campos serão descartados.
      *
-     * @param  array<int, int>  $recipientIds
+     * `required` faz parte da regra da assinatura: um campo de assinatura opcional não
+     * satisfaz "todo signatário precisa de pelo menos um campo de assinatura". Sem este
+     * filtro havia DUAS definições da mesma invariante — esta, que grava o status, e a de
+     * `Envelopes\EnvelopeReadiness::fieldIssues()`, que monta a lista de pendências da tela
+     * — e elas discordavam.
+     *
+     * @param  Collection<int, Document>  $documents
+     * @param  Collection<int, Recipient>  $recipients
      */
-    private function everyRecipientHasSignatureField(Envelope $envelope, array $recipientIds): bool
+    private function fieldsSatisfyRoles(Envelope $envelope, Collection $documents, Collection $recipients): bool
     {
-        $versionId = $envelope->document?->current_version_id;
+        $versionIds = array_values(array_map(
+            'intval',
+            array_filter($documents->pluck('current_version_id')->all(), static fn ($id): bool => $id !== null),
+        ));
 
-        if ($versionId === null) {
+        if ($versionIds === []) {
             return false;
         }
 
-        $withSignature = SigningField::query()
+        /** @var Collection<int, SigningField> $fields */
+        $fields = SigningField::withoutOrganizationScope()
             ->where('envelope_id', $envelope->getKey())
-            ->where('document_version_id', $versionId)
-            ->where('type', FieldType::Signature->value)
-            // `required` faz parte da regra: um campo de assinatura opcional não satisfaz
-            // "todo signatário precisa de pelo menos um campo de assinatura". Sem este
-            // filtro havia DUAS definições da mesma invariante — esta, que grava o status,
-            // e a de `Envelopes\EnvelopeReadiness::fieldIssues()`, que monta a lista de
-            // pendências da tela — e elas discordavam.
-            ->where('required', true)
-            ->distinct()
-            ->pluck('recipient_id')
-            ->all();
-        $withSignature = array_map('intval', $withSignature);
+            ->whereIn('document_version_id', $versionIds)
+            ->get(['id', 'recipient_id', 'type', 'required']);
 
-        foreach ($recipientIds as $recipientId) {
-            if (! in_array($recipientId, $withSignature, true)) {
+        $byRecipient = $fields->groupBy('recipient_id');
+
+        foreach ($recipients as $recipient) {
+            /** @var Collection<int, SigningField> $mine */
+            $mine = $byRecipient->get($recipient->getKey(), collect());
+
+            if (! $recipient->role->allowsFields() && $mine->isNotEmpty()) {
+                return false;
+            }
+
+            if (! $recipient->role->allowsVisualSignature()
+                && $mine->contains(fn (SigningField $field): bool => $field->type->isImageBased())) {
+                return false;
+            }
+
+            if ($recipient->role->requiresSignatureField()
+                && ! $mine->contains(fn (SigningField $field): bool => $field->type === FieldType::Signature && $field->required)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * @return Collection<int, Recipient>
+     */
+    private function recipients(Envelope $envelope): Collection
+    {
+        return Recipient::withoutOrganizationScope()
+            ->where('envelope_id', $envelope->getKey())
+            ->get();
     }
 }

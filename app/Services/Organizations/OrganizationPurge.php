@@ -76,26 +76,46 @@ class OrganizationPurge
      * @var list<string>
      */
     private const TABLES_IN_ORDER = [
+        // Fase 2: "acessar como" é RESTRICT na organização (a sessão de suporte é trilha);
+        // sai antes de tudo. `platform_audit_events` fica — é trilha da plataforma
+        // (organization_id nullOnDelete).
+        'impersonations',
         'signing_field_values',
+        'acceptance_documents',
         'signature_acceptances',
         'signing_fields',
         'auth_challenges',
+        'signing_session_documents',
         'signing_sessions',
         'recipient_access_links',
         'delivery_attempts',
+        'envelope_reminders',
         'recipients',
         'verification_records',
         'audit_events',
         'document_versions',
         'documents',
+        // Fase 2: etiquetas e modelos (filhos antes dos pais).
+        'envelope_tag',
+        'tags',
+        'template_usages',
+        'template_fields',
+        'template_roles',
+        'template_variables',
+        'template_versions',
+        'templates',
         'plan_consumptions',
         'payments',
         'subscriptions',
         'envelopes',
         'certificate_references',
         'membership_invitations',
+        // Fase 2: acesso por pasta e times antes de pastas/membros; funções depois dos membros.
+        'folder_permissions',
+        'teams',
         'folders',
         'memberships',
+        'roles',
     ];
 
     public function __construct(

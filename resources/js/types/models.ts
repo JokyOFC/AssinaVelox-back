@@ -7,6 +7,7 @@
  * Datas em ISO-8601 UTC (string); valores monetários em centavos (number, BRL).
  */
 import type {
+    AcceptanceAction,
     AuditEventKind,
     AuditEventType,
     AuthMethod,
@@ -20,6 +21,7 @@ import type {
     NotificationChannel,
     NotificationEvent,
     PaymentDisplayStatus,
+    ParticipantRole,
     PaymentStatus,
     PlanCode,
     RecipientStatus,
@@ -176,6 +178,84 @@ export interface EnvelopeDocument {
         rotation: number;
     }[];
     sha256: string | null;
+    /** Fase 2 §2.3: posição na lista de arquivos do envelope (1..N). */
+    position?: number;
+    /** Fase 2 §2.3: nome de exibição do arquivo. */
+    name?: string | null;
+}
+
+/** Flags de domínio da organização no wizard (`DomainFeatures::forOrganization`). */
+export interface DomainFeatures {
+    multi_document: boolean;
+    participant_roles: boolean;
+}
+
+/** Opção do seletor de papel (`WizardProps.participant_roles`). */
+export interface ParticipantRoleOption {
+    value: ParticipantRole;
+    label: string;
+}
+
+/**
+ * Arquivo do envelope no detalhe (`EnvelopeDetailResource::documentsList`,
+ * docs/fase-2/multi-documento-e-papeis.md §8.2). URLs já trazem `?document=`.
+ */
+export interface EnvelopeFile {
+    id: string;
+    position: number;
+    name: string | null;
+    original_name: string | null;
+    processing_status: DocumentProcessingStatus;
+    pages: number;
+    size_bytes: number;
+    sha256_original: string | null;
+    sha256_sent: string | null;
+    sha256_final: string | null;
+    pdf_url: string | null;
+    downloads: {
+        original: string | null;
+        signed: string | null;
+        evidence: string | null;
+    };
+}
+
+/**
+ * Lembretes automáticos e envio agendado (`ReminderProps::forEnvelope`,
+ * docs/fase-2/lembretes-e-agendamento.md §7.2). `available = false` mantém a
+ * interface da Fase 1.
+ */
+export interface ReminderSettings {
+    enabled: boolean;
+    first_after_days: number;
+    interval_days: number;
+    max_count: number;
+}
+
+export interface EnvelopeReminders {
+    available: boolean;
+    settings: ReminderSettings;
+    /** `true` = sem cadência própria (no rascunho, é o padrão da organização). */
+    is_default: boolean;
+    /** "A cada 2 dias · até 3 lembretes" | "Desativados". */
+    summary: string;
+    limits: Record<
+        'first_after_days' | 'interval_days' | 'max_count',
+        { min: number; max: number }
+    >;
+    window: { window_start_hour: number; window_end_hour: number };
+    /** Identificador IANA (cálculos de data); nunca exibido cru. */
+    timezone: string;
+    /** "horário de Brasília (GMT-3)" — rótulo PT-BR do fuso, para as frases. */
+    timezone_label: string;
+    recipients: Record<string, { sent: number; last_sent_at: string | null }>;
+    scheduled_send: {
+        at: string;
+        at_local: string;
+        input_value: string;
+        timezone: string;
+        timezone_label: string;
+    } | null;
+    scheduled_send_limits: { min_lead_minutes: number; max_days: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +274,9 @@ export interface WizardRecipient {
     color_index: number; // paleta de `components/envelopes/recipient-colors`
     channel: 'email';
     auth_methods: AuthMethod[]; // Fase 1: sempre ['email_otp']
+    /** Fase 2 §2.4: papel de domínio. Ausente = `signer` (Fase 1). */
+    participant_role?: ParticipantRole;
+    participant_role_label?: string;
 }
 
 /**
@@ -227,6 +310,8 @@ export interface WizardField {
     options?: WizardFieldOptions | null;
     /** Rubrica gerada pelo servidor ("Rubrica em todas as páginas"): não editável. */
     auto?: boolean;
+    /** Fase 2 §2.3: ULID do arquivo onde o campo fica (ausente/null = o primeiro). */
+    document_id?: string | null;
 }
 
 export interface EnvelopeCan {
@@ -263,7 +348,10 @@ export interface Envelope {
     status: EnvelopeStatus;
     status_label: string;
     signed_count: number;
+    /** Só quem participa da coleta (visualizadores ficam fora — Fase 2 §2.4). */
     recipients_count: number;
+    /** Fase 2 §2.4: visualizadores (recebem cópia, não assinam). */
+    viewers_count?: number;
     folder: FolderRef | null;
     creator: UserRef;
     created_at: string;
@@ -285,6 +373,8 @@ export interface Envelope {
         sha256_signed: string | null;
         pdf_url: string;
     } | null;
+    /** Fase 2 §2.3: todos os arquivos, na ordem (o primeiro é `document`). */
+    documents?: EnvelopeFile[];
     downloads: {
         original: string | null;
         signed: string | null;
@@ -327,11 +417,17 @@ export interface Recipient {
     can_resend: boolean;
     can_edit: boolean;
     evidence: RecipientEvidence | null; // só quando signed
+    /** Fase 2 §2.4 (aditivos). */
+    participant_role?: ParticipantRole;
+    participant_role_label?: string;
+    acceptance_action?: AcceptanceAction | null;
 }
 
 export interface SigningField {
     id: string;
     recipient_id: string;
+    /** Fase 2 §2.3: arquivo onde o campo está. */
+    document_id?: string | null;
     type: FieldType;
     page: number | 'all';
     x: number;

@@ -4,19 +4,21 @@ namespace App\Services\Envelopes;
 
 use App\Enums\DocumentProcessingStatus;
 use App\Enums\FieldType;
+use App\Enums\RecipientRole;
 use App\Enums\SigningOrder;
 use App\Models\Document;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\SigningField;
+use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Documents\EnvelopeReadiness as DocumentReadiness;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Completude do envelope em preparo e recálculo do estado (docs/arquitetura.md §3.2).
  *
- * `ready` exige documento `ready` com versão exibível, ≥ 1 destinatário e todo
- * destinatário com pelo menos um campo de assinatura nessa versão.
+ * `ready` exige todos os documentos `ready` com versão exibível, ≥ 1 signatário e as regras
+ * de campo por papel (docs/fase-2/multi-documento-e-papeis.md §5).
  *
  * Divisão com o pipeline documental: quem DECIDE e GRAVA o status é
  * `App\Services\Documents\EnvelopeReadiness` (contrato público do agente B-DOC, também
@@ -75,20 +77,46 @@ final class EnvelopeReadiness
      */
     public static function documentIssues(Envelope $envelope): array
     {
-        $document = self::document($envelope);
+        $documents = self::documents($envelope);
 
-        if ($document === null) {
+        if ($documents->isEmpty()) {
             return ['Envie o documento que será assinado.'];
         }
 
-        return match ($document->processing_status) {
-            DocumentProcessingStatus::Ready => $document->current_version_id === null
-                ? ['O documento ainda não tem uma versão preparada para assinatura.']
-                : [],
-            DocumentProcessingStatus::Uploaded, DocumentProcessingStatus::Converting => ['O documento ainda está sendo processado.'],
-            DocumentProcessingStatus::Failed => ['Falha ao processar o arquivo. Envie um PDF válido.'],
-            DocumentProcessingStatus::Blocked => ['O arquivo está protegido por senha ou já assinado digitalmente. Envie outro PDF.'],
-        };
+        if ($documents->count() === 1) {
+            $document = $documents->first();
+
+            return match ($document->processing_status) {
+                DocumentProcessingStatus::Ready => $document->current_version_id === null
+                    ? ['O documento ainda não tem uma versão preparada para assinatura.']
+                    : [],
+                DocumentProcessingStatus::Uploaded, DocumentProcessingStatus::Converting => ['O documento ainda está sendo processado.'],
+                DocumentProcessingStatus::Failed => ['Falha ao processar o arquivo. Envie um PDF válido.'],
+                DocumentProcessingStatus::Blocked => ['O arquivo está protegido por senha ou já assinado digitalmente. Envie outro PDF.'],
+            };
+        }
+
+        // Vários documentos: a pendência diz QUAL arquivo precisa de atenção.
+        $issues = [];
+
+        foreach ($documents as $document) {
+            $name = $document->original_filename;
+
+            $issue = match ($document->processing_status) {
+                DocumentProcessingStatus::Ready => $document->current_version_id === null
+                    ? sprintf('O arquivo "%s" ainda não tem uma versão preparada para assinatura.', $name)
+                    : null,
+                DocumentProcessingStatus::Uploaded, DocumentProcessingStatus::Converting => sprintf('O arquivo "%s" ainda está sendo processado.', $name),
+                DocumentProcessingStatus::Failed => sprintf('Falha ao processar o arquivo "%s". Envie um PDF válido.', $name),
+                DocumentProcessingStatus::Blocked => sprintf('O arquivo "%s" está protegido por senha ou já assinado digitalmente. Envie outro PDF.', $name),
+            };
+
+            if ($issue !== null) {
+                $issues[] = $issue;
+            }
+        }
+
+        return $issues;
     }
 
     /**
@@ -96,7 +124,11 @@ final class EnvelopeReadiness
      */
     public static function recipientIssues(Envelope $envelope): array
     {
-        if (self::recipients($envelope)->isEmpty()) {
+        $recipients = self::recipients($envelope);
+
+        // Visualizador e aprovador não bastam: o envelope existe para colher a assinatura
+        // de alguém.
+        if (! $recipients->contains(fn (Recipient $recipient): bool => $recipient->role === RecipientRole::Signer)) {
             return ['Adicione pelo menos um signatário.'];
         }
 
@@ -125,36 +157,77 @@ final class EnvelopeReadiness
             return [];
         }
 
-        $document = self::document($envelope);
-        $versionId = $document?->current_version_id;
+        $documents = self::documents($envelope);
 
-        if ($versionId === null) {
+        /** @var array<int, int> $pageCounts versão exibível corrente => páginas do documento */
+        $pageCounts = [];
+
+        foreach ($documents as $document) {
+            if ($document->current_version_id !== null) {
+                $pageCounts[(int) $document->current_version_id] = (int) $document->page_count;
+            }
+        }
+
+        if ($pageCounts === []) {
             return [];
         }
 
         $fields = self::fields($envelope)
-            ->filter(fn (SigningField $field): bool => $field->document_version_id === $versionId);
+            ->filter(fn (SigningField $field): bool => array_key_exists((int) $field->document_version_id, $pageCounts));
 
         $issues = [];
+
+        // Signatários e testemunhas: pelo menos um campo de assinatura obrigatório.
+        $needsSignature = $recipients
+            ->filter(fn (Recipient $recipient): bool => $recipient->role->requiresSignatureField())
+            ->values();
 
         $withSignature = $fields
             ->filter(fn (SigningField $field): bool => $field->type === FieldType::Signature && $field->required)
             ->pluck('recipient_id')
             ->unique();
 
-        $missing = $recipients
+        $missing = $needsSignature
             ->reject(fn (Recipient $recipient): bool => $withSignature->contains($recipient->getKey()))
             ->values();
 
         if ($missing->isNotEmpty()) {
-            $issues[] = $missing->count() === $recipients->count()
+            $issues[] = $missing->count() === $needsSignature->count()
                 ? 'Todo signatário precisa de pelo menos um campo de assinatura.'
                 : 'Sem campo de assinatura: '.$missing->pluck('name')->join(', ', ' e ').'.';
         }
 
-        $pageCount = (int) $document->page_count;
+        // Aprovador: aprova o conteúdo, não assina — nada de assinatura nem de rubrica.
+        $approversWithVisual = $recipients
+            ->filter(fn (Recipient $recipient): bool => $recipient->role === RecipientRole::Approver)
+            ->filter(fn (Recipient $recipient): bool => $fields->contains(
+                fn (SigningField $field): bool => $field->recipient_id === $recipient->getKey() && $field->type->isImageBased(),
+            ))
+            ->values();
 
-        if ($pageCount > 0 && $fields->contains(fn (SigningField $field): bool => $field->page < 1 || $field->page > $pageCount)) {
+        if ($approversWithVisual->isNotEmpty()) {
+            $issues[] = 'Aprovador não recebe campo de assinatura ou rubrica: '.$approversWithVisual->pluck('name')->join(', ', ' e ').'.';
+        }
+
+        // Visualizador: só recebe cópia — campo nenhum.
+        $viewersWithFields = $recipients
+            ->filter(fn (Recipient $recipient): bool => $recipient->role === RecipientRole::Viewer)
+            ->filter(fn (Recipient $recipient): bool => $fields->contains(
+                fn (SigningField $field): bool => $field->recipient_id === $recipient->getKey(),
+            ))
+            ->values();
+
+        if ($viewersWithFields->isNotEmpty()) {
+            $issues[] = 'Visualizador não recebe campos: '.$viewersWithFields->pluck('name')->join(', ', ' e ').'.';
+        }
+
+        $outOfRange = $fields->contains(function (SigningField $field) use ($pageCounts): bool {
+            $pageCount = $pageCounts[(int) $field->document_version_id] ?? 0;
+
+            return $pageCount > 0 && ($field->page < 1 || $field->page > $pageCount);
+        });
+
+        if ($outOfRange) {
             $issues[] = 'Há campos posicionados em páginas que não existem no documento.';
         }
 
@@ -173,9 +246,19 @@ final class EnvelopeReadiness
 
     // -- Acesso às relações (usa o que já estiver carregado) ---------------------------
 
-    private static function document(Envelope $envelope): ?Document
+    /**
+     * Documentos na ordem de apresentação. Com um único documento, o `document` já
+     * carregado pelo chamador é reaproveitado (é o mesmo registro).
+     *
+     * @return \Illuminate\Support\Collection<int, Document>
+     */
+    private static function documents(Envelope $envelope): \Illuminate\Support\Collection
     {
-        return $envelope->relationLoaded('document') ? $envelope->document : $envelope->document()->first();
+        if ($envelope->relationLoaded('orderedDocuments')) {
+            return $envelope->orderedDocuments->values();
+        }
+
+        return EnvelopeDocuments::ordered($envelope);
     }
 
     /**

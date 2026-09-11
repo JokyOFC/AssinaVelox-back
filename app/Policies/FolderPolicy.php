@@ -2,12 +2,14 @@
 
 namespace App\Policies;
 
+use App\Enums\Permission;
 use App\Models\Folder;
 use App\Models\User;
 use App\Policies\Concerns\ResolvesMembership;
 
 /**
- * Pastas: qualquer membro vê; criar/renomear/excluir só owner/admin (manage_folders).
+ * Pastas: qualquer membro vê a lista; criar/renomear/excluir e definir quem acessa cada
+ * pasta exigem `manage_folders` (owner/admin nos papéis de sistema).
  */
 class FolderPolicy
 {
@@ -40,6 +42,14 @@ class FolderPolicy
 
     public function manage(User $user, ?Folder $folder = null): bool
     {
-        return $this->isAdmin($user, $folder?->organization_id);
+        return $this->allows($user, Permission::ManageFolders, $folder?->organization_id);
+    }
+
+    /**
+     * Conceder/retirar acesso à pasta (para funções, times ou pessoas).
+     */
+    public function grantAccess(User $user, ?Folder $folder = null): bool
+    {
+        return $this->manage($user, $folder);
     }
 }

@@ -71,7 +71,7 @@ export interface RecipientsIndexProps {
     };
     tabs: Record<RecipientTab, number>;
     recipients: Paginated<RecipientListItem>;
-    can?: { resend_pending: boolean };
+    can?: { resend_pending: boolean; export?: boolean };
 }
 
 /** Assinaturas (ROUTES §2.9; DESIGN §6.6) — versão inicial funcional com dados reais. */
@@ -281,12 +281,18 @@ export default function RecipientsIndex({
                 subtitle="Todos os signatários dos seus documentos, com status e evidências."
                 actions={
                     <>
-                        <Button asChild variant="outline">
-                            <a href={recipientsExport.url({ query: filters })}>
-                                <Download className="size-[15px]" /> Exportar
-                                CSV
-                            </a>
-                        </Button>
+                        {(can?.export ?? true) && (
+                            <Button asChild variant="outline">
+                                <a
+                                    href={recipientsExport.url({
+                                        query: filters,
+                                    })}
+                                >
+                                    <Download className="size-[15px]" />{' '}
+                                    Exportar CSV
+                                </a>
+                            </Button>
+                        )}
                         {(can?.resend_pending ?? true) && (
                             <Button
                                 variant="outline"

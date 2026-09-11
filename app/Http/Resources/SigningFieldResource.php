@@ -52,6 +52,11 @@ class SigningFieldResource extends JsonResource
             'page_rotation' => (int) $this->page_rotation,
             'value' => $value?->value_text,
             'signed' => $recipient?->status === RecipientStatus::Signed,
+            // Fase 2 §2.3: arquivo onde o campo está (ULID de `documents`). `null` quando o
+            // chamador não carregou `documentVersion.document`.
+            'document_id' => $this->relationLoaded('documentVersion')
+                ? $this->documentVersion?->document?->ulid
+                : null,
         ];
     }
 }

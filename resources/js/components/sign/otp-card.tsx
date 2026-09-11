@@ -39,6 +39,11 @@ export interface OtpCardProps {
     /** `limits.otp_length` e `limits.otp_ttl_minutes` das props. */
     codeLength?: number;
     ttlMinutes?: number;
+    /**
+     * Título da etapa. Fase 2 §2.4: o aprovador confirma "para aprovar" e o
+     * visualizador "para ver o documento"; o padrão é o texto da Fase 1.
+     */
+    heading?: string;
 }
 
 /** Segundos que faltam até `until`; 0 quando já passou. */
@@ -74,6 +79,7 @@ export function OtpCard({
     errors,
     codeLength = 6,
     ttlMinutes = 10,
+    heading = 'Confirme sua identidade para assinar',
 }: OtpCardProps) {
     const CODE_LENGTH = codeLength;
     const requested = otp?.sent_at != null;
@@ -148,7 +154,7 @@ export function OtpCard({
                     Olá, {firstName}
                 </p>
                 <h1 className="mt-1.5 text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
-                    Confirme sua identidade para assinar
+                    {heading}
                 </h1>
                 <p className="text-text-secondary mt-2 text-[13.5px] leading-[1.55]">
                     {senderName} ({organizationName}) enviou este documento para

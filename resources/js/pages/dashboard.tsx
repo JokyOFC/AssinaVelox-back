@@ -102,6 +102,8 @@ export interface DashboardProps {
     };
     recent_envelopes: EnvelopeListItem[];
     recent_total: number;
+    /** Permissão `export_data` (o servidor responde 403 sem ela). */
+    can?: { export: boolean };
 }
 
 const RANGE_OPTIONS: { value: Range; label: string }[] = [
@@ -147,6 +149,7 @@ export default function Dashboard({
     plan_usage,
     recent_envelopes,
     recent_total,
+    can,
 }: DashboardProps) {
     const [reloading, setReloading] = useState(false);
     const [resending, setResending] = useState<string | null>(null);
@@ -307,12 +310,18 @@ export default function Dashboard({
                 subtitle={`${greeting.date_label} · ${plural(greeting.pending_count, 'documento aguarda assinatura', 'documentos aguardam assinatura')}`}
                 actions={
                     <>
-                        <Button asChild variant="outline">
-                            <a href={dashboardExport.url({ query: { range } })}>
-                                <Download className="size-[15px]" />
-                                Exportar
-                            </a>
-                        </Button>
+                        {(can?.export ?? true) && (
+                            <Button asChild variant="outline">
+                                <a
+                                    href={dashboardExport.url({
+                                        query: { range },
+                                    })}
+                                >
+                                    <Download className="size-[15px]" />
+                                    Exportar
+                                </a>
+                            </Button>
+                        )}
                         <Button asChild>
                             <Link href={envelopesCreate()}>
                                 <Plus

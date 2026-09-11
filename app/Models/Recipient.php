@@ -9,6 +9,7 @@ use App\Exceptions\InvalidRecipientTransition;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\HasPublicUlid;
 use Database\Factories\RecipientFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -59,6 +60,8 @@ class Recipient extends Model
         // sendo o enum de domínio (RECONCILIACAO §1, migration add_role_label_to_recipients).
         'role_label',
         'order_index',
+        // Posição na lista, separada da vez de assinar (`order_index`).
+        'position',
         'status',
         'auth_method',
         'signed_at',
@@ -74,6 +77,7 @@ class Recipient extends Model
         'status' => RecipientStatus::Pending->value,
         'auth_method' => AuthMethod::EmailOtp->value,
         'order_index' => 1,
+        'position' => 0,
         'notification_count' => 0,
     ];
 
@@ -85,6 +89,7 @@ class Recipient extends Model
         return [
             'role' => RecipientRole::class,
             'order_index' => 'integer',
+            'position' => 'integer',
             'status' => RecipientStatus::class,
             'auth_method' => AuthMethod::class,
             'signed_at' => 'datetime',
@@ -124,6 +129,41 @@ class Recipient extends Model
     public function isTerminal(): bool
     {
         return $this->status->isTerminal();
+    }
+
+    // -- Papel (Fase 2 §2.4) ----------------------------------------------------------
+
+    /**
+     * Participa da coleta (signer, witness, approver): tem vez, é pendência e conta para a
+     * conclusão. O visualizador (viewer) não.
+     */
+    public function participates(): bool
+    {
+        return $this->role->participates();
+    }
+
+    public function isViewer(): bool
+    {
+        return $this->role === RecipientRole::Viewer;
+    }
+
+    /**
+     * Aguarda aceite/aprovação desta pessoa? Visualizador nunca é pendência.
+     */
+    public function isPendingParticipant(): bool
+    {
+        return $this->participates() && $this->status->isPendingSignature();
+    }
+
+    /**
+     * Escopo: só quem participa da coleta (exclui visualizadores).
+     *
+     * @param  Builder<Recipient>  $query
+     * @return Builder<Recipient>
+     */
+    public function scopeParticipating(Builder $query): Builder
+    {
+        return $query->whereIn($query->qualifyColumn('role'), RecipientRole::participatingValues());
     }
 
     // -- Relações ---------------------------------------------------------------------

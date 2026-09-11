@@ -18,6 +18,8 @@ use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Services\AdminLog\ToolFlags;
+use App\Services\Impersonation\ImpersonationManager;
 use App\Support\Csv;
 use App\Support\OrganizationSettings;
 use App\Support\TaxId;
@@ -117,6 +119,24 @@ class OrganizationController extends Controller
                 'storage' => ['used_bytes' => $storage, 'limit_bytes' => $this->storageLimit($plan)],
             ],
             'members' => MembershipResource::collection($members->sortByDesc(fn (Membership $m) => $m->role->weight())->values())->resolve($request),
+            // Fase 2 — "Acessar como" (flag `impersonation`; ver docs/fase-2/tags-relatorios-e-logs.md).
+            // Só membros ativos, que não são platform admin nem estão bloqueados, são elegíveis.
+            // Nome próprio (integração I-2A): `impersonation` é a prop COMPARTILHADA da sessão
+            // de suporte ativa; reutilizá-lo aqui acendia o banner com "encerra em NaN min".
+            'impersonation_options' => [
+                'enabled' => ToolFlags::impersonation(),
+                'ttl_minutes' => ImpersonationManager::TTL_MINUTES,
+                'eligible' => ToolFlags::impersonation()
+                    ? $members
+                        ->filter(fn (Membership $m): bool => $m->status === MembershipStatus::Active
+                            && ! $m->user->is_platform_admin
+                            && $m->user->getAttribute('blocked_at') === null
+                            && ! $m->user->is($request->user()))
+                        ->map(fn (Membership $m): string => (string) $m->getKey())
+                        ->values()
+                        ->all()
+                    : [],
+            ],
             'payments' => Payment::forOrganization($organization)
                 ->latest()
                 ->limit(24)

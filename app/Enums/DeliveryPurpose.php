@@ -17,6 +17,11 @@ enum DeliveryPurpose: string
     case InvitationAccepted = 'invitation_accepted';
     case ProductNews = 'product_news';
 
+    // Fase 2 §2.5 (B-REM): lembrete automático ao signatário e aviso ao remetente de que o
+    // envio agendado não pôde sair. Ver docs/fase-2/lembretes-e-agendamento.md.
+    case Reminder = 'reminder';
+    case ScheduledSend = 'scheduled_send';
+
     public function label(): string
     {
         return match ($this) {
@@ -32,6 +37,8 @@ enum DeliveryPurpose: string
             self::DailyDigest => 'Resumo diário de pendências',
             self::InvitationAccepted => 'Convite de usuário aceito',
             self::ProductNews => 'Novidades do produto',
+            self::Reminder => 'Lembrete automático',
+            self::ScheduledSend => 'Envio agendado',
         };
     }
 }

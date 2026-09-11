@@ -23,7 +23,11 @@ import {
     check_file as verifyCheckFile,
     index as verifyIndex,
 } from '@/routes/verify';
-import type { RecipientStatus, SignatureStatus } from '@/types/enums';
+import type {
+    ParticipantRole,
+    RecipientStatus,
+    SignatureStatus,
+} from '@/types/enums';
 
 /**
  * Resultado publicável (`App\Services\Verification\PublicVerification::result`).
@@ -66,8 +70,23 @@ export interface PublicVerificationResult {
         status: RecipientStatus;
         status_label: string;
         signed_at: string | null;
+        /** Fase 2 §2.4: só quando o envelope usa papel diferente de signatário. */
+        participant_role?: ParticipantRole;
+        participant_role_label?: string;
     }[];
     events_summary: { label: string; occurred_at: string }[];
+    /**
+     * Fase 2 §2.3: só quando o envelope tem mais de um arquivo (lista fechada de chaves
+     * — privacidade §11). Com um arquivo, o resultado é o da Fase 1.
+     */
+    documents?: {
+        position: number;
+        name: string;
+        pages: number;
+        sent_sha256: string | null;
+        final_sha256: string | null;
+    }[];
+    documents_count?: number;
 }
 
 export interface VerifyShowProps {
@@ -82,6 +101,8 @@ export interface VerifyShowProps {
     file_check?: {
         matches: 'signed' | 'original' | 'none';
         checked_sha256: string;
+        /** Fase 2 §2.3: com vários arquivos, qual deles conferiu. */
+        document?: { position: number; name: string } | null;
     } | null;
 }
 
@@ -144,7 +165,12 @@ export default function VerifyShow({
         { kind: 'final', value: finalHash, label: 'Arquivo final' },
     ];
 
-    const checkTargets: FileCheckTarget[] = [
+    const files = result.documents ?? [];
+    const multi = files.length > 1;
+    const fileName = (file: { position: number; name: string }) =>
+        `${file.position}. ${file.name}`;
+
+    const singleTargets: FileCheckTarget[] = [
         ...(finalHash
             ? [
                   {
@@ -167,6 +193,32 @@ export default function VerifyShow({
             : []),
     ];
 
+    // Fase 2 §2.3: o arquivo em mãos pode ser qualquer um dos arquivos do envelope.
+    const checkTargets: FileCheckTarget[] = multi
+        ? files.flatMap((file) => [
+              ...(file.final_sha256
+                  ? [
+                        {
+                            key: `final-${file.position}`,
+                            label: `Arquivo final de ${fileName(file)}`,
+                            sha256: file.final_sha256,
+                            canonical: true,
+                        },
+                    ]
+                  : []),
+              ...(file.sent_sha256 && file.sent_sha256 !== file.final_sha256
+                  ? [
+                        {
+                            key: `sent-${file.position}`,
+                            label: `documento enviado (${fileName(file)})`,
+                            sha256: file.sent_sha256,
+                            hint: 'É a versão apresentada aos participantes, antes dos campos preenchidos e do relatório de evidências — não é o arquivo final.',
+                        },
+                    ]
+                  : []),
+          ])
+        : singleTargets;
+
     return (
         <>
             <Head title={`Verificação · ${formattedCode}`} />
@@ -184,8 +236,10 @@ export default function VerifyShow({
                         <b className="text-foreground">
                             {result.organization_name}
                         </b>
-                        {result.pages > 0 &&
-                            ` · ${plural(result.pages, 'página')}`}{' '}
+                        {multi
+                            ? ` · ${plural(result.documents_count ?? files.length, 'arquivo')}`
+                            : result.pages > 0 &&
+                              ` · ${plural(result.pages, 'página')}`}{' '}
                         · {plural(result.recipients.length, 'participante')}
                     </p>
                     <div className="border-border bg-sidebar flex items-center justify-between gap-2 rounded-lg border p-3">
@@ -240,6 +294,18 @@ export default function VerifyShow({
                             >
                                 <span>
                                     <b>{recipient.name_masked}</b>
+                                    {recipient.participant_role &&
+                                        recipient.participant_role !==
+                                            'signer' &&
+                                        recipient.participant_role_label && (
+                                            <span className="text-primary font-semibold">
+                                                {' '}
+                                                ·{' '}
+                                                {
+                                                    recipient.participant_role_label
+                                                }
+                                            </span>
+                                        )}
                                     {recipient.role && (
                                         <span className="text-muted-foreground">
                                             {' '}
@@ -294,15 +360,54 @@ export default function VerifyShow({
                         variant="small"
                         title="Integridade (SHA-256)"
                         description={
-                            completed
-                                ? 'Cada resumo identifica bytes diferentes do mesmo documento.'
-                                : 'O resumo do arquivo final é publicado quando o documento é concluído.'
+                            multi
+                                ? completed
+                                    ? `Este documento reúne ${plural(files.length, 'arquivo')}. Cada arquivo tem os próprios resumos.`
+                                    : `Este documento reúne ${plural(files.length, 'arquivo')}. O resumo final de cada um é publicado quando o documento é concluído.`
+                                : completed
+                                  ? 'Cada resumo identifica bytes diferentes do mesmo documento.'
+                                  : 'O resumo do arquivo final é publicado quando o documento é concluído.'
                         }
                     />
-                    <HashList
-                        entries={hashEntries}
-                        primerText={result.hash_primer}
-                    />
+                    {multi ? (
+                        <ol className="flex flex-col gap-2">
+                            {files.map((file) => (
+                                <li
+                                    key={file.position}
+                                    className="border-border rounded-lg border p-3 text-[12.5px]"
+                                >
+                                    <p className="font-semibold">
+                                        {fileName(file)}
+                                        {file.pages > 0 && (
+                                            <span className="text-muted-foreground font-normal">
+                                                {' '}
+                                                · {plural(file.pages, 'página')}
+                                            </span>
+                                        )}
+                                    </p>
+                                    <HashLine
+                                        label="Enviado"
+                                        value={file.sent_sha256}
+                                    />
+                                    <HashLine
+                                        label="Final"
+                                        value={file.final_sha256}
+                                        empty="publicado na conclusão"
+                                    />
+                                </li>
+                            ))}
+                            {result.hash_primer && (
+                                <p className="text-muted-foreground text-[12px] leading-[1.5]">
+                                    {result.hash_primer}
+                                </p>
+                            )}
+                        </ol>
+                    ) : (
+                        <HashList
+                            entries={hashEntries}
+                            primerText={result.hash_primer}
+                        />
+                    )}
                     {checkTargets.length > 0 && (
                         <FileCheck
                             targets={checkTargets}
@@ -371,6 +476,33 @@ export default function VerifyShow({
                 </Button>
             </div>
         </>
+    );
+}
+
+/** Um resumo de um arquivo (Fase 2 §2.3), com cópia. */
+function HashLine({
+    label,
+    value,
+    empty = '—',
+}: {
+    label: string;
+    value: string | null;
+    empty?: string;
+}) {
+    return (
+        <div className="mt-1.5 grid grid-cols-[64px_1fr] items-start gap-2">
+            <span className="text-muted-foreground">{label}</span>
+            {value ? (
+                <span className="flex min-w-0 items-start gap-1">
+                    <code className="min-w-0 font-mono text-[11.5px] break-all">
+                        {value}
+                    </code>
+                    <CopyButton value={value} className="size-5 shrink-0" />
+                </span>
+            ) : (
+                <span className="text-muted-foreground">{empty}</span>
+            )}
+        </div>
     );
 }
 

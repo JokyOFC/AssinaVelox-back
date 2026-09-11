@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Envelopes;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Documents\StoreEnvelopeDocumentRequest;
 use App\Http\Resources\DocumentResource;
+use App\Models\Document;
 use App\Models\Envelope;
 use App\Services\Documents\DocumentIntake;
 use App\Services\Documents\DocumentStorage;
+use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Documents\Exceptions\UploadRejectedException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,9 +22,15 @@ use Symfony\Component\HttpFoundation\Response;
  * Documento do envelope: upload, remoção, status do processamento e visualização.
  * ROUTES §1.2 · pipeline em docs/preparacao-documental.md.
  *
- * Fase 1: exatamente um documento por envelope. Enviar um segundo arquivo **substitui** o
- * anterior — os campos posicionados sobre ele são apagados e o envelope volta a `draft`,
- * porque a geometria dos campos só faz sentido sobre a versão a que se referem.
+ * Fase 1 (flag `multi_document` desligada): exatamente um documento por envelope. Enviar um
+ * segundo arquivo **substitui** o anterior — os campos posicionados sobre ele são apagados e
+ * o envelope volta a `draft`, porque a geometria dos campos só faz sentido sobre a versão a
+ * que se referem.
+ *
+ * Fase 2 §2.3 (flag ligada): cada upload acrescenta um arquivo. As rotas existentes aceitam
+ * o parâmetro opcional `document` (ULID) para escolher o arquivo em `destroy`, `preview` e
+ * `status`; sem ele, valem para o PRIMEIRO arquivo — exatamente o contrato da Fase 1. Um ULID
+ * de outro envelope ou de outra organização responde 404.
  */
 class EnvelopeDocumentController extends Controller
 {
@@ -59,7 +67,8 @@ class EnvelopeDocumentController extends Controller
     }
 
     /**
-     * Remove o documento (e os campos posicionados sobre ele); o envelope volta a `draft`.
+     * Remove um arquivo (e os campos posicionados sobre ele); com um arquivo só, o envelope
+     * volta a `draft`.
      */
     public function destroy(Request $request, Envelope $envelope): RedirectResponse
     {
@@ -69,8 +78,10 @@ class EnvelopeDocumentController extends Controller
             return back()->with('error', 'Ação indisponível no status atual.');
         }
 
+        $document = $this->requestedDocument($request, $envelope);
+
         try {
-            $removed = $this->intake->remove($envelope, $request->user(), $request);
+            $removed = $this->intake->remove($envelope, $request->user(), $request, $document);
         } catch (UploadRejectedException $exception) {
             // A checagem acima decidiu pelo model do route binding; o serviço decide de
             // novo sob lock. Se outra requisição concluiu o envio no meio do caminho, a
@@ -92,7 +103,7 @@ class EnvelopeDocumentController extends Controller
     {
         Gate::authorize('view', $envelope);
 
-        $document = $envelope->document;
+        $document = $this->requestedDocument($request, $envelope) ?? $envelope->document;
 
         if ($document === null) {
             return response()->json([
@@ -108,9 +119,21 @@ class EnvelopeDocumentController extends Controller
             ]);
         }
 
-        return response()->json(DocumentResource::processing($document) + [
+        $payload = DocumentResource::processing($document) + [
             'envelope_status' => $envelope->status->value,
-        ]);
+        ];
+
+        $documents = EnvelopeDocuments::ordered($envelope);
+
+        // Vários arquivos: o polling recebe o estado de todos numa só resposta.
+        if ($documents->count() > 1) {
+            $payload['documents'] = $documents
+                ->map(fn (Document $item): array => ['id' => $item->ulid, 'position' => (int) $item->position] + DocumentResource::processing($item))
+                ->values()
+                ->all();
+        }
+
+        return response()->json($payload);
     }
 
     /**
@@ -123,7 +146,7 @@ class EnvelopeDocumentController extends Controller
     {
         Gate::authorize('view', $envelope);
 
-        $document = $envelope->document;
+        $document = $this->requestedDocument($request, $envelope) ?? $envelope->document;
         $version = $document?->currentVersion;
 
         if ($document === null || $version === null || ! $this->storage->exists($version)) {
@@ -155,5 +178,24 @@ class EnvelopeDocumentController extends Controller
         Gate::authorize('view', $envelope);
 
         abort(404, 'Miniaturas são geradas no navegador a partir do PDF; não há imagem no servidor.');
+    }
+
+    /**
+     * Arquivo pedido por `?document={ulid}`. Ausente → null (o chamador usa o primeiro).
+     * Presente e de outro envelope/organização → 404: nunca se confirma a existência.
+     */
+    private function requestedDocument(Request $request, Envelope $envelope): ?Document
+    {
+        $ulid = $request->query('document', $request->input('document'));
+
+        if (! is_string($ulid) || $ulid === '') {
+            return null;
+        }
+
+        $document = EnvelopeDocuments::find($envelope, $ulid);
+
+        abort_if($document === null, 404, 'Arquivo não encontrado.');
+
+        return $document;
     }
 }

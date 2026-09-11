@@ -2,13 +2,18 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\DocumentVersionKind;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
+use App\Models\DocumentVersion;
 use App\Models\Envelope;
+use App\Models\Recipient;
+use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Verification\SignatureNarrative;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Envelope da página de detalhe (ROUTES §2.7 → types/models.ts `Envelope`).
@@ -26,7 +31,9 @@ class EnvelopeDetailResource extends JsonResource
     public function toArray(Request $request): array
     {
         $user = $request->user();
-        $signedCount = $this->recipients->where('status', RecipientStatus::Signed)->count();
+        // Visualizadores (Fase 2 §2.4) não assinam nem são pendência: ficam fora do progresso.
+        $participants = $this->recipients->filter(fn (Recipient $recipient): bool => $recipient->participates());
+        $signedCount = $participants->where('status', RecipientStatus::Signed)->count();
         $document = $this->document;
         $originalVersion = $document->currentVersion ?? $document?->originalVersion;
         $finalVersion = $this->finalVersion;
@@ -55,7 +62,8 @@ class EnvelopeDetailResource extends JsonResource
                 ? SignatureNarrative::completedLabel($record)
                 : $this->status->labelWithProgress($signedCount),
             'signed_count' => $signedCount,
-            'recipients_count' => $this->recipients->count(),
+            'recipients_count' => $participants->count(),
+            'viewers_count' => $this->recipients->count() - $participants->count(),
             'folder' => $this->folder ? ['id' => $this->folder->ulid, 'name' => $this->folder->name] : null,
             'creator' => UserRefResource::ref($this->creator) ?? ['id' => '', 'name' => '—', 'initials' => '—'],
             'created_at' => $this->created_at?->toIso8601String(),
@@ -80,6 +88,9 @@ class EnvelopeDetailResource extends JsonResource
                 // e imagem isso não é PDF e o PDF.js não abriria (docs/preparacao-documental.md).
                 'pdf_url' => route('envelopes.document.preview', ['envelope' => $this->ulid]),
             ] : null,
+            // Fase 2 §2.3: todos os arquivos, na ordem de apresentação (`document` acima é o
+            // primeiro, mantido para o contrato da Fase 1).
+            'documents' => self::documentsList($this->resource, $completed, $canView),
             'downloads' => [
                 'original' => $document && $canView ? route('envelopes.download', ['envelope' => $this->ulid, 'type' => 'original']) : null,
                 'signed' => $completed && $canView ? route('envelopes.download', ['envelope' => $this->ulid, 'type' => 'signed']) : null,
@@ -103,6 +114,60 @@ class EnvelopeDetailResource extends JsonResource
                 'move' => $user?->can('move', $this->resource) ?? false,
             ],
         ];
+    }
+
+    /**
+     * Um item por arquivo do envelope, com os resumos conhecidos e as URLs por documento.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function documentsList(Envelope $envelope, bool $completed, bool $canView): array
+    {
+        $documents = EnvelopeDocuments::ordered($envelope);
+
+        if ($documents->isEmpty()) {
+            return [];
+        }
+
+        $versions = DocumentVersion::withoutOrganizationScope()
+            ->whereIn('document_id', $documents->pluck('id')->all())
+            ->get(['id', 'document_id', 'kind', 'sha256', 'size_bytes', 'page_count', 'version_number'])
+            ->groupBy('document_id');
+
+        $items = [];
+
+        foreach ($documents as $document) {
+            $document->setRelation('envelope', $envelope);
+
+            /** @var Collection<int, DocumentVersion> $mine */
+            $mine = $versions->get($document->getKey(), collect());
+
+            $original = $mine->where('kind', DocumentVersionKind::Original)->sortBy('version_number')->first();
+            $current = $document->current_version_id === null ? null : $mine->firstWhere('id', $document->current_version_id);
+            $sent = $document->sent_version_id === null ? null : $mine->firstWhere('id', $document->sent_version_id);
+            $final = $document->final_version_id === null ? null : $mine->firstWhere('id', $document->final_version_id);
+
+            $items[] = [
+                'id' => $document->ulid,
+                'position' => (int) $document->position,
+                'name' => $document->name,
+                'original_name' => $document->original_filename,
+                'processing_status' => $document->processing_status->value,
+                'pages' => (int) ($document->page_count ?? $current->page_count ?? 0),
+                'size_bytes' => (int) ($original->size_bytes ?? $current->size_bytes ?? 0),
+                'sha256_original' => $original?->sha256,
+                'sha256_sent' => $sent?->sha256,
+                'sha256_final' => $final?->sha256,
+                'pdf_url' => $current === null ? null : route('envelopes.document.preview', DocumentResource::routeParameters($document)),
+                'downloads' => [
+                    'original' => $canView ? route('envelopes.download', ['envelope' => $envelope->ulid, 'type' => 'original', 'document' => $document->ulid]) : null,
+                    'signed' => $completed && $canView ? route('envelopes.download', ['envelope' => $envelope->ulid, 'type' => 'signed', 'document' => $document->ulid]) : null,
+                    'evidence' => $completed && $canView ? route('envelopes.download', ['envelope' => $envelope->ulid, 'type' => 'evidence', 'document' => $document->ulid]) : null,
+                ],
+            ];
+        }
+
+        return $items;
     }
 
     /**

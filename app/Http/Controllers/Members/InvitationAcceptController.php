@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureCurrentOrganization;
 use App\Models\MembershipInvitation;
 use App\Services\Organizations\Invitations;
+use App\Support\PermissionsInvitationGrants;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -35,7 +36,7 @@ class InvitationAcceptController extends Controller
             'invitation' => $invitation ? [
                 'organization_name' => $invitation->organization->name,
                 'organization_initials' => $invitation->organization->initials,
-                'role_label' => $invitation->role->label(),
+                'role_label' => PermissionsInvitationGrants::roleLabel($invitation),
                 'email' => $invitation->email,
                 'invited_by' => $invitation->inviter->name ?? 'AssinaVelox',
                 'expires_at' => $invitation->expires_at->toIso8601String(),
@@ -72,6 +73,12 @@ class InvitationAcceptController extends Controller
         }
 
         $membership = $this->invitations->accept($invitation, $user);
+
+        // Fase 2: função personalizada e pastas oferecidas no convite valem só para a
+        // membership criada por ESTE aceite (reativação não herda nada).
+        if ($membership->wasRecentlyCreated) {
+            PermissionsInvitationGrants::apply($invitation, $membership);
+        }
 
         $request->session()->forget(Invitations::PENDING_SESSION_KEY);
         $request->session()->put(EnsureCurrentOrganization::SESSION_KEY, $membership->organization_id);

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEventType;
+use App\Enums\Permission;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Http\Resources\RecipientListItemResource;
 use App\Jobs\Envelopes\ResendPendingInvitations;
@@ -76,7 +78,12 @@ class RecipientController extends Controller
             'kpis' => $this->kpis($membership, $timezone),
             'tabs' => $tabs,
             'recipients' => RecipientListItemResource::collection($recipients),
-            'can' => ['resend_pending' => $membership->role->canManageMembers()],
+            // Mesma permissão que a rota exige (`org.role` → Permissions::routeAllows).
+            'can' => [
+                'resend_pending' => $membership->hasPermission(Permission::ManageAnyEnvelope),
+                // Mesma regra de `export()`.
+                'export' => $membership->hasPermission(Permission::ExportData),
+            ],
         ]);
     }
 
@@ -90,6 +97,10 @@ class RecipientController extends Controller
 
         $current = CurrentOrganization::instance();
         $membership = $current->membership();
+
+        // `export_data` = "Planilhas CSV dos documentos e assinaturas visíveis".
+        abort_unless($membership->hasPermission(Permission::ExportData), 403, 'Sua função não permite exportar dados.');
+
         $timezone = $current->get()->timezone;
 
         $query = $this->applyTab(
@@ -156,6 +167,8 @@ class RecipientController extends Controller
                 RecipientStatus::Notified->value,
                 RecipientStatus::Viewed->value,
             ])
+            // Mesma seleção de ResendInvitations::eligible(): visualizador não é pendência.
+            ->whereIn('recipients.role', RecipientRole::participatingValues())
             ->count();
 
         if ($pending === 0) {
@@ -239,11 +252,13 @@ class RecipientController extends Controller
     protected function applyTab(Builder $query, string $tab): Builder
     {
         return match ($tab) {
+            // Fase 2 §2.4: o visualizador só acompanha — não tem aceite a dar, então não é
+            // pendência (na Fase 1 todos são `signer` e o filtro não muda nada).
             'pending' => $query->whereIn('recipients.status', [
                 RecipientStatus::Pending->value,
                 RecipientStatus::Notified->value,
                 RecipientStatus::Viewed->value,
-            ]),
+            ])->whereIn('recipients.role', RecipientRole::participatingValues()),
             'signed' => $query->where('recipients.status', RecipientStatus::Signed->value),
             'refused' => $query->where('recipients.status', RecipientStatus::Refused->value),
             'expired' => $query->whereIn('recipients.status', [
@@ -277,15 +292,21 @@ class RecipientController extends Controller
             ])
             ->count();
 
-        $pending = (clone $visible())->whereIn('recipients.status', [
+        // Os três indicadores falam de quem tem aceite a dar: o visualizador (Fase 2 §2.4)
+        // não pode estar pendente, "visualizar" para ele não é passo de coleta, e ele não
+        // recusa — contá-lo no total diluiria a taxa de recusa.
+        $participating = fn (): Builder => (clone $visible())
+            ->whereIn('recipients.role', RecipientRole::participatingValues());
+
+        $pending = $participating()->whereIn('recipients.status', [
             RecipientStatus::Pending->value,
             RecipientStatus::Notified->value,
             RecipientStatus::Viewed->value,
         ])->count();
 
-        $viewed = (clone $visible())->where('recipients.status', RecipientStatus::Viewed->value)->count();
+        $viewed = $participating()->where('recipients.status', RecipientStatus::Viewed->value)->count();
 
-        $total = (clone $visible())->count();
+        $total = $participating()->count();
 
         $refused = (clone $visible())
             ->where('recipients.status', RecipientStatus::Refused->value)

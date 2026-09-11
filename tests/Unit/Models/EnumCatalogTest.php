@@ -62,9 +62,27 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
     // sessão de assinatura, não a leitura (docs/entrega-fase-1.md §10.3).
     $review = ['document.presented'];
 
+    // Fase 2, onda A (roadmap §1 T7: eventos novos entram no catálogo, nada é renomeado).
+    // Registro por área em docs/fase-2/*.md.
+    $phase2 = [
+        // Vários documentos e papéis (docs/fase-2/multi-documento-e-papeis.md).
+        'documents.reordered', 'approval.recorded', 'document.finalized',
+        // Lembretes e envio agendado (docs/fase-2/lembretes-e-agendamento.md).
+        'envelope.scheduled', 'envelope.schedule_canceled', 'reminder.sent', 'reminder.skipped',
+        // Funções personalizadas, times e acesso por pasta (docs/fase-2/permissoes-e-times.md).
+        'role.created', 'role.updated', 'role.deleted', 'membership.role_changed',
+        'team.created', 'team.updated', 'team.deleted', 'folder_access.updated',
+        // Modelos (docs/fase-2/modelos.md).
+        'template.created', 'template.updated', 'template.version_created', 'template.duplicated',
+        'template.archived', 'template.restored', 'template.used',
+        // Etiquetas, relatórios e "acessar como" (docs/fase-2/tags-relatorios-e-logs.md).
+        'tag.created', 'tag.updated', 'tag.deleted', 'tags.applied', 'tags.removed',
+        'report.exported', 'impersonation.started', 'impersonation.ended', 'impersonation.page_viewed',
+    ];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review])
-        ->toHaveCount(45);
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2])
+        ->toHaveCount(45 + 31);
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

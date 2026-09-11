@@ -4,6 +4,7 @@ namespace App\Services\Signing;
 
 use App\Enums\AccessLinkPurpose;
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Organization;
@@ -130,6 +131,21 @@ final class SignerLinkResolver
      */
     public static function stateFor(Envelope $envelope, Recipient $recipient): ?string
     {
+        // Visualizador (Fase 2 §2.4): não tem vez nem aceite. O link abre enquanto o
+        // envelope está vivo e depois da conclusão (para a cópia final); encerramento sem
+        // conclusão mostra o motivo, como para os demais.
+        if ($recipient->role === RecipientRole::Viewer) {
+            return match (true) {
+                $recipient->status === RecipientStatus::Canceled => SignerContext::STATE_CANCELED,
+                $recipient->status === RecipientStatus::Expired => SignerContext::STATE_EXPIRED,
+                $envelope->status === EnvelopeStatus::Expired => SignerContext::STATE_EXPIRED,
+                $envelope->status === EnvelopeStatus::Canceled,
+                $envelope->status === EnvelopeStatus::Refused => SignerContext::STATE_CANCELED,
+                in_array($envelope->status, [EnvelopeStatus::InProgress, EnvelopeStatus::Finalizing, EnvelopeStatus::Completed], true) => SignerContext::STATE_ACTIVE,
+                default => null,
+            };
+        }
+
         return match (true) {
             $recipient->status === RecipientStatus::Signed => match ($envelope->status) {
                 EnvelopeStatus::Completed => SignerContext::STATE_COMPLETED,

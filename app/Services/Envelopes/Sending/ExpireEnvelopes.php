@@ -4,6 +4,7 @@ namespace App\Services\Envelopes\Sending;
 
 use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
@@ -215,12 +216,16 @@ class ExpireEnvelopes implements RevalidatesEnvelopeExpiration
             return false;
         }
 
+        // Só quem participa da coleta (Fase 2 §2.4): o visualizador fica em notified/viewed
+        // para sempre, não tem prazo a cumprir e não pode ter o link somente leitura revogado
+        // pelo link novo do aviso. Na Fase 1 todos são `signer` — nada muda.
         $pending = $envelope->recipients()
             ->whereIn('status', [
                 RecipientStatus::Pending->value,
                 RecipientStatus::Notified->value,
                 RecipientStatus::Viewed->value,
             ])
+            ->whereIn('role', RecipientRole::participatingValues())
             ->get();
 
         if ($pending->isEmpty()) {

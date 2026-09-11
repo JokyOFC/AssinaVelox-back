@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Support\PermissionsSystemRoles;
 use App\Support\TaxId;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -47,6 +48,9 @@ class CreateOrganization
                 'role' => MembershipRole::Owner,
                 'status' => MembershipStatus::Active,
             ]);
+
+            // Fase 2 (docs/fase-2/permissoes-e-times.md): papéis de sistema da organização.
+            PermissionsSystemRoles::ensureFor($organization);
 
             $now = now();
 

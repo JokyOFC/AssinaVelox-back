@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Enums\EnvelopeStatus;
 use App\Enums\MembershipStatus;
+use App\Enums\Permission;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Http\Resources\EnvelopeResource;
 use App\Models\DocumentVersion;
@@ -91,6 +93,8 @@ class DashboardController extends Controller
             'pending_recipients' => $this->pendingRecipients($membership),
             'pending_recipients_total' => EnvelopeVisibility::recipients($membership)
                 ->whereIn('status', [RecipientStatus::Notified->value, RecipientStatus::Viewed->value])
+                // Fase 2 §2.4: visualizador não é pendência (na Fase 1 todos são `signer`).
+                ->whereIn('role', RecipientRole::participatingValues())
                 ->whereHas('envelope', fn (Builder $q) => $q->where('status', EnvelopeStatus::InProgress->value))
                 ->count(),
             'plan_usage' => $this->planUsage(),
@@ -102,6 +106,8 @@ class DashboardController extends Controller
                     ->get(),
             )->resolve($request),
             'recent_total' => $visible()->count(),
+            // Mesma regra de `export()`: a planilha exige `export_data` (Fase 1: todo papel tem).
+            'can' => ['export' => $membership->hasPermission(Permission::ExportData)],
         ]);
     }
 
@@ -111,10 +117,16 @@ class DashboardController extends Controller
         $range = $validated['range'] ?? '30d';
 
         $current = CurrentOrganization::instance();
+        $membership = $current->membership();
+
+        // Catálogo de permissões: `export_data` = "Planilhas CSV dos documentos e assinaturas
+        // visíveis". Owner, admin e Operador têm; uma função personalizada pode não ter.
+        abort_unless($membership->hasPermission(Permission::ExportData), 403, 'Sua função não permite exportar dados.');
+
         $timezone = $current->get()->timezone;
         [$from] = $this->period($range, Carbon::now($timezone));
 
-        $query = EnvelopeVisibility::envelopes($current->membership())
+        $query = EnvelopeVisibility::envelopes($membership)
             ->with(['folder', 'creator', 'recipients'])
             ->where('created_at', '>=', $from->utc())
             ->orderBy('created_at');
@@ -244,6 +256,7 @@ class DashboardController extends Controller
         return EnvelopeVisibility::recipients($membership)
             ->with('envelope')
             ->whereIn('status', [RecipientStatus::Notified->value, RecipientStatus::Viewed->value])
+            ->whereIn('role', RecipientRole::participatingValues())
             ->whereHas('envelope', fn (Builder $q) => $q->where('status', EnvelopeStatus::InProgress->value))
             ->orderBy('last_notified_at')
             ->limit(4)

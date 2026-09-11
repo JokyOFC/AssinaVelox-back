@@ -29,6 +29,22 @@ export interface OrgPermissions {
     cancel_any_envelope: boolean; // owner, admin
     view_all_envelopes: boolean; // owner, admin
     manage_folders: boolean; // owner, admin
+    /*
+     * Fase 2 §2.14 — o catálogo completo (App\Enums\Permission) só chega com a flag
+     * `custom_roles` ligada (Permissions::sharedMap); desligada, só as 7 chaves acima.
+     */
+    create_envelopes?: boolean;
+    send_envelopes?: boolean;
+    manage_any_envelope?: boolean;
+    manage_templates?: boolean;
+    manage_tags?: boolean;
+    view_reports?: boolean;
+    export_data?: boolean;
+    view_audit_log?: boolean;
+    manage_roles?: boolean;
+    manage_teams?: boolean;
+    manage_integrations?: boolean;
+    transfer_ownership?: boolean;
 }
 
 export interface CurrentOrganization {
@@ -71,6 +87,19 @@ export interface Features {
     sms_whatsapp: boolean;
     branding: boolean;
     multi_document: boolean;
+    certificate_login: boolean;
+    /** Fase 2 §2.4 — testemunha, aprovador e visualizador. */
+    participant_roles: boolean;
+    /** Fase 2 §2.14 — funções personalizadas, times e acesso por pasta. */
+    custom_roles: boolean;
+    /** Fase 2 §2.14 — etiquetas, relatórios e registro de atividades da organização. */
+    tags: boolean;
+    reports: boolean;
+    audit_log: boolean;
+    /** Fase 2 §2.14 — painel interno (só o interruptor global). */
+    admin_users: boolean;
+    admin_audit: boolean;
+    impersonation: boolean;
 }
 
 export interface SharedProps {

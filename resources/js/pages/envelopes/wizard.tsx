@@ -11,13 +11,18 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { remindersUrl } from '@/components/envelopes/phase2-routes';
+import { ScheduleSendCard } from '@/components/envelopes/schedule-send-card';
 import { useWizardAutosave } from '@/components/envelopes/use-wizard-autosave';
 import {
     WizardStepDocument,
     type WizardMetadata,
 } from '@/components/envelopes/wizard-step-document';
 import { WizardStepFields } from '@/components/envelopes/wizard-step-fields';
-import { WizardStepRecipients } from '@/components/envelopes/wizard-step-recipients';
+import {
+    roleOf,
+    WizardStepRecipients,
+} from '@/components/envelopes/wizard-step-recipients';
 import { WizardStepReview } from '@/components/envelopes/wizard-step-review';
 import { usePdfDocument } from '@/components/pdf/use-pdf-document';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -41,8 +46,12 @@ import { sync as fieldsSync } from '@/routes/envelopes/fields';
 import { sync as recipientsSync } from '@/routes/envelopes/recipients';
 import type { FieldType, SigningOrder } from '@/types/enums';
 import type {
+    DomainFeatures,
     EnvelopeDocument,
+    EnvelopeReminders,
     FolderRef,
+    ParticipantRoleOption,
+    ReminderSettings,
     WizardField,
     WizardRecipient,
 } from '@/types/models';
@@ -65,6 +74,20 @@ export interface WizardProps {
     };
     step: 1 | 2 | 3 | 4;
     document: EnvelopeDocument | null;
+    /**
+     * Fase 2 §2.3: todos os arquivos, na ordem de apresentação (o primeiro é `document`).
+     * Contrato em docs/fase-2/multi-documento-e-papeis.md §8.1.
+     */
+    documents?: EnvelopeDocument[];
+    /** Flags de domínio desta organização (config global **e** plano). */
+    domain_features?: DomainFeatures;
+    /** Rótulos PT-BR dos papéis de participante (Fase 2 §2.4). */
+    participant_roles?: ParticipantRoleOption[];
+    /**
+     * Fase 2 §2.5 (`ReminderProps::forEnvelope`). Ainda não exposta por
+     * `EnvelopeController::edit` — ausente, a interface fica a da Fase 1.
+     */
+    reminders?: EnvelopeReminders | null;
     recipients: WizardRecipient[];
     fields: WizardField[];
     folders: FolderRef[];
@@ -85,6 +108,8 @@ export interface WizardProps {
         accepted_mimes: string[];
         max_fields: number;
         max_recipients: number;
+        /** Fase 2 §2.3: 1 com a flag `multi_document` desligada. */
+        max_documents?: number;
         /**
          * Mínimo por tipo em pontos da página exibida, tal como o servidor valida
          * (`FieldGeometry::MINIMUM_POINTS`). `FIELD_MIN_SIZE_PT` em
@@ -110,6 +135,17 @@ export const WIZARD_STEPS = [
     { key: 'fields', title: 'Campos', subtitle: 'Posição das assinaturas' },
     { key: 'review', title: 'Revisar', subtitle: 'Mensagem e envio' },
 ];
+
+/** Com papéis de participante (Fase 2 §2.4) o passo 2 deixa de ser só de quem assina. */
+const WIZARD_STEPS_WITH_ROLES = WIZARD_STEPS.map((definition) =>
+    definition.key === 'recipients'
+        ? {
+              ...definition,
+              title: 'Participantes',
+              subtitle: 'Quem assina, aprova ou acompanha',
+          }
+        : definition,
+);
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -141,15 +177,33 @@ function recipientIsComplete(recipient: WizardRecipient): boolean {
     );
 }
 
+function isProcessing(document: EnvelopeDocument): boolean {
+    return (
+        document.processing.status === 'uploaded' ||
+        document.processing.status === 'converting'
+    );
+}
+
 /**
  * Wizard "Nova solicitação" (ROUTES §2.6; DESIGN §6.5): 4 passos com autosave
  * por grupo de alterações. O passo vem da query-string (`?step=`) e o backend
  * pode rebaixá-lo quando o passo anterior está incompleto.
+ *
+ * Fase 2 (onda A) — cada recurso só aparece com a sua flag; com todas desligadas o
+ * wizard é exatamente o da Fase 1 (mesmas telas, mesmos payloads):
+ * - `domain_features.multi_document` (§2.3): vários arquivos, ordem e campos por arquivo;
+ * - `domain_features.participant_roles` (§2.4): testemunha, aprovador e visualizador;
+ * - `reminders.available` (§2.5): lembretes automáticos e envio agendado;
+ * - `features.templates` (§2.1): seletor "Ou comece por um modelo".
  */
 export default function EnvelopeWizard({
     envelope,
     step,
     document,
+    documents: serverDocuments,
+    domain_features,
+    participant_roles,
+    reminders,
     recipients: serverRecipients,
     fields: serverFields,
     folders,
@@ -159,8 +213,18 @@ export default function EnvelopeWizard({
     completeness,
     issues: serverIssues,
 }: WizardProps) {
-    const { errors } = usePage().props;
+    const { errors, features } = usePage().props;
     const autosave = useWizardAutosave();
+
+    const multiDocument =
+        domain_features?.multi_document ?? features?.multi_document ?? false;
+    const participantRoles =
+        domain_features?.participant_roles ??
+        features?.participant_roles ??
+        false;
+    const remindersAvailable = reminders?.available === true;
+    const templatesEnabled = features?.templates === true;
+    const maxDocuments = multiDocument ? (limits.max_documents ?? 1) : 1;
 
     const [metadata, setMetadata] = useState<WizardMetadata>({
         title: envelope.title,
@@ -178,36 +242,74 @@ export default function EnvelopeWizard({
     const [initialsOnAllPages, setInitialsOnAllPages] = useState(
         envelope.initials_on_all_pages,
     );
+    const [reminderSettings, setReminderSettings] =
+        useState<ReminderSettings | null>(reminders?.settings ?? null);
 
     const [page, setPage] = useState(1);
     const [zoom, setZoom] = useState(DEFAULT_ZOOM);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const [uploadLabel, setUploadLabel] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const [discarding, setDiscarding] = useState(false);
     const [discardingInFlight, setDiscardingInFlight] = useState(false);
+    // Ordem otimista dos arquivos enquanto o PATCH não volta.
+    const [documentOrder, setDocumentOrder] = useState<string[] | null>(null);
+    const [activeDocumentId, setActiveDocumentId] = useState<string | null>(
+        null,
+    );
+
+    // Lista de arquivos: com a flag desligada é só o `document` da Fase 1.
+    const baseDocuments: EnvelopeDocument[] = multiDocument
+        ? serverDocuments && serverDocuments.length > 0
+            ? serverDocuments
+            : document
+              ? [document]
+              : []
+        : document
+          ? [document]
+          : [];
+    const orderedDocuments = documentOrder
+        ? [...baseDocuments].sort(
+              (a, b) =>
+                  documentOrder.indexOf(a.id) - documentOrder.indexOf(b.id),
+          )
+        : baseDocuments;
+    const firstDocumentId = orderedDocuments[0]?.id ?? null;
+    const activeDocument: EnvelopeDocument | null = multiDocument
+        ? (orderedDocuments.find(
+              (candidate) => candidate.id === activeDocumentId,
+          ) ??
+          orderedDocuments[0] ??
+          null)
+        : document;
 
     const processing = document?.processing.status ?? null;
+    const anyProcessing = multiDocument
+        ? orderedDocuments.some(isProcessing)
+        : processing === 'uploaded' || processing === 'converting';
     // `ready` do resource já exige versão exibível — não basta o status.
-    const documentReady = document?.processing.ready === true;
+    const activeReady = activeDocument?.processing.ready === true;
     const pdf = usePdfDocument(
-        step === 3 && documentReady ? (document?.pdf_url ?? null) : null,
+        step === 3 && activeReady ? (activeDocument?.pdf_url ?? null) : null,
     );
 
     // Enquanto o arquivo é convertido, recarrega só o que muda (ROUTES §2.6).
     useEffect(() => {
-        if (processing !== 'uploaded' && processing !== 'converting') {
+        if (!anyProcessing) {
             return;
         }
 
         const timer = setInterval(() => {
             router.reload({
-                only: ['document', 'completeness', 'envelope'],
+                only: multiDocument
+                    ? ['document', 'documents', 'completeness', 'envelope']
+                    : ['document', 'completeness', 'envelope'],
             });
         }, POLL_INTERVAL_MS);
 
         return () => clearInterval(timer);
-    }, [processing]);
+    }, [anyProcessing, multiDocument]);
 
     // ---------------------------------------------------------------- autosave
 
@@ -258,6 +360,10 @@ export default function EnvelopeWizard({
                         email: recipient.email,
                         role: recipient.role,
                         order: index + 1,
+                        // Fase 2 §2.4: só com a flag; ausente, o servidor mantém o papel.
+                        ...(participantRoles
+                            ? { participant_role: roleOf(recipient) }
+                            : {}),
                     })),
                 },
                 {
@@ -351,6 +457,10 @@ export default function EnvelopeWizard({
                 placeholder: field.placeholder,
                 // Preserva chaves que o backend acrescente (`default`, etc.).
                 options: { ...field.options },
+                // Fase 2 §2.3: arquivo do campo (ausente = o primeiro, como na Fase 1).
+                ...(multiDocument
+                    ? { document_id: field.document_id ?? firstDocumentId }
+                    : {}),
             }),
         );
 
@@ -391,6 +501,26 @@ export default function EnvelopeWizard({
         });
     };
 
+    const saveReminders = (next: ReminderSettings): void => {
+        autosave.schedule('reminders', (done) => {
+            router.put(
+                remindersUrl(envelope.id),
+                {
+                    enabled: next.enabled,
+                    first_after_days: next.first_after_days,
+                    interval_days: next.interval_days,
+                    max_count: next.max_count,
+                },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onSuccess: () => done(true),
+                    onError: () => done(false),
+                },
+            );
+        });
+    };
+
     const patchMetadata = (patch: Partial<WizardMetadata>): void => {
         const next = { ...metadata, ...patch };
         setMetadata(next);
@@ -403,19 +533,64 @@ export default function EnvelopeWizard({
         saveRecipients(recipients, order);
     };
 
-    const changeRecipients = (next: WizardRecipient[]): void => {
-        setRecipients(next);
-        saveRecipients(next);
-    };
-
     const changeFields = (next: WizardField[]): void => {
         setFields(next);
         saveFields(next);
     };
 
+    const changeRecipients = (next: WizardRecipient[]): void => {
+        setRecipients(next);
+        saveRecipients(next);
+
+        if (!participantRoles) {
+            return;
+        }
+
+        // Regras de papel (§2.4), as mesmas do `FieldSync`: visualizador não tem campo
+        // e aprovador não tem assinatura nem rubrica. Trocar o papel remove o que deixou
+        // de valer, em vez de deixar o servidor recusar a lista inteira.
+        const affected = new Set<string>();
+        const pruned = fields.filter((field) => {
+            const owner = next.find(
+                (recipient) =>
+                    recipient.client_id === field.recipient_client_id,
+            );
+
+            if (!owner) {
+                return true;
+            }
+
+            const participantRole = roleOf(owner);
+            const keep =
+                participantRole !== 'viewer' &&
+                !(
+                    participantRole === 'approver' &&
+                    (field.type === 'signature' || field.type === 'initials')
+                );
+
+            if (!keep) {
+                affected.add(owner.name || 'participante');
+            }
+
+            return keep;
+        });
+
+        if (pruned.length !== fields.length) {
+            changeFields(pruned);
+            toast.info(
+                `Campos removidos de ${[...affected].join(', ')}: visualizadores não recebem campos e aprovadores não recebem assinatura nem rubrica.`,
+            );
+        }
+    };
+
     const changeInitials = (value: boolean): void => {
         setInitialsOnAllPages(value);
         saveFields(fields, value);
+    };
+
+    const changeReminders = (next: ReminderSettings): void => {
+        setReminderSettings(next);
+        saveReminders(next);
     };
 
     // ------------------------------------------------------------------ upload
@@ -442,12 +617,131 @@ export default function EnvelopeWizard({
         );
     };
 
+    /**
+     * Fila de uploads (Fase 2 §2.3): um `POST document.store` por arquivo, em sequência,
+     * na ordem escolhida — o servidor acrescenta cada um ao fim da lista. Um erro para a
+     * fila e mostra o motivo; os arquivos que já subiram continuam no envelope.
+     */
+    const uploadDocuments = (files: File[]): void => {
+        if (files.length === 0) {
+            return;
+        }
+
+        setUploadError(null);
+
+        const finish = () => {
+            setUploadProgress(null);
+            setUploadLabel(null);
+        };
+
+        const upload = (index: number): void => {
+            const file = files[index];
+
+            if (!file) {
+                finish();
+
+                return;
+            }
+
+            let settled = false;
+
+            setUploadLabel(
+                files.length > 1
+                    ? `Enviando arquivo ${index + 1} de ${files.length}: ${file.name}`
+                    : `Enviando ${file.name}…`,
+            );
+            setUploadProgress(0);
+
+            router.post(
+                documentStore(envelope.id).url,
+                { file },
+                {
+                    forceFormData: true,
+                    preserveState: true,
+                    preserveScroll: true,
+                    onProgress: (event) =>
+                        setUploadProgress(Math.round(event?.percentage ?? 0)),
+                    onSuccess: () => {
+                        settled = true;
+                        upload(index + 1);
+                    },
+                    onError: (bag) => {
+                        settled = true;
+                        setUploadError(
+                            `${file.name}: ${bag.file ?? 'não foi possível enviar o arquivo.'}`,
+                        );
+                        finish();
+                    },
+                    onFinish: () => {
+                        if (!settled) {
+                            finish();
+                        }
+                    },
+                },
+            );
+        };
+
+        upload(0);
+    };
+
     const removeDocument = (): void => {
         setFields([]);
         setUploadError(null);
         router.delete(documentDestroy(envelope.id).url, {
             preserveState: true,
             preserveScroll: true,
+        });
+    };
+
+    /** Remove um arquivo (Fase 2): só os campos daquele arquivo saem. */
+    const removeDocumentItem = (target: EnvelopeDocument): void => {
+        setFields((current) =>
+            current.filter(
+                (field) => (field.document_id ?? firstDocumentId) !== target.id,
+            ),
+        );
+        setUploadError(null);
+
+        if (activeDocumentId === target.id) {
+            setActiveDocumentId(null);
+            setPage(1);
+        }
+
+        router.delete(
+            documentDestroy(envelope.id, { query: { document: target.id } })
+                .url,
+            { preserveState: true, preserveScroll: true },
+        );
+    };
+
+    /** Reordena os arquivos (`PATCH envelopes.update` com `document_order`). */
+    const moveDocument = (from: number, to: number): void => {
+        if (to < 0 || to >= orderedDocuments.length || from === to) {
+            return;
+        }
+
+        const ids = orderedDocuments.map((item) => item.id);
+        const [moved] = ids.splice(from, 1);
+        ids.splice(to, 0, moved);
+        setDocumentOrder(ids);
+
+        autosave.schedule('documents', (done) => {
+            router.patch(
+                envelopeUpdate(envelope.id).url,
+                { document_order: ids },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onSuccess: () => done(true),
+                    onError: () => done(false),
+                    onFinish: () =>
+                        setDocumentOrder((current) =>
+                            current && current.join('|') === ids.join('|')
+                                ? null
+                                : current,
+                        ),
+                },
+            );
         });
     };
 
@@ -496,6 +790,7 @@ export default function EnvelopeWizard({
     ];
 
     const issues = [...new Set([...(serverIssues ?? []), ...localIssues])];
+    const scheduled = remindersAvailable && reminders?.scheduled_send != null;
 
     const send = (): void => {
         autosave.flush();
@@ -549,7 +844,9 @@ export default function EnvelopeWizard({
         ),
     });
 
-    const stepperSteps = WIZARD_STEPS.map((definition, index) => ({
+    const stepperSteps = (
+        participantRoles ? WIZARD_STEPS_WITH_ROLES : WIZARD_STEPS
+    ).map((definition, index) => ({
         ...definition,
         disabled:
             (index >= 1 && !completeness.document) ||
@@ -624,16 +921,29 @@ export default function EnvelopeWizard({
                 {step === 1 && (
                     <WizardStepDocument
                         document={document}
+                        documents={orderedDocuments}
+                        multiDocument={multiDocument}
+                        maxDocuments={maxDocuments}
                         folders={folders}
                         limits={limits}
                         metadata={metadata}
                         onMetadataChange={patchMetadata}
                         onUpload={uploadDocument}
+                        onUploadMany={uploadDocuments}
                         onUploadReject={setUploadError}
                         onRemove={removeDocument}
+                        onRemoveDocument={removeDocumentItem}
+                        onMoveDocument={moveDocument}
                         uploadProgress={uploadProgress}
+                        uploadLabel={uploadLabel}
                         uploadError={uploadError}
                         errors={errors}
+                        reminders={remindersAvailable ? reminders : null}
+                        reminderSettings={
+                            remindersAvailable ? reminderSettings : null
+                        }
+                        onRemindersChange={changeReminders}
+                        templatesEnabled={templatesEnabled}
                     />
                 )}
 
@@ -645,13 +955,22 @@ export default function EnvelopeWizard({
                         onChange={changeRecipients}
                         onSigningOrderChange={changeSigningOrder}
                         errors={errors}
+                        participantRoles={participantRoles}
+                        roleOptions={participant_roles}
                     />
                 )}
 
                 {step === 3 &&
-                    (document ? (
+                    (activeDocument ? (
                         <WizardStepFields
-                            document={document}
+                            document={activeDocument}
+                            documents={orderedDocuments}
+                            multiDocument={multiDocument}
+                            onDocumentChange={(id) => {
+                                autosave.flush();
+                                setActiveDocumentId(id);
+                                setPage(1);
+                            }}
                             pdf={pdf}
                             page={page}
                             onPageChange={setPage}
@@ -675,6 +994,9 @@ export default function EnvelopeWizard({
                 {step === 4 && (
                     <WizardStepReview
                         document={document}
+                        documents={orderedDocuments}
+                        multiDocument={multiDocument}
+                        participantRoles={participantRoles}
                         folder={
                             folders.find(
                                 (folder) => folder.id === metadata.folder_id,
@@ -698,6 +1020,30 @@ export default function EnvelopeWizard({
                         issues={issues}
                         onEditStep={goToStep}
                         disabled={sending}
+                        reminderSettings={
+                            remindersAvailable ? reminderSettings : null
+                        }
+                        scheduleSlot={
+                            remindersAvailable && reminders ? (
+                                <ScheduleSendCard
+                                    envelopeId={envelope.id}
+                                    reminders={reminders}
+                                    canSchedule={
+                                        issues.length === 0 && plan.can_send
+                                    }
+                                    blockedReason={
+                                        issues.length > 0
+                                            ? 'Resolva as pendências acima para agendar o envio.'
+                                            : plan.reason
+                                    }
+                                    waitingSave={
+                                        autosave.status === 'pending' ||
+                                        autosave.status === 'saving'
+                                    }
+                                    errors={errors}
+                                />
+                            ) : undefined
+                        }
                     />
                 )}
 
@@ -745,7 +1091,9 @@ export default function EnvelopeWizard({
                                 ) : (
                                     <Send className="size-[15px]" />
                                 )}
-                                Enviar para assinatura
+                                {scheduled
+                                    ? 'Enviar agora'
+                                    : 'Enviar para assinatura'}
                             </Button>
                         )}
                     </div>

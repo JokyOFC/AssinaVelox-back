@@ -44,9 +44,11 @@ import {
     show as envelopeShow,
 } from '@/routes/envelopes';
 import type {
+    AcceptanceAction,
     AuditEvent,
     AuthMethod,
     Envelope,
+    ParticipantRole,
     RecipientStatus,
     SignatureKind,
     SignatureStatus,
@@ -82,6 +84,45 @@ export interface EvidenceRecipient {
     terms_version?: string | null;
     /** SHA-256 da versão que esta pessoa viu ao aceitar. */
     document_sha256?: string | null;
+    /** Fase 2 §2.4 (aditivos). */
+    participant_role?: ParticipantRole;
+    participant_role_label?: string;
+    acceptance_action?: AcceptanceAction | null;
+    acceptance_action_label?: string | null;
+    /** Fase 2 §2.3: o que o aceite desta pessoa cobriu, arquivo por arquivo. */
+    accepted_documents?: {
+        document_id: string | null;
+        position: number;
+        name: string | null;
+        sha256: string | null;
+    }[];
+}
+
+/**
+ * Arquivo do envelope no dossiê (`EvidenceDossier::documents`, Fase 2 §2.3): os resumos
+ * de cada arquivo e quem registrou aceite sobre ele.
+ */
+export interface EvidenceDocument {
+    id: string;
+    position: number;
+    name: string | null;
+    original_name: string | null;
+    hashes: {
+        original_sha256: string | null;
+        sent_sha256: string | null;
+        consolidated_sha256: string | null;
+        evidence_sha256: string | null;
+        final_sha256: string | null;
+    };
+    accepted_by: {
+        name: string | null;
+        participant_role: ParticipantRole | null;
+        action: AcceptanceAction | null;
+        action_label: string | null;
+        accepted_at: string | null;
+        document_sha256: string | null;
+    }[];
+    downloads: { signed: string | null; evidence: string | null };
 }
 
 export interface EvidenceProps {
@@ -132,6 +173,8 @@ export interface EvidenceProps {
         not_a_certificate?: string;
     };
     verify_url: string;
+    /** Fase 2 §2.3: um item por arquivo (com um arquivo, a página é a da Fase 1). */
+    documents?: EvidenceDocument[];
 }
 
 /**
@@ -155,7 +198,9 @@ export default function EnvelopeEvidence({
     certificate,
     notes,
     verify_url,
+    documents = [],
 }: EvidenceProps) {
+    const multi = documents.length > 1;
     const items = hashes.items ?? [];
     const byKey = (key: string) =>
         items.find((item) => item.key === key)?.value ?? null;
@@ -195,7 +240,7 @@ export default function EnvelopeEvidence({
                   { kind: 'final', value: finalHash },
               ];
 
-    const checkTargets: FileCheckTarget[] = [
+    const singleTargets: FileCheckTarget[] = [
         ...(finalHash
             ? [
                   {
@@ -227,6 +272,53 @@ export default function EnvelopeEvidence({
               ]
             : []),
     ];
+
+    /*
+     * Fase 2 §2.3: com vários arquivos o arquivo local pode ser QUALQUER um deles. Os
+     * finais são os alvos "registrados" (verde); enviado e consolidado de cada um são
+     * etapas intermediárias, com a mesma explicação da versão de um arquivo.
+     */
+    const checkTargets: FileCheckTarget[] = multi
+        ? documents.flatMap((file) => {
+              const name = fileTitle(file);
+              const { final_sha256, sent_sha256, consolidated_sha256 } =
+                  file.hashes;
+
+              return [
+                  ...(final_sha256
+                      ? [
+                            {
+                                key: `final-${file.id}`,
+                                label: `Arquivo final de ${name}`,
+                                sha256: final_sha256,
+                                canonical: true,
+                            },
+                        ]
+                      : []),
+                  ...(sent_sha256 && sent_sha256 !== final_sha256
+                      ? [
+                            {
+                                key: `sent-${file.id}`,
+                                label: `documento enviado (${name})`,
+                                sha256: sent_sha256,
+                                hint: 'É a versão apresentada aos participantes, antes dos campos preenchidos e da página de evidências.',
+                            },
+                        ]
+                      : []),
+                  ...(consolidated_sha256 &&
+                  consolidated_sha256 !== final_sha256
+                      ? [
+                            {
+                                key: `consolidated-${file.id}`,
+                                label: `documento consolidado (${name})`,
+                                sha256: consolidated_sha256,
+                                hint: 'É o PDF com os campos achatados, antes da página de evidências e da assinatura da operadora.',
+                            },
+                        ]
+                      : []),
+              ];
+          })
+        : singleTargets;
 
     return (
         <>
@@ -309,7 +401,13 @@ export default function EnvelopeEvidence({
                                     signingOrderLabels[envelope.signing_order]
                                 }
                             />
-                            {envelope.document && (
+                            {multi && (
+                                <Row
+                                    label="Arquivos"
+                                    value={plural(documents.length, 'arquivo')}
+                                />
+                            )}
+                            {!multi && envelope.document && (
                                 <Row
                                     label="Arquivo"
                                     value={`${envelope.document.original_name} · ${formatBytes(envelope.document.size_bytes)} · ${plural(envelope.document.pages, 'página')}`}
@@ -345,6 +443,14 @@ export default function EnvelopeEvidence({
                                                 <span className="font-semibold">
                                                     {recipient.name}
                                                 </span>
+                                                {recipient.participant_role &&
+                                                    recipient.participant_role !==
+                                                        'signer' && (
+                                                        <span className="border-primary-soft-border bg-primary-soft text-primary rounded-md border px-1.5 py-px text-[11px] font-semibold">
+                                                            {recipient.participant_role_label ??
+                                                                recipient.participant_role}
+                                                        </span>
+                                                    )}
                                                 {recipient.role && (
                                                     <span className="text-muted-foreground text-[12px]">
                                                         · {recipient.role}
@@ -411,19 +517,29 @@ export default function EnvelopeEvidence({
                                                 </Field>
                                                 {recipient.signed_at && (
                                                     <>
-                                                        <Field label="Aceite registrado">
+                                                        <Field
+                                                            label={
+                                                                recipient.acceptance_action ===
+                                                                'approve'
+                                                                    ? 'Aprovação registrada'
+                                                                    : 'Aceite registrado'
+                                                            }
+                                                        >
                                                             {formatDateTime(
                                                                 recipient.accepted_at ??
                                                                     recipient.signed_at,
                                                             )}
                                                         </Field>
                                                         <Field label="Representação visual">
-                                                            {recipient.signature_kind
-                                                                ? signatureKindLabels[
-                                                                      recipient
-                                                                          .signature_kind
-                                                                  ]
-                                                                : '—'}
+                                                            {recipient.acceptance_action ===
+                                                            'approve'
+                                                                ? 'Nenhuma — aprovação eletrônica, sem representação visual'
+                                                                : recipient.signature_kind
+                                                                  ? signatureKindLabels[
+                                                                        recipient
+                                                                            .signature_kind
+                                                                    ]
+                                                                  : '—'}
                                                         </Field>
                                                         <Field label="IP · dispositivo">
                                                             <span className="break-all">
@@ -440,6 +556,49 @@ export default function EnvelopeEvidence({
                                                                         recipient.document_sha256
                                                                     }
                                                                 </span>
+                                                            </Field>
+                                                        )}
+                                                        {recipient.acceptance_action &&
+                                                            recipient.acceptance_action !==
+                                                                'sign' &&
+                                                            recipient.acceptance_action_label && (
+                                                                <Field label="Registro">
+                                                                    {
+                                                                        recipient.acceptance_action_label
+                                                                    }
+                                                                </Field>
+                                                            )}
+                                                        {(recipient
+                                                            .accepted_documents
+                                                            ?.length ?? 0) >
+                                                            1 && (
+                                                            <Field label="Arquivos aceitos">
+                                                                <ul className="flex flex-col gap-0.5">
+                                                                    {recipient.accepted_documents?.map(
+                                                                        (
+                                                                            item,
+                                                                        ) => (
+                                                                            <li
+                                                                                key={`${item.position}-${item.document_id}`}
+                                                                                className="min-w-0"
+                                                                            >
+                                                                                {
+                                                                                    item.position
+                                                                                }
+                                                                                .{' '}
+                                                                                {item.name ??
+                                                                                    `Arquivo ${item.position}`}
+                                                                                {item.sha256 && (
+                                                                                    <span className="text-muted-foreground block font-mono break-all">
+                                                                                        {
+                                                                                            item.sha256
+                                                                                        }
+                                                                                    </span>
+                                                                                )}
+                                                                            </li>
+                                                                        ),
+                                                                    )}
+                                                                </ul>
                                                             </Field>
                                                         )}
                                                         {recipient.terms_version && (
@@ -497,6 +656,8 @@ export default function EnvelopeEvidence({
                             ))}
                         </div>
                     </section>
+
+                    {multi && <EvidenceFiles documents={documents} />}
 
                     <section className="border-border bg-card shadow-card rounded-xl border p-5">
                         <Heading
@@ -562,7 +723,11 @@ export default function EnvelopeEvidence({
                         <Heading
                             variant="small"
                             title="Integridade (SHA-256)"
-                            description="Cada resumo identifica bytes diferentes do mesmo documento."
+                            description={
+                                multi
+                                    ? 'Resumos do primeiro arquivo. Os de cada arquivo estão em “Documentos deste envelope”; a conferência abaixo aceita qualquer um deles.'
+                                    : 'Cada resumo identifica bytes diferentes do mesmo documento.'
+                            }
                         />
                         <HashList
                             entries={hashEntries}
@@ -598,6 +763,131 @@ export default function EnvelopeEvidence({
                 </div>
             </div>
         </>
+    );
+}
+
+function fileTitle(file: { position: number; name: string | null }): string {
+    return `${file.position}. ${file.name?.trim() || `Arquivo ${file.position}`}`;
+}
+
+/**
+ * "Documentos deste envelope (N)" — Fase 2 §2.3. Para cada arquivo, os resumos (mesmos
+ * rótulos e explicações da lista do envelope) e quem registrou aceite sobre ele, com o
+ * resumo exato da versão aceita. É o espelho da seção homônima da página de evidências
+ * em PDF (docs/fase-2/multi-documento-e-papeis.md §9).
+ */
+function EvidenceFiles({ documents }: { documents: EvidenceDocument[] }) {
+    return (
+        <section className="border-border bg-card shadow-card rounded-xl border p-5">
+            <Heading
+                variant="small"
+                title={`Documentos deste envelope (${documents.length})`}
+                description="Cada arquivo tem versões e resumos próprios. Um único aceite de cada participante cobre o conjunto, registrado arquivo por arquivo."
+                className="mb-3"
+            />
+            <div className="flex flex-col gap-3">
+                {documents.map((file) => (
+                    <article
+                        key={file.id}
+                        className="border-border rounded-[10px] border p-4"
+                    >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <p className="font-semibold">
+                                    {fileTitle(file)}
+                                </p>
+                                {file.original_name &&
+                                    file.original_name !== file.name && (
+                                        <p className="text-muted-foreground text-[12px]">
+                                            {file.original_name}
+                                        </p>
+                                    )}
+                            </div>
+                            <span className="flex flex-wrap gap-1.5">
+                                {file.downloads.signed && (
+                                    <Button asChild variant="outline" size="xs">
+                                        <a href={file.downloads.signed}>
+                                            <Download className="size-3.5" />
+                                            Arquivo final
+                                        </a>
+                                    </Button>
+                                )}
+                                {file.downloads.evidence && (
+                                    <Button asChild variant="outline" size="xs">
+                                        <a href={file.downloads.evidence}>
+                                            <Download className="size-3.5" />
+                                            Evidências
+                                        </a>
+                                    </Button>
+                                )}
+                            </span>
+                        </div>
+
+                        <HashList
+                            className="mt-3"
+                            entries={[
+                                {
+                                    kind: 'original',
+                                    value: file.hashes.original_sha256,
+                                },
+                                {
+                                    kind: 'sent',
+                                    value: file.hashes.sent_sha256,
+                                },
+                                {
+                                    kind: 'consolidated',
+                                    value: file.hashes.consolidated_sha256,
+                                },
+                                {
+                                    kind: 'evidence',
+                                    value: file.hashes.evidence_sha256,
+                                },
+                                {
+                                    kind: 'final',
+                                    value: file.hashes.final_sha256,
+                                },
+                            ]}
+                        />
+
+                        <div className="mt-3">
+                            <p className="text-muted-foreground text-[11px] font-semibold tracking-[.08em] uppercase">
+                                Registros sobre este arquivo
+                            </p>
+                            {file.accepted_by.length === 0 ? (
+                                <p className="text-muted-foreground mt-1 text-[12.5px]">
+                                    Nenhum aceite registrado ainda.
+                                </p>
+                            ) : (
+                                <ul className="mt-1 flex flex-col text-[12.5px]">
+                                    {file.accepted_by.map((entry, index) => (
+                                        <li
+                                            key={`${entry.name}-${index}`}
+                                            className="border-muted flex flex-col gap-0.5 border-t py-1.5 first:border-t-0"
+                                        >
+                                            <span>
+                                                <b>{entry.name ?? '—'}</b>
+                                                <span className="text-muted-foreground">
+                                                    {' · '}
+                                                    {entry.action_label ??
+                                                        'Aceite eletrônico'}
+                                                    {entry.accepted_at &&
+                                                        ` · ${formatDateTime(entry.accepted_at)}`}
+                                                </span>
+                                            </span>
+                                            {entry.document_sha256 && (
+                                                <span className="text-muted-foreground font-mono text-[11.5px] break-all">
+                                                    {entry.document_sha256}
+                                                </span>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </article>
+                ))}
+            </div>
+        </section>
     );
 }
 

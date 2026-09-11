@@ -130,3 +130,26 @@ Schedule::command('notifications:daily-digest')
     ->withoutOverlapping(30)
     ->runInBackground()
     ->onOneServer();
+
+/*
+| Fase 2 §2.5 — lembretes automáticos e envio agendado (docs/fase-2/lembretes-e-agendamento.md).
+|
+| Os dois só fazem algo com a flag `features.reminders` ligada (interruptor global E plano
+| da organização). Desligada, o de lembretes não seleciona nada e o de envio agendado não
+| encontra agendamento — nenhum pode ser criado sem a flag.
+|
+| Lembretes: de hora em hora, no minuto 5. A janela de horário (padrão 8h–20h) é avaliada
+| no fuso de CADA organização pelo serviço, não aqui. Envio agendado: a cada minuto — o
+| usuário escolhe o minuto, e a varredura também cancela agendamentos de envelopes editados.
+*/
+Schedule::command('envelopes:send-reminders')
+    ->hourlyAt(5)
+    ->withoutOverlapping(30)
+    ->runInBackground()
+    ->onOneServer();
+
+Schedule::command('envelopes:dispatch-scheduled')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->runInBackground()
+    ->onOneServer();

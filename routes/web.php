@@ -1,7 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditController as AdminAuditController;
+use App\Http\Controllers\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\PlaceholderController as AdminPlaceholderController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Billing\BillingCheckoutController;
 use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
@@ -20,6 +23,9 @@ use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\Members\InvitationAcceptController;
 use App\Http\Controllers\Members\InvitationController;
 use App\Http\Controllers\Members\MembershipController;
+use App\Http\Controllers\Members\MembershipFolderAccessController;
+use App\Http\Controllers\Members\RoleController;
+use App\Http\Controllers\Members\TeamController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Organizations\OrganizationController;
 use App\Http\Controllers\Organizations\OrganizationSwitchController;
@@ -27,6 +33,8 @@ use App\Http\Controllers\Public\HomeController;
 use App\Http\Controllers\Public\LegalController;
 use App\Http\Controllers\Public\VerificationController;
 use App\Http\Controllers\RecipientController;
+use App\Http\Controllers\Reports\AuditLogController;
+use App\Http\Controllers\Reports\ReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Settings\GeneralController;
 use App\Http\Controllers\Settings\NotificationController as NotificationSettingsController;
@@ -37,7 +45,12 @@ use App\Http\Controllers\Sign\OtpController;
 use App\Http\Controllers\Sign\RefusalController;
 use App\Http\Controllers\Sign\SignatureController;
 use App\Http\Controllers\Sign\SignerPageController;
+use App\Http\Controllers\Tags\EnvelopeTagController;
+use App\Http\Controllers\Tags\TagController;
 use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\Templates\TemplatePickerController;
+use App\Http\Controllers\Templates\TemplateSourceController;
+use App\Http\Controllers\Templates\TemplateUseController;
 use App\Http\Controllers\Webhooks\MercadoPagoController;
 use Illuminate\Support\Facades\Route;
 
@@ -131,6 +144,10 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::put('{envelope}/destinatarios', [EnvelopeRecipientController::class, 'sync'])->name('recipients.sync');
         Route::put('{envelope}/campos', [EnvelopeFieldController::class, 'sync'])->name('fields.sync');
         Route::post('{envelope}/enviar', [EnvelopeSendController::class, 'store'])->name('send');
+        // Fase 2 §2.5 (docs/fase-2/lembretes-e-agendamento.md): 404 com a flag `reminders` desligada.
+        Route::post('{envelope}/agendamento', [EnvelopeSendController::class, 'schedule'])->name('schedule');
+        Route::delete('{envelope}/agendamento', [EnvelopeSendController::class, 'cancelSchedule'])->name('schedule.cancel');
+        Route::put('{envelope}/lembretes', [EnvelopeSendController::class, 'reminders'])->name('reminders.update');
         Route::get('{envelope}', [EnvelopeController::class, 'show'])->name('show');
         Route::get('{envelope}/download/{type}', [EnvelopeDownloadController::class, 'show'])->whereIn('type', ['original', 'signed', 'evidence'])->name('download');
         Route::get('{envelope}/evidencias', [EnvelopeEvidenceController::class, 'show'])->name('evidence');
@@ -158,7 +175,22 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         ->name('recipients.resend_pending');
 
     // Fase 2 (placeholders)
-    Route::get('modelos', [TemplateController::class, 'index'])->name('templates.index');
+    // Modelos (Fase 2 §2.1 — docs/fase-2/modelos.md). Flag `templates` desligada: `index` é o
+    // placeholder da Fase 1 e as demais respondem 404 (middleware do próprio controller).
+    Route::prefix('modelos')->name('templates.')->scopeBindings()->group(function (): void {
+        Route::get('/', [TemplateController::class, 'index'])->name('index');
+        Route::get('seletor', [TemplatePickerController::class, 'index'])->middleware('throttle:60,1')->name('picker');
+        Route::post('/', [TemplateController::class, 'store'])->middleware('throttle:30,1')->name('store');
+        Route::get('{template}/editar', [TemplateController::class, 'edit'])->name('edit');
+        Route::put('{template}', [TemplateController::class, 'update'])->name('update');
+        Route::post('{template}/duplicar', [TemplateController::class, 'duplicate'])->name('duplicate');
+        Route::post('{template}/arquivar', [TemplateController::class, 'archive'])->name('archive');
+        Route::post('{template}/restaurar', [TemplateController::class, 'restore'])->name('restore');
+        Route::get('{template}/arquivo', [TemplateSourceController::class, 'show'])->name('source.show');
+        Route::post('{template}/arquivo', [TemplateSourceController::class, 'update'])->middleware('throttle:30,1')->name('source.update');
+        Route::get('{template}/pre-visualizacao', [TemplateSourceController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
+        Route::post('{template}/usar', [TemplateUseController::class, 'store'])->middleware('throttle:20,1')->name('use');
+    });
     Route::get('api-integracoes', [IntegrationController::class, 'index'])->name('integrations.index');
     Route::get('api-integracoes/chaves', [IntegrationController::class, 'keys'])->middleware('org.role:owner,admin')->name('integrations.keys');
     Route::get('api-integracoes/logs', [IntegrationController::class, 'logs'])->middleware('org.role:owner,admin')->name('integrations.logs');
@@ -177,6 +209,31 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::post('usuarios/convites/{invitation}/reenviar', [InvitationController::class, 'resend'])->name('invitations.resend');
         Route::delete('usuarios/convites/{invitation}', [InvitationController::class, 'destroy'])->name('invitations.destroy');
     });
+
+    // Fase 2 — funções personalizadas, times e acesso por pasta (docs/fase-2/permissoes-e-times.md).
+    // Sem `org.role`: cada ação é autorizada por permissão nas Policies (Role/Team/Membership)
+    // e exige a flag `custom_roles` nos FormRequests.
+    Route::post('usuarios/funcoes', [RoleController::class, 'store'])->name('roles.store');
+    Route::patch('usuarios/funcoes/{role}', [RoleController::class, 'update'])->name('roles.update');
+    Route::delete('usuarios/funcoes/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+    Route::put('usuarios/funcoes/{role}/pastas', [RoleController::class, 'folders'])->name('roles.folders');
+    Route::post('usuarios/times', [TeamController::class, 'store'])->name('teams.store');
+    Route::patch('usuarios/times/{team}', [TeamController::class, 'update'])->name('teams.update');
+    Route::delete('usuarios/times/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');
+    Route::put('usuarios/{membership}/pastas', [MembershipFolderAccessController::class, 'update'])->name('members.folders');
+
+    // Fase 2 — etiquetas, relatórios e registro de atividades (docs/fase-2/tags-relatorios-e-logs.md).
+    // Sem `org.role`: flags `tags`/`reports`/`audit_log` + permissões verificadas nos controllers.
+    // Com a flag desligada, os GETs mostram o estado "Fase 2" e os demais respondem 403.
+    Route::get('configuracoes/etiquetas', [TagController::class, 'index'])->name('settings.tags');
+    Route::post('etiquetas', [TagController::class, 'store'])->name('tags.store');
+    Route::patch('etiquetas/{tag}', [TagController::class, 'update'])->name('tags.update');
+    Route::delete('etiquetas/{tag}', [TagController::class, 'destroy'])->name('tags.destroy');
+    Route::post('documentos/etiquetas', [EnvelopeTagController::class, 'apply'])->name('envelopes.tags.apply');
+    Route::delete('documentos/{envelope}/etiquetas/{tag}', [EnvelopeTagController::class, 'detach'])->name('envelopes.tags.detach');
+    Route::get('relatorios', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('relatorios/exportar', [ReportController::class, 'export'])->middleware('throttle:export')->name('reports.export');
+    Route::get('configuracoes/registro-de-atividades', [AuditLogController::class, 'index'])->name('settings.audit');
 
     // Configurações
     Route::prefix('configuracoes')->group(function (): void {
@@ -220,9 +277,22 @@ Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin')->name
     Route::get('clientes/{organization}', [AdminOrganizationController::class, 'show'])->name('organizations.show');
 
     Route::get('faturamento', AdminPlaceholderController::class)->name('billing.index');
-    Route::get('usuarios', AdminPlaceholderController::class)->name('users.index');
-    Route::get('auditoria', AdminPlaceholderController::class)->name('audit.index');
+    // Fase 2 (docs/fase-2/tags-relatorios-e-logs.md): flags `admin_users`, `admin_audit` e
+    // `impersonation`; desligadas, as páginas continuam o placeholder da Fase 1.
+    Route::get('usuarios', [AdminUserController::class, 'index'])->name('users.index');
+    Route::post('usuarios/{user}/bloquear', [AdminUserController::class, 'block'])->middleware('password.confirm')->name('users.block');
+    Route::post('usuarios/{user}/desbloquear', [AdminUserController::class, 'unblock'])->middleware('password.confirm')->name('users.unblock');
+    Route::get('auditoria', [AdminAuditController::class, 'index'])->name('audit.index');
+    Route::post('clientes/{organization}/acessar-como', [AdminImpersonationController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('organizations.impersonate');
     Route::get('configuracoes', AdminPlaceholderController::class)->name('settings.index');
 });
+
+// Encerrar "acessar como": fora do grupo platform-admin (durante a sessão o usuário autenticado
+// é o alvo). Só age sobre a impersonation da própria sessão.
+Route::post('admin/acessar-como/encerrar', [AdminImpersonationController::class, 'stop'])
+    ->middleware('auth')
+    ->name('admin.impersonation.stop');
 
 require __DIR__.'/settings.php';

@@ -58,9 +58,77 @@ enum AuditEventType: string
     case SubscriptionExpired = 'subscription.expired';
     case SubscriptionRenewed = 'subscription.renewed';
 
+    // Fase 2, onda A — múltiplos documentos e papéis (docs/fase-2/multi-documento-e-papeis.md).
+    case DocumentsReordered = 'documents.reordered';
+    case ApprovalRecorded = 'approval.recorded';
+    case DocumentFinalized = 'document.finalized';
+
+    // Fase 2, onda A — envio agendado e lembretes automáticos (docs/fase-2/lembretes-e-agendamento.md).
+    case EnvelopeScheduled = 'envelope.scheduled';
+    case EnvelopeScheduleCanceled = 'envelope.schedule_canceled';
+    case ReminderSent = 'reminder.sent';
+    case ReminderSkipped = 'reminder.skipped';
+
+    // Fase 2, onda A — funções, times e acesso por pasta (docs/fase-2/permissoes-e-times.md).
+    case RoleCreated = 'role.created';
+    case RoleUpdated = 'role.updated';
+    case RoleDeleted = 'role.deleted';
+    case MembershipRoleChanged = 'membership.role_changed';
+    case TeamCreated = 'team.created';
+    case TeamUpdated = 'team.updated';
+    case TeamDeleted = 'team.deleted';
+    case FolderAccessUpdated = 'folder_access.updated';
+
+    // Fase 2, onda A — etiquetas, relatórios e "acessar como" (docs/fase-2/tags-relatorios-e-logs.md).
+    // Todos são eventos da ORGANIZAÇÃO (`envelope_id` nulo): a trilha do envelope e a página
+    // de evidências não mudam.
+    case TagCreated = 'tag.created';
+    case TagUpdated = 'tag.updated';
+    case TagDeleted = 'tag.deleted';
+    case TagsApplied = 'tags.applied';
+    case TagsRemoved = 'tags.removed';
+    case ReportExported = 'report.exported';
+    case ImpersonationStarted = 'impersonation.started';
+    case ImpersonationEnded = 'impersonation.ended';
+    case ImpersonationPageViewed = 'impersonation.page_viewed';
+
+    // Fase 2, onda A — modelos com variáveis tipadas (docs/fase-2/modelos.md). Eventos da
+    // ORGANIZAÇÃO (`envelope_id` nulo), exceto `template.used`, gravado no envelope gerado.
+    case TemplateCreated = 'template.created';
+    case TemplateVersionCreated = 'template.version_created';
+    case TemplateUpdated = 'template.updated';
+    case TemplateDuplicated = 'template.duplicated';
+    case TemplateArchived = 'template.archived';
+    case TemplateRestored = 'template.restored';
+    case TemplateUsed = 'template.used';
+
     public function label(): string
     {
         return match ($this) {
+            self::TemplateCreated => 'Modelo criado',
+            self::TemplateVersionCreated => 'Nova versão do modelo',
+            self::TemplateUpdated => 'Dados do modelo alterados',
+            self::TemplateDuplicated => 'Modelo duplicado',
+            self::TemplateArchived => 'Modelo arquivado',
+            self::TemplateRestored => 'Modelo restaurado',
+            self::TemplateUsed => 'Documento gerado a partir de modelo',
+            self::TagCreated => 'Etiqueta criada',
+            self::TagUpdated => 'Etiqueta alterada',
+            self::TagDeleted => 'Etiqueta excluída',
+            self::TagsApplied => 'Etiqueta aplicada a documentos',
+            self::TagsRemoved => 'Etiqueta removida de documentos',
+            self::ReportExported => 'Relatório exportado',
+            self::ImpersonationStarted => 'Acesso de suporte iniciado',
+            self::ImpersonationEnded => 'Acesso de suporte encerrado',
+            self::ImpersonationPageViewed => 'Página visitada pelo suporte',
+            self::RoleCreated => 'Função criada',
+            self::RoleUpdated => 'Função alterada',
+            self::RoleDeleted => 'Função excluída',
+            self::MembershipRoleChanged => 'Função de usuário alterada',
+            self::TeamCreated => 'Time criado',
+            self::TeamUpdated => 'Time alterado',
+            self::TeamDeleted => 'Time excluído',
+            self::FolderAccessUpdated => 'Acesso a pastas alterado',
             self::EnvelopeCreated => 'Documento criado',
             self::EnvelopeUpdated => 'Documento atualizado',
             self::DocumentUploaded => 'Arquivo enviado',
@@ -106,6 +174,13 @@ enum AuditEventType: string
             self::SubscriptionPastDue => 'Plano em atraso',
             self::SubscriptionExpired => 'Plano expirado',
             self::SubscriptionRenewed => 'Ciclo do plano renovado',
+            self::DocumentsReordered => 'Ordem dos arquivos alterada',
+            self::ApprovalRecorded => 'Aprovação registrada',
+            self::DocumentFinalized => 'Arquivo final gerado',
+            self::EnvelopeScheduled => 'Envio agendado',
+            self::EnvelopeScheduleCanceled => 'Agendamento de envio cancelado',
+            self::ReminderSent => 'Lembrete automático enviado',
+            self::ReminderSkipped => 'Lembrete automático não enviado',
         };
     }
 
@@ -118,6 +193,8 @@ enum AuditEventType: string
     {
         return match ($this) {
             self::AcceptanceRecorded,
+            self::ApprovalRecorded,
+            self::DocumentFinalized,
             self::ChallengeVerified,
             self::EnvelopeCompleted,
             self::EnvelopeSignedCompanyA1,
@@ -136,7 +213,8 @@ enum AuditEventType: string
             self::EnvelopeFinalizationFailed,
             self::PaymentFailed,
             self::SubscriptionPastDue,
-            self::SubscriptionExpired => 'warn',
+            self::SubscriptionExpired,
+            self::ImpersonationStarted => 'warn',
 
             default => 'info',
         };

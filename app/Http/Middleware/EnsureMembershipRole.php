@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Enums\MembershipRole;
 use App\Support\CurrentOrganization;
+use App\Support\Permissions;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,18 +17,21 @@ class EnsureMembershipRole
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        $current = CurrentOrganization::instance()->role();
+        $membership = CurrentOrganization::instance()->membership();
 
-        if ($current === null) {
+        if ($membership === null) {
             abort(403, 'Nenhuma organização ativa.');
         }
 
-        $allowed = array_filter(array_map(
+        $allowed = array_values(array_filter(array_map(
             fn (string $role): ?MembershipRole => MembershipRole::tryFrom(trim($role)),
             $roles,
-        ));
+        )));
 
-        if ($allowed === [] || ! in_array($current, $allowed, true)) {
+        // Fase 2 §2.14: para papéis de sistema o resultado é idêntico ao da Fase 1 (o papel
+        // precisa estar na lista); uma função personalizada passa se tiver a permissão
+        // equivalente à rota (Permissions::ROUTE_PERMISSIONS).
+        if ($allowed === [] || ! Permissions::routeAllows($membership, $allowed, $request->route()?->getName())) {
             abort(403, 'Você não tem permissão para acessar este recurso.');
         }
 

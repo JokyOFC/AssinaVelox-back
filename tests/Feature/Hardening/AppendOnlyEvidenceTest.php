@@ -87,6 +87,11 @@ it('declara a política de cada tabela de evidência', function () {
         'signature_acceptances' => 'no_update_no_delete',
         'document_versions' => 'no_update_no_delete',
         'verification_records' => 'no_delete',
+        // Fase 2 §2.3 (integração I-2A): tabelas novas de evidência por arquivo, só INSERT.
+        // `verification_record_documents` fica de fora: é reescrita pela retentativa da
+        // finalização, como `verification_records` (ver config/assinavelox.php).
+        'acceptance_documents' => 'no_update_no_delete',
+        'signing_session_documents' => 'no_update_no_delete',
     ]);
 });
 

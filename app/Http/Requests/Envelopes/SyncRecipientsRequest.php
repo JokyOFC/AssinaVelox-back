@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Envelopes;
 
+use App\Enums\RecipientRole;
 use App\Models\Envelope;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * PUT envelopes.recipients.sync (ROUTES §2.6 passo 2). A autorização (`can:update`) e a
@@ -30,6 +32,9 @@ class SyncRecipientsRequest extends FormRequest
             'recipients.*.name' => ['required', 'string', 'min:2', 'max:120'],
             'recipients.*.email' => ['required', 'string', 'email:rfc', 'max:255', 'distinct:ignore_case'],
             'recipients.*.role' => ['nullable', 'string', 'max:40'],
+            // Fase 2 §2.4: papel de domínio (o `role` acima é o rótulo livre). A flag
+            // `participant_roles` é conferida em RecipientSync.
+            'recipients.*.participant_role' => ['nullable', 'string', Rule::in(RecipientRole::values())],
             'recipients.*.order' => ['nullable', 'integer', 'min:1', 'max:20'],
         ];
     }
@@ -45,6 +50,7 @@ class SyncRecipientsRequest extends FormRequest
             'recipients.*.name' => 'nome',
             'recipients.*.email' => 'e-mail',
             'recipients.*.role' => 'papel',
+            'recipients.*.participant_role' => 'tipo de participante',
             'recipients.*.order' => 'ordem',
         ];
     }

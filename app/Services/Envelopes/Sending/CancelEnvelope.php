@@ -87,6 +87,9 @@ class CancelEnvelope
             $locked->settings = $settings;
             $locked->save();
 
+            // Fase 2 §2.5: um envelope cancelado não pode ser enviado na hora agendada.
+            ScheduledSend::clearWithinLock($locked, 'envelope_canceled');
+
             foreach ($pending as $recipient) {
                 $recipient->transitionTo(RecipientStatus::Canceled);
                 $recipient->save();

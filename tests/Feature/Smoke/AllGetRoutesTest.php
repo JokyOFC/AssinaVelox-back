@@ -95,6 +95,12 @@ const SMOKE_OVERRIDES = [
     'two-factor.login' => ['*' => 302],
     // Fortify: chave secreta de usuário SEM TOTP ativado → 404 (qr-code/recovery-codes devolvem 200 vazio).
     'two-factor.secret-key' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    // Fase 2 §2.1 (docs/fase-2/modelos.md): com a flag `templates` desligada — o padrão —
+    // só `templates.index` existe (placeholder); as demais rotas de modelos respondem 404.
+    'templates.edit' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'templates.preview' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'templates.source.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'templates.picker' => ['owner' => 404, 'admin' => 404, 'member' => 404],
 ];
 
 /**
@@ -129,6 +135,8 @@ function smokeRouteParameters(string $name, array $ctx): array
         'password.reset' => ['token' => 'token-de-teste'],
         'search.index' => ['q' => 'contrato'],
         'verification.verify' => ['id' => $user->getKey(), 'hash' => sha1($user->email)],
+        // Fase 2: ULID sintético — com a flag desligada a rota responde 404 antes do binding.
+        'templates.edit', 'templates.preview', 'templates.source.show' => ['template' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         default => [],
     };
 }

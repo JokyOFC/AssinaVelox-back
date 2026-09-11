@@ -364,7 +364,7 @@ eletrônico com evidências".
 ## Detalhe do documento — abas Signatários e Trilha
 
 - **Signatários**: cabeçalho "Ordem de assinatura: sequencial · Lembretes:
-  manuais" (lembretes automáticos são Fase 2). Cada card traz avatar com o tom
+  manuais" (com a flag `reminders`, a cadência real — ver "Fase 2 — onda A"). Cada card traz avatar com o tom
   do status, papel e posição na ordem, chips de canal e de autenticação, badge
   de status e um rodapé com a nota do estado. Ações por estado: `notified` →
   "Reenviar"; `viewed` → "Lembrar"; `pending` aguardando a vez no sequencial →
@@ -382,6 +382,62 @@ eletrônico com evidências".
   evidências e `envelope.signed_company_a1` identifica a operadora, não a pessoa.
   A mesma distinção aparece na nota do card do signatário ("Abertura detectada
   em …" em vez de "Visualizou em …").
+
+## Fase 2 — onda A: vários documentos, papéis, lembretes e agendamento
+
+Contratos do backend: `docs/fase-2/multi-documento-e-papeis.md` §8 e `docs/fase-2/lembretes-e-agendamento.md` §7. Regra de ouro (roadmap T8): **cada recurso só aparece com a sua flag**; com todas desligadas as telas, os textos e os payloads são os da Fase 1. A flag só liga a interface — quem autoriza continua sendo o servidor.
+
+### De onde vem cada flag
+
+| Recurso                           | Lido de                                                                                            | Onde aparece                       |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Vários arquivos (§2.3)            | `domain_features.multi_document` (prop do wizard; cai em `features.multi_document`)                | wizard (passos 1, 3 e 4)           |
+| Papéis de participante (§2.4)     | `domain_features.participant_roles` (cai em `features.participant_roles`, ainda não compartilhada) | wizard (passos 2, 3 e 4)           |
+| Lembretes e envio agendado (§2.5) | `reminders.available` (prop `reminders` do wizard e do detalhe)                                    | wizard (passos 1 e 4), detalhe     |
+| Início por modelo (§2.1)          | `features.templates`                                                                               | wizard, passo 1 (`TemplatePicker`) |
+
+O **detalhe**, a **página pública**, as **evidências** e a **verificação** não olham flag: mostram o que o envelope tem (vários arquivos, papéis mistos). Um envelope enviado com três arquivos continua sendo exibido assim mesmo que a flag seja desligada depois — é a mesma regra do backend.
+
+### Componentes novos
+
+| Arquivo                                         | Papel                                                                                                                                                          |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/envelopes/wizard-document-list.tsx` | Lista de arquivos do passo 1: ordem com setas (↑/↓), estado do processamento por arquivo, remoção individual. Exporta `fileBadge` e `documentName`.            |
+| `components/envelopes/reminders-control.tsx`    | Switch "Lembretes automáticos" real + primeiro lembrete após / repetir a cada / máximo, dentro dos `limits` do servidor, com a janela e o fuso da organização. |
+| `components/envelopes/schedule-send-card.tsx`   | "Agendar envio" (`datetime-local` limitado por `scheduled_send_limits`, no fuso da organização), "Envio agendado para …", "Reagendar", "Cancelar agendamento". |
+| `components/envelopes/phase2-routes.ts`         | URLs de `agendamento` e `lembretes` montadas a partir de `envelopes.show` enquanto as rotas não estão no Wayfinder; `reminderSummary`, `zonedInputValue`.      |
+| `components/pdf/document-switcher.tsx`          | Navegação entre arquivos (editor de campos, detalhe, página pública). Rola na horizontal no celular.                                                           |
+| `components/templates/template-picker.tsx`      | **Stub** criado por este agente só para compilar; o agente de modelos o substitui (contrato: `TemplatePicker({ onPicked? })`).                                 |
+
+### Wizard
+
+- **Passo 1 (vários arquivos).** A dropzone aceita vários arquivos de uma vez até `limits.max_documents`; se algum for inválido, nenhum sobe e a mensagem diz qual. O upload é uma fila (um `POST document.store` por arquivo, na ordem escolhida: "Enviando arquivo 2 de 3: anexo.pdf"). A ordem muda por `PATCH envelopes.update { document_order }` (autosave `documents`, com ordem otimista até a resposta). Remover um arquivo usa `DELETE document.destroy?document={ulid}` e tira do estado local só os campos daquele arquivo. O polling de processamento recarrega também `documents`.
+- **Passo 1 (lembretes).** Com `reminders.available`, o switch "Fase 2" vira o `RemindersControl`; grava por `PUT documentos/{envelope}/lembretes` (autosave `reminders`). O resumo ("A cada 2 dias · até 3 lembretes") é calculado no cliente com a mesma fórmula do servidor, para não exibir o valor antigo durante o autosave. O selo "Padrão da organização" aparece enquanto `is_default`.
+- **Passo 2 (papéis).** Cada linha ganha "Tipo de participante" (Signatário, Testemunha, Aprovador, Visualizador, rótulos de `participant_roles`) com uma frase sobre o efeito (`participantRoleDescriptions` em `lib/labels.ts`); o rótulo livre (`role`: "Locatária") continua ao lado. Visualizador aparece com o ícone de olho no lugar do número (não tem vez); a numeração conta só quem participa. Botões "Adicionar aprovador" e "Adicionar visualizador". O sync envia `participant_role` **só com a flag**. Trocar o papel remove do estado local os campos que deixaram de valer (tudo do visualizador; assinatura e rubrica do aprovador) e avisa com um toast.
+- **Passo 3.** Seletor de arquivo acima do documento ("Posicionar campos no arquivo", com a contagem de campos de cada um); cada campo novo leva `document_id` e o sync envia `fields[].document_id` só com a flag. Visualizadores ficam fora de "Adicionar campo para"; com um aprovador ativo, Assinatura e Rubrica ficam desabilitadas (com a explicação). O painel "Por participante" soma os campos de cada um em todos os arquivos. O aviso "Sem campo de assinatura" considera só signatário e testemunha.
+- **Passo 4.** Lista os arquivos (com campos por arquivo), mostra o tipo de cada participante, a linha "Lembretes" no resumo e o `ScheduleSendCard`. O agendamento só é oferecido sem pendências e com cota, e espera o autosave terminar (uma gravação depois de agendar cancelaria o agendamento). Com agendamento, o botão principal diz "Enviar agora". As pendências novas (por arquivo e por papel) vêm prontas do backend.
+
+### Detalhe do documento
+
+Com mais de um arquivo: seletor acima do visualizador (campos filtrados por `document_id`), lista "arquivos" abaixo com original / final / evidências de cada um, menu "Baixar" agrupado por arquivo, um `HashBox` por arquivo na aba Trilha e "Arquivos" em Detalhes. Com papéis: aba "Participantes", selo do papel no card, "Aprovação registrada em …" para o aprovador, visualizador sem "aguarda a vez" ("Cópia para acompanhamento enviada em …") e fora de "Lembrar pendentes". Com `reminders.available`: "Lembretes: a cada N dias …", "último lembrete automático …" no card e o cartão de envio agendado com "Cancelar agendamento".
+
+### Página pública (`sign/show.tsx`)
+
+- `action` decide o texto: "Sua assinatura" (signatário, igual à Fase 1), "Sua assinatura como testemunha", "Sua aprovação" (aprovador — sem captura da representação visual; o `POST sign.complete` vai **sem** `signature` e sem `initials`). O botão usa `action.button_label`; a recusa do aprovador é "Recusar aprovação". A declaração e a caixa de aceite vêm de `consent` (variantes por papel, já resolvidas no servidor). O stepper do cabeçalho vira "Aprovar" / "Acompanhar" via `steps` do `SignerLayout`.
+- **`view` (visualizador).** Documento em leitura, "Cópia para acompanhamento", o `copy.notice` do servidor e os botões de cópia final por arquivo quando disponíveis. Sem aceite, sem recusa.
+- **Vários arquivos.** `DocumentSwitcher` com o estado de cada arquivo ("Ainda não aberto", "N campos pendentes", "Aberto · sem pendências"). Cada arquivo é aberto pela sua `pdf_url` (é isso que registra a entrega à sessão); o aceite só habilita quando **todos** foram entregues — começando pelo `presented` do servidor, para um recarregamento não obrigar a abrir tudo de novo. "Próximo campo" atravessa arquivos. A tela diz "aberto", nunca "lido": a entrega não prova leitura.
+- O comprovante (`ReceiptCard`) mostra `receipt.action_label`, "Aprovação registrada." para o aprovador e, com vários arquivos, o SHA-256 e a cópia final de cada um.
+
+### Evidências e verificação pública
+
+- **Evidências:** seção "Documentos deste envelope (N)" com os cinco resumos de cada arquivo e "Registros sobre este arquivo" (quem, qual registro, quando, SHA-256 da versão aceita); no participante, selo do papel, "Registro" e "Arquivos aceitos". A conferência local aceita o final, o enviado ou o consolidado de **qualquer** arquivo.
+- **Verificação:** só quando `result.documents` existe (envelope com mais de um arquivo — lista fechada de chaves): "N arquivos" no cabeçalho e, em Integridade, enviado/final de cada arquivo. A conferência no navegador compara com todos; a manual (por resumo digitado) diz qual arquivo conferiu (`file_check.document`). O papel aparece só quando o servidor manda `participant_role_label`.
+
+### Pendências fora do front (para o relatório de integração)
+
+1. Rotas `envelopes.schedule`, `envelopes.schedule.cancel` e `envelopes.reminders.update` ainda não estão em `routes/web.php`: o front usa `phase2-routes.ts`. Depois de registrar, rodar `php artisan wayfinder:generate --with-form` e trocar pelos helpers do Wayfinder.
+2. `EnvelopeController::edit/show` ainda não mescla a prop `reminders` — sem ela, lembretes e agendamento não aparecem (comportamento da Fase 1).
+3. `HandleInertiaRequests::features()` ainda não compartilha `participant_roles` (o wizard usa `domain_features`) nem deriva `multi_document`/`reminders` das flags reais.
 
 ## Responsividade
 

@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -161,6 +162,16 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+
+        // `assinavelox.vite_hot_file` (VITE_HOT_FILE): os testes apontam para um arquivo
+        // inexistente e sempre usam o build, com ou sem `npm run dev` rodando.
+        $hotFile = config('assinavelox.vite_hot_file');
+
+        if (is_string($hotFile) && $hotFile !== '') {
+            Vite::useHotFile(str_starts_with($hotFile, DIRECTORY_SEPARATOR) || preg_match('/^[A-Za-z]:[\\\\\/]/', $hotFile) === 1
+                ? $hotFile
+                : base_path($hotFile));
+        }
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),

@@ -3,10 +3,12 @@
 namespace App\Services\Envelopes\Sending;
 
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Organization;
 use App\Models\Recipient;
+use App\Services\Envelopes\Reminders\ReminderLog;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\RateLimiter;
@@ -19,7 +21,9 @@ use Illuminate\Support\Facades\RateLimiter;
  *     `RateLimiter` — a mesma trava vale para o botão da linha, o "Lembrar pendentes" e o
  *     lote da tela Assinaturas;
  *  2. **máximo de reenvios por destinatário** (`organizations.settings.max_resends`,
- *     padrão 5), contado por `recipients.notification_count` menos o convite inicial;
+ *     padrão 5), contado por `recipients.notification_count` menos o convite inicial,
+ *     SOMADO aos lembretes automáticos enviados (Fase 2, roadmap §2.5: o lembrete respeita
+ *     `max_resends`);
  *  3. **1 hora por organização** para o "Lembrar todos os pendentes" da tela Assinaturas
  *     (`assinavelox.resend.bulk_throttle_minutes`).
  *
@@ -109,7 +113,9 @@ class ResendInvitations
             RecipientStatus::Pending->value,
             RecipientStatus::Notified->value,
             RecipientStatus::Viewed->value,
-        ]);
+        ])
+            // Visualizador nunca é pendência (Fase 2 §2.4); na Fase 1 todos são `signer`.
+            ->whereIn('role', RecipientRole::participatingValues());
 
         if ($envelope->isSequential()) {
             $query->where('order_index', (int) $envelope->current_order);
@@ -142,7 +148,11 @@ class ResendInvitations
      */
     public function resendCount(Recipient $recipient): int
     {
-        return max(0, (int) $recipient->notification_count - 1);
+        // Convite + reenvios manuais (`notification_count` - 1) + lembretes automáticos já
+        // enviados. Sem a flag de lembretes não há linhas em `envelope_reminders` e o número
+        // é exatamente o da Fase 1.
+        return max(0, (int) $recipient->notification_count - 1)
+            + app(ReminderLog::class)->statsForRecipient((int) $recipient->getKey())['sent'];
     }
 
     /**
@@ -191,6 +201,15 @@ class ResendInvitations
     }
 
     private function key(Recipient $recipient): string
+    {
+        return self::throttleKeyFor($recipient);
+    }
+
+    /**
+     * Chave da trava de 10 minutos por destinatário. Pública para que o lembrete automático
+     * (Fase 2 §2.5) respeite e alimente a MESMA trava do reenvio manual.
+     */
+    public static function throttleKeyFor(Recipient $recipient): string
     {
         return 'invitation-resend:'.$recipient->getKey();
     }

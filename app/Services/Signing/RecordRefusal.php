@@ -4,6 +4,7 @@ namespace App\Services\Signing;
 
 use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
@@ -76,6 +77,11 @@ final class RecordRefusal
                 throw SigningRejectedException::conflict('not_refusable', 'Este documento não está mais disponível para assinatura.');
             }
 
+            // Visualizador (Fase 2 §2.4) não aceita nem recusa: só acompanha.
+            if (! $recipient->participates()) {
+                throw SigningRejectedException::conflict('not_refusable', 'Você recebeu este documento apenas para acompanhar: não há recusa a registrar.');
+            }
+
             if (SignatureAcceptance::withoutOrganizationScope()->where('recipient_id', $recipient->getKey())->exists()) {
                 throw SigningRejectedException::conflict('already_signed', 'Seu aceite já foi registrado: não é possível recusar depois de assinar.');
             }
@@ -97,12 +103,19 @@ final class RecordRefusal
             $recipient->refusal_reason = $reason;
             $recipient->save();
 
-            SignerAudit::record($envelope, $recipient, AuditEventType::RecipientRefused, [
+            $refusalPayload = [
                 // O motivo já está em `recipients.refusal_reason` e vai ao remetente; na
                 // trilha fica só a medida, para não duplicar texto livre vindo do público.
                 'reason_length' => mb_strlen($reason),
                 'order_index' => $recipient->order_index,
-            ], $correlationId);
+            ];
+
+            // Recusa de testemunha ou aprovador: a trilha diz de qual papel veio.
+            if ($recipient->role !== RecipientRole::Signer) {
+                $refusalPayload['role'] = $recipient->role->value;
+            }
+
+            SignerAudit::record($envelope, $recipient, AuditEventType::RecipientRefused, $refusalPayload, $correlationId);
 
             $closed = $this->closesEnvelope($context);
             $canceled = $closed ? $this->closeEnvelope($envelope, $recipient, $reason, $now, $correlationId) : [];

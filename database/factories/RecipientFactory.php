@@ -28,6 +28,8 @@ class RecipientFactory extends Factory
             'role' => RecipientRole::Signer,
             'role_label' => null,
             'order_index' => 1,
+            // Espelha a vez por padrão: dados de teste antigos continuam na mesma ordem.
+            'position' => fn (array $attributes): int => (int) ($attributes['order_index'] ?? 1),
             'status' => RecipientStatus::Pending,
             'auth_method' => AuthMethod::EmailOtp,
             'notification_count' => 0,

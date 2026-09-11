@@ -14,6 +14,7 @@ use App\Models\Envelope;
 use App\Models\SigningField;
 use App\Models\User;
 use App\Services\Documents\Exceptions\UploadRejectedException;
+use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\PreparationGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -29,15 +30,24 @@ use Psr\Log\LoggerInterface;
  * privado `documents` e persiste `Document` + `DocumentVersion(kind=original)` com o
  * sha256 desses bytes. Emite `document.uploaded` e despacha `ProcessDocumentUpload`.
  *
- * Garantias:
+ * ## Um documento ou vários (Fase 2 §2.3)
+ *
+ * - **Flag `multi_document` desligada** (padrão, comportamento da Fase 1): o envelope tem
+ *   exatamente um documento. Enviar outro arquivo **substitui** o anterior — que sai, com
+ *   seus arquivos e os campos posicionados sobre ele, no mesmo commit do substituto.
+ * - **Flag ligada** ({@see DomainFeatures::multiDocument()}): cada arquivo enviado é
+ *   ACRESCENTADO ao fim da lista (`documents.position`), até
+ *   `assinavelox.multi_document.max_documents`. Remover um arquivo apaga só os campos
+ *   posicionados sobre ele. A ordem pode ser alterada por {@see self::reorder()}.
+ *
+ * Garantias (valem nos dois modos):
  * - a versão original **nunca** é sobrescrita: cada upload grava um arquivo novo, com
  *   caminho derivado do ULID da versão;
- * - substituir o documento de um envelope (Fase 1: um documento por envelope) remove o
- *   documento anterior, seus arquivos e os campos posicionados sobre ele — mas só DEPOIS
- *   de o substituto estar gravado, e no mesmo commit: uma falha de disco ou de banco
- *   deixa o documento anterior exatamente onde estava;
+ * - na substituição, o documento anterior só sai DEPOIS de o substituto estar gravado, e no
+ *   mesmo commit: uma falha de disco ou de banco deixa o anterior exatamente onde estava;
  * - o arquivo só é gravado depois de aprovado; o commit no banco acontece depois da
- *   gravação, e uma falha no banco apaga o arquivo recém-escrito.
+ *   gravação, e uma falha no banco apaga o arquivo recém-escrito;
+ * - toda decisão que depende do estado do envelope é refeita sob lock (TOCTOU).
  */
 class DocumentIntake
 {
@@ -69,15 +79,21 @@ class DocumentIntake
             );
         }
 
+        $multi = DomainFeatures::multiDocument($envelope->organization);
+        $max = DomainFeatures::maxDocuments($envelope->organization);
+
+        $this->assertRoomForAnother($envelope, $multi, $max, EnvelopeDocuments::count($envelope));
+
         $inspected = $this->inspector->inspect($file);
 
         $correlationId = (string) Str::ulid();
 
-        // Substituição: o documento anterior só sai DEPOIS que o novo estiver gravado.
-        // Removê-lo primeiro (registro, bytes e campos posicionados, tudo commitado) fazia
-        // com que uma falha transitória de disco — cheio, S3 fora, permissão — deixasse o
-        // envelope sem documento algum e sem os campos que o remetente já tinha posto.
-        $previous = $envelope->document()->first();
+        // Substituição (só com a flag desligada): o documento anterior só sai DEPOIS que o
+        // novo estiver gravado. Removê-lo primeiro (registro, bytes e campos posicionados,
+        // tudo commitado) fazia com que uma falha transitória de disco — cheio, S3 fora,
+        // permissão — deixasse o envelope sem documento algum e sem os campos que o
+        // remetente já tinha posto.
+        $previous = $multi ? null : $envelope->document()->first();
         $previousVersions = $previous === null ? collect() : $previous->versions()->get();
         $previousPayload = $previous === null ? null : [
             'document_ulid' => $previous->ulid,
@@ -115,7 +131,7 @@ class DocumentIntake
         }
 
         try {
-            $document = DB::transaction(function () use ($envelope, $previous, $inspected, $versionUlid, $storagePath, $sha256, $actor): Document {
+            $document = DB::transaction(function () use ($envelope, $previous, $inspected, $versionUlid, $storagePath, $sha256, $actor, $multi, $max): Document {
                 // TOCTOU: `acceptsUpload()` acima decidiu pelo model que a requisição
                 // trouxe. Entre aquela leitura e este commit outra requisição pode ter
                 // concluído o envio — e a substituição apaga a versão congelada, os campos
@@ -123,17 +139,27 @@ class DocumentIntake
                 // lock, como `PreparationGuard` faz nos demais serviços de preparo.
                 $locked = $this->lockForPreparation($envelope);
 
-                // Dentro da MESMA transação do novo documento: ou os dois passos valem,
-                // ou nenhum vale. A Fase 1 admite um documento por envelope, e é este
-                // commit que restabelece a regra.
-                if ($previous !== null) {
-                    $this->purgeDocumentRecords($locked, $previous);
+                if ($multi) {
+                    // O limite também é reconferido sob lock: dois uploads simultâneos não
+                    // podem, juntos, passar do teto.
+                    $this->assertRoomForAnother($locked, true, $max, EnvelopeDocuments::count($locked));
+                    $position = EnvelopeDocuments::nextPosition($locked);
+                } else {
+                    // Dentro da MESMA transação do novo documento: ou os dois passos valem,
+                    // ou nenhum vale. Com a flag desligada o envelope admite um documento, e
+                    // é este commit que restabelece a regra.
+                    if ($previous !== null) {
+                        $this->purgeDocumentRecords($locked, $previous);
+                    }
+
+                    $position = 1;
                 }
 
                 /** @var Document $document */
                 $document = Document::query()->create([
                     'envelope_id' => $envelope->getKey(),
                     'organization_id' => $envelope->organization_id,
+                    'position' => $position,
                     'name' => $inspected->baseName,
                     'original_filename' => $inspected->displayName,
                     'source_type' => $inspected->sourceType,
@@ -185,7 +211,12 @@ class DocumentIntake
             throw $exception;
         }
 
-        $envelope->setRelation('document', $document);
+        if ($multi) {
+            // Com vários documentos, `document` é o PRIMEIRO — não necessariamente este.
+            $envelope->unsetRelation('document');
+        } else {
+            $envelope->setRelation('document', $document);
+        }
 
         if ($previousPayload !== null) {
             // Bytes e trilha do documento substituído, já fora da transação: se apagar o
@@ -203,22 +234,21 @@ class DocumentIntake
             );
         }
 
-        $this->audit->record(
-            $envelope,
-            AuditEventType::DocumentUploaded,
-            [
-                'document_ulid' => $document->ulid,
-                'document_version_ulid' => $versionUlid,
-                'original_filename' => $inspected->displayName,
-                'source_type' => $inspected->sourceType->value,
-                'mime_type' => $inspected->mimeType,
-                'size_bytes' => $inspected->sizeBytes,
-                'sha256' => $sha256,
-            ],
-            $actor,
-            $request,
-            $correlationId,
-        );
+        $payload = [
+            'document_ulid' => $document->ulid,
+            'document_version_ulid' => $versionUlid,
+            'original_filename' => $inspected->displayName,
+            'source_type' => $inspected->sourceType->value,
+            'mime_type' => $inspected->mimeType,
+            'size_bytes' => $inspected->sizeBytes,
+            'sha256' => $sha256,
+        ];
+
+        if ($multi) {
+            $payload['position'] = (int) $document->position;
+        }
+
+        $this->audit->record($envelope, AuditEventType::DocumentUploaded, $payload, $actor, $request, $correlationId);
 
         ProcessDocumentUpload::dispatch(
             (int) $document->getKey(),
@@ -230,11 +260,12 @@ class DocumentIntake
     }
 
     /**
-     * Remove o documento do envelope (ação "remover" do wizard).
+     * Remove um documento do envelope (ação "remover" do wizard). Sem `$document`, remove o
+     * primeiro — o único, na Fase 1.
      *
      * @throws UploadRejectedException quando o envelope já saiu da preparação
      */
-    public function remove(Envelope $envelope, ?User $actor = null, ?Request $request = null): bool
+    public function remove(Envelope $envelope, ?User $actor = null, ?Request $request = null, ?Document $document = null): bool
     {
         // A remoção destrói mais do que a substituição: campos posicionados, o registro do
         // documento e — por cascata do esquema — as versões, os `signing_field_values` e os
@@ -249,9 +280,9 @@ class DocumentIntake
             );
         }
 
-        $document = $envelope->document()->first();
+        $document ??= $envelope->document()->first();
 
-        if ($document === null) {
+        if ($document === null || (int) $document->envelope_id !== (int) $envelope->getKey()) {
             return false;
         }
 
@@ -259,10 +290,93 @@ class DocumentIntake
 
         $this->removeDocument($envelope, $document, $actor, $request, $correlationId, replaced: false);
 
+        EnvelopeDocuments::compactPositions($envelope);
+
         $envelope->unsetRelation('document');
         $this->readiness->recompute($envelope);
 
         return true;
+    }
+
+    /**
+     * Nova ordem de apresentação dos documentos (Fase 2 §2.3). `$ulids` precisa listar cada
+     * documento do envelope exatamente uma vez.
+     *
+     * @param  list<string>  $ulids
+     *
+     * @throws UploadRejectedException
+     */
+    public function reorder(Envelope $envelope, array $ulids, ?User $actor = null, ?Request $request = null): void
+    {
+        if (! $this->acceptsUpload($envelope)) {
+            throw UploadRejectedException::make(
+                'envelope_not_editable',
+                'Este documento não está mais em rascunho e não pode ser alterado.',
+            );
+        }
+
+        $ulids = array_map('strval', $ulids);
+
+        $changed = DB::transaction(function () use ($envelope, $ulids): bool {
+            $locked = $this->lockForPreparation($envelope);
+            $documents = EnvelopeDocuments::ordered($locked)->keyBy('ulid');
+
+            $expected = $documents->keys()->sort()->values()->all();
+            $given = collect($ulids)->sort()->values()->all();
+
+            if (count($ulids) !== count(array_unique($ulids)) || $expected !== $given) {
+                throw UploadRejectedException::make(
+                    'invalid_document_order',
+                    'A nova ordem precisa listar cada arquivo do documento exatamente uma vez.',
+                );
+            }
+
+            $changed = false;
+
+            foreach ($ulids as $index => $ulid) {
+                /** @var Document $document */
+                $document = $documents->get($ulid);
+
+                if ((int) $document->position !== $index + 1) {
+                    $document->forceFill(['position' => $index + 1])->save();
+                    $changed = true;
+                }
+            }
+
+            return $changed;
+        });
+
+        if (! $changed) {
+            return;
+        }
+
+        $envelope->unsetRelation('document');
+
+        $this->audit->record($envelope, AuditEventType::DocumentsReordered, [
+            'order' => $ulids,
+        ], $actor, $request);
+    }
+
+    /**
+     * @throws UploadRejectedException
+     */
+    private function assertRoomForAnother(Envelope $envelope, bool $multi, int $max, int $existing): void
+    {
+        if (! $multi && $existing > 1) {
+            // A flag foi desligada com um rascunho de vários arquivos em andamento: substituir
+            // "o primeiro" deixaria os outros para trás sem que ninguém percebesse.
+            throw UploadRejectedException::make(
+                'multi_document_disabled',
+                'Este documento tem mais de um arquivo, mas o envio de vários arquivos não está disponível para esta organização. Remova os arquivos extras antes de enviar outro.',
+            );
+        }
+
+        if ($multi && $existing >= $max) {
+            throw UploadRejectedException::make(
+                'too_many_documents',
+                sprintf('Este documento aceita no máximo %d arquivos.', $max),
+            );
+        }
     }
 
     /**
@@ -335,10 +449,29 @@ class DocumentIntake
      */
     private function purgeDocumentRecords(Envelope $envelope, Document $document): void
     {
+        $hasOthers = Document::withoutOrganizationScope()
+            ->where('envelope_id', $envelope->getKey())
+            ->whereKeyNot($document->getKey())
+            ->exists();
+
         // Campos posicionados sobre a versão que está saindo perdem a referência.
         // Consulta direta: a relação `fields()` carrega ORDER BY, que o SQLite recusa
         // em DELETE.
-        SigningField::query()->where('envelope_id', $envelope->getKey())->delete();
+        if ($hasOthers) {
+            // Vários documentos: só os campos DESTE documento saem; os posicionados sobre os
+            // demais continuam válidos.
+            $versionIds = DocumentVersion::withoutOrganizationScope()
+                ->where('document_id', $document->getKey())
+                ->pluck('id')
+                ->all();
+
+            SigningField::query()
+                ->where('envelope_id', $envelope->getKey())
+                ->whereIn('document_version_id', $versionIds === [] ? [0] : $versionIds)
+                ->delete();
+        } else {
+            SigningField::query()->where('envelope_id', $envelope->getKey())->delete();
+        }
 
         $envelope->forceFill([
             'sent_document_version_id' => null,
@@ -352,7 +485,7 @@ class DocumentIntake
         $envelope->save();
 
         // current_version_id aponta para uma linha de document_versions: solta antes.
-        $document->forceFill(['current_version_id' => null])->save();
+        $document->forceFill(['current_version_id' => null, 'sent_version_id' => null, 'final_version_id' => null])->save();
         $document->delete();
     }
 

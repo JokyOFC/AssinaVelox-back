@@ -42,11 +42,32 @@ class DocumentResource extends JsonResource
             'processing' => self::processing($document),
             'pdf_url' => $version === null
                 ? null
-                : route('envelopes.document.preview', ['envelope' => $document->envelope->ulid]),
+                : route('envelopes.document.preview', self::routeParameters($document)),
             'page_thumb_url_template' => null,
             'page_sizes' => self::pageSizes($version),
             'sha256' => $original?->sha256,
+            // Fase 2 §2.3 (aditivos): posição na lista e nome de exibição.
+            'position' => (int) $document->position,
+            'name' => $document->name,
         ];
+    }
+
+    /**
+     * Parâmetros das rotas por documento. O primeiro arquivo (position 1) dispensa
+     * `document` — é o padrão das rotas, e a URL da Fase 1 continua exatamente igual.
+     *
+     * @param  array<string, string>  $extra
+     * @return array<string, string>
+     */
+    public static function routeParameters(Document $document, array $extra = []): array
+    {
+        $parameters = ['envelope' => $document->envelope->ulid] + $extra;
+
+        if ((int) $document->position > 1) {
+            $parameters['document'] = $document->ulid;
+        }
+
+        return $parameters;
     }
 
     /**

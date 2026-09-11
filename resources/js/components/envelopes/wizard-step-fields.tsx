@@ -17,6 +17,9 @@ import {
     minSizeFor,
 } from '@/components/envelopes/field-types';
 import { recipientColor } from '@/components/envelopes/recipient-colors';
+import { documentName } from '@/components/envelopes/wizard-document-list';
+import { roleOf } from '@/components/envelopes/wizard-step-recipients';
+import { DocumentSwitcher } from '@/components/pdf/document-switcher';
 import { PdfPageRail } from '@/components/pdf/pdf-page-rail';
 import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import type { PdfDocumentState } from '@/components/pdf/use-pdf-document';
@@ -38,7 +41,8 @@ import {
     type NormalizedRect,
     type PageSize,
 } from '@/lib/geometry';
-import { fieldTypeLabels } from '@/lib/labels';
+import { plural } from '@/lib/format';
+import { fieldTypeLabels, participantRoleLabels } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 import type { FieldType } from '@/types/enums';
 import type {
@@ -46,6 +50,9 @@ import type {
     WizardField,
     WizardRecipient,
 } from '@/types/models';
+
+/** Tipos que desenham a representação visual — proibidos para aprovador (§2.4). */
+const VISUAL_TYPES: FieldType[] = ['signature', 'initials'];
 
 function firstName(recipient: WizardRecipient, index: number): string {
     const name = recipient.name.trim();
@@ -59,6 +66,7 @@ function newField(
     page: number,
     rect: NormalizedRect,
     min: MinSize,
+    documentId: string | undefined,
 ): WizardField {
     return {
         id: null,
@@ -77,15 +85,28 @@ function newField(
                       date_format: DATE_FORMATS[0].value,
                   }
                 : { font_size: DEFAULT_FONT_SIZE },
+        // Fase 2 §2.3: só com vários arquivos o campo carrega o arquivo; sem a flag o
+        // payload é o da Fase 1.
+        ...(documentId ? { document_id: documentId } : {}),
     };
 }
 
 /**
  * Passo 3 — Campos (DESIGN §6.5): rail de páginas, página do PDF com a camada
  * de campos e painel lateral com paleta, propriedades e lista de campos.
+ *
+ * Fase 2:
+ * - §2.3 (`multiDocument`): seletor de arquivo acima do documento; cada campo pertence a
+ *   um arquivo (`document_id`) e a página/rail/lista mostram só os do arquivo aberto.
+ * - §2.4: visualizador não recebe campos (fica fora da lista "Adicionar campo para");
+ *   aprovador não recebe assinatura nem rubrica (os dois tipos ficam desabilitados).
+ *   As mesmas regras são revalidadas pelo servidor (`FieldSync`).
  */
 export function WizardStepFields({
     document,
+    documents = [],
+    multiDocument = false,
+    onDocumentChange,
     pdf,
     page,
     onPageChange,
@@ -99,7 +120,11 @@ export function WizardStepFields({
     errors,
     disabled,
 }: {
+    /** Arquivo aberto no editor (com um só arquivo, o documento do envelope). */
     document: EnvelopeDocument;
+    documents?: EnvelopeDocument[];
+    multiDocument?: boolean;
+    onDocumentChange?: (documentId: string) => void;
     pdf: PdfDocumentState;
     page: number;
     onPageChange: (page: number) => void;
@@ -113,18 +138,35 @@ export function WizardStepFields({
     errors: Record<string, string>;
     disabled?: boolean;
 }) {
+    const multi = multiDocument && documents.length > 1;
+    const firstDocumentId = documents[0]?.id ?? document.id;
+    const documentOf = (field: WizardField): string =>
+        field.document_id ?? firstDocumentId;
+    const inCurrent = (field: WizardField): boolean =>
+        !multi || documentOf(field) === document.id;
+
+    // Visualizador não recebe campo nenhum (§2.4). Sem papéis, todos são signatários.
+    const eligible = recipients.filter(
+        (recipient) => roleOf(recipient) !== 'viewer',
+    );
+    const rolesInUse = recipients.some(
+        (recipient) => roleOf(recipient) !== 'signer',
+    );
+
     const [activeRecipientId, setActiveRecipientId] = useState<string | null>(
-        recipients[0]?.client_id ?? null,
+        eligible[0]?.client_id ?? null,
     );
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [grid, setGrid] = useState(false);
 
     const activeRecipient =
-        recipients.find(
+        eligible.find(
             (recipient) => recipient.client_id === activeRecipientId,
         ) ??
-        recipients[0] ??
+        eligible[0] ??
         null;
+    const activeIsApprover =
+        activeRecipient !== null && roleOf(activeRecipient) === 'approver';
 
     const indexOfRecipient = (clientId: string): number =>
         Math.max(
@@ -164,8 +206,11 @@ export function WizardStepFields({
     // páginas", lendo "+ N rubricas automáticas" e sem ver nenhuma caixa na página:
     // não dava para perceber onde elas caem antes do envio, quando o documento já está
     // bloqueado para edição.
-    const manualFields = fields.filter((field) => field.auto !== true);
-    const autoCount = fields.length - manualFields.length;
+    const allManual = fields.filter((field) => field.auto !== true);
+    const manualFields = allManual.filter(inCurrent);
+    const autoCount = fields.filter(
+        (field) => field.auto === true && inCurrent(field),
+    ).length;
 
     const pageFields = manualFields.filter(
         (field) => field.page !== 'all' && Number(field.page) === page,
@@ -174,6 +219,7 @@ export function WizardStepFields({
     const autoPageFields = fields.filter(
         (field) =>
             field.auto === true &&
+            inCurrent(field) &&
             field.page !== 'all' &&
             Number(field.page) === page,
     );
@@ -199,6 +245,10 @@ export function WizardStepFields({
             return;
         }
 
+        if (activeIsApprover && VISUAL_TYPES.includes(type)) {
+            return;
+        }
+
         const size = DEFAULT_FIELD_SIZE[type];
         const created = newField(
             type,
@@ -211,6 +261,7 @@ export function WizardStepFields({
                 h: size.h,
             },
             minSizeFor(type, pointsOf(page)),
+            multiDocument ? document.id : undefined,
         );
 
         onFieldsChange([...fields, created]);
@@ -255,312 +306,451 @@ export function WizardStepFields({
         setSelectedId(copy.client_id);
     };
 
+    // Só signatário e testemunha precisam de assinatura (o aprovador aprova sem ela).
     const missingSignature = recipients.filter(
         (recipient) =>
-            !manualFields.some(
+            (roleOf(recipient) === 'signer' ||
+                roleOf(recipient) === 'witness') &&
+            !allManual.some(
                 (field) =>
                     field.recipient_client_id === recipient.client_id &&
                     (field.type === 'signature' || field.type === 'initials'),
             ),
     );
 
-    return (
-        <div className="flex flex-wrap items-start gap-5">
-            <PdfPageRail
-                document={pdf.document}
-                pageCount={pdf.pageCount || (document.processing.pages ?? 0)}
-                current={page}
-                onSelect={onPageChange}
-                fieldCounts={fieldCounts}
-                className="w-full shrink-0 md:max-h-[70vh] md:w-[72px]"
-            />
+    const countIn = (documentId: string): number =>
+        allManual.filter((field) => documentOf(field) === documentId).length;
 
-            <div className="min-w-0 flex-[1.5_1_380px]">
-                <PdfViewer
-                    pdf={pdf}
-                    page={page}
-                    onPageChange={onPageChange}
-                    zoom={zoom}
-                    onZoomChange={onZoomChange}
-                    processing={document.processing}
-                    maxPageWidth={520}
-                    stamp={`pág. ${page}/${pdf.pageCount || document.processing.pages || '?'}`}
-                    overlay={(size) => (
-                        <>
-                            {autoPageFields.length > 0 && (
-                                // Camada somente leitura, sem alças e sem eventos: as
-                                // rubricas automáticas são do servidor, mas quem prepara
-                                // precisa vê-las no lugar em que vão cair.
+    return (
+        <div className="flex flex-col gap-4">
+            {multi && (
+                <DocumentSwitcher
+                    items={documents.map((item) => ({
+                        id: item.id,
+                        position: item.position ?? documents.indexOf(item) + 1,
+                        name: documentName(item),
+                        meta: item.processing.ready
+                            ? plural(countIn(item.id), 'campo')
+                            : item.processing.label,
+                        tone: item.processing.ready ? 'default' : 'attention',
+                    }))}
+                    current={document.id}
+                    onSelect={(id) => {
+                        setSelectedId(null);
+                        onDocumentChange?.(id);
+                    }}
+                    label="Posicionar campos no arquivo"
+                />
+            )}
+
+            <div className="flex flex-wrap items-start gap-5">
+                <PdfPageRail
+                    document={pdf.document}
+                    pageCount={
+                        pdf.pageCount || (document.processing.pages ?? 0)
+                    }
+                    current={page}
+                    onSelect={onPageChange}
+                    fieldCounts={fieldCounts}
+                    className="w-full shrink-0 md:max-h-[70vh] md:w-[72px]"
+                />
+
+                <div className="min-w-0 flex-[1.5_1_380px]">
+                    <PdfViewer
+                        pdf={pdf}
+                        page={page}
+                        onPageChange={onPageChange}
+                        zoom={zoom}
+                        onZoomChange={onZoomChange}
+                        processing={document.processing}
+                        maxPageWidth={520}
+                        stamp={
+                            multi
+                                ? `arq. ${document.position ?? documents.indexOf(document) + 1} · pág. ${page}/${pdf.pageCount || document.processing.pages || '?'}`
+                                : `pág. ${page}/${pdf.pageCount || document.processing.pages || '?'}`
+                        }
+                        overlay={(size) => (
+                            <>
+                                {autoPageFields.length > 0 && (
+                                    // Camada somente leitura, sem alças e sem eventos: as
+                                    // rubricas automáticas são do servidor, mas quem prepara
+                                    // precisa vê-las no lugar em que vão cair.
+                                    <FieldLayer
+                                        fields={autoPageFields}
+                                        page={size}
+                                        selectedId={null}
+                                        onSelect={() => {}}
+                                        onChange={() => {}}
+                                        onDelete={() => {}}
+                                        onDuplicate={() => {}}
+                                        colorOf={colorOf}
+                                        tagOf={tagOf}
+                                        variantOf={() => 'pending'}
+                                        footnoteOf={() => 'Rubrica automática'}
+                                        readOnly
+                                        className="pointer-events-none"
+                                    />
+                                )}
                                 <FieldLayer
-                                    fields={autoPageFields}
+                                    fields={pageFields}
                                     page={size}
-                                    selectedId={null}
-                                    onSelect={() => {}}
-                                    onChange={() => {}}
-                                    onDelete={() => {}}
-                                    onDuplicate={() => {}}
+                                    selectedId={selectedId}
+                                    onSelect={setSelectedId}
+                                    onChange={(clientId, rect) =>
+                                        updateField(clientId, rect)
+                                    }
+                                    onDelete={deleteField}
+                                    onDuplicate={duplicateField}
+                                    onDropType={(type, rect) =>
+                                        addField(type, rect)
+                                    }
                                     colorOf={colorOf}
                                     tagOf={tagOf}
-                                    variantOf={() => 'pending'}
-                                    footnoteOf={() => 'Rubrica automática'}
-                                    readOnly
-                                    className="pointer-events-none"
+                                    minSizeOf={minOf}
+                                    grid={grid}
+                                    readOnly={disabled}
                                 />
-                            )}
-                            <FieldLayer
-                                fields={pageFields}
-                                page={size}
-                                selectedId={selectedId}
-                                onSelect={setSelectedId}
-                                onChange={(clientId, rect) =>
-                                    updateField(clientId, rect)
-                                }
-                                onDelete={deleteField}
-                                onDuplicate={duplicateField}
-                                onDropType={(type, rect) =>
-                                    addField(type, rect)
-                                }
-                                colorOf={colorOf}
-                                tagOf={tagOf}
-                                minSizeOf={minOf}
-                                grid={grid}
-                                readOnly={disabled}
-                            />
-                        </>
-                    )}
-                />
-                <p className="text-muted-foreground mt-2 text-[12px] leading-[1.5]">
-                    Clique num campo para selecionar. Setas movem, Shift com as
-                    setas redimensiona, Delete remove.
-                </p>
-            </div>
-
-            <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-4">
-                <div className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-4">
-                    <div className="text-[13px] font-semibold">
-                        Adicionar campo para
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {recipients.map((recipient, index) => {
-                            const color = recipientColor(index);
-                            const active =
-                                recipient.client_id ===
-                                activeRecipient?.client_id;
-
-                            return (
-                                <button
-                                    key={recipient.client_id}
-                                    type="button"
-                                    onClick={() =>
-                                        setActiveRecipientId(
-                                            recipient.client_id,
-                                        )
-                                    }
-                                    aria-pressed={active}
-                                    style={
-                                        active
-                                            ? {
-                                                  backgroundColor: color.solid,
-                                                  borderColor: color.solid,
-                                                  color: '#ffffff',
-                                              }
-                                            : { borderColor: undefined }
-                                    }
-                                    className={cn(
-                                        'inline-flex h-[30px] max-w-full items-center gap-1.5 rounded-full border px-[10px] text-[12.5px] font-semibold',
-                                        !active &&
-                                            'border-input text-foreground bg-white',
-                                    )}
-                                >
-                                    <span
-                                        aria-hidden
-                                        className="size-2 shrink-0 rounded-full"
-                                        style={{
-                                            backgroundColor: active
-                                                ? '#ffffff'
-                                                : color.solid,
-                                        }}
-                                    />
-                                    <span className="truncate">
-                                        {recipient.name ||
-                                            `Signatário ${index + 1}`}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <p className="text-muted-foreground text-[12px] leading-[1.5]">
-                        Arraste um tipo de campo para a página ou clique para
-                        inserir no centro.
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-2">
-                        {FIELD_TYPES.map((type) => {
-                            const Icon = FIELD_TYPE_ICONS[type];
-
-                            return (
-                                <button
-                                    key={type}
-                                    type="button"
-                                    draggable={
-                                        !disabled && Boolean(activeRecipient)
-                                    }
-                                    onDragStart={(event) => {
-                                        event.dataTransfer.setData(
-                                            FIELD_DRAG_MIME,
-                                            type,
-                                        );
-                                        event.dataTransfer.effectAllowed =
-                                            'copy';
-                                    }}
-                                    disabled={disabled || !activeRecipient}
-                                    onClick={() => addField(type)}
-                                    className="border-border hover:border-primary hover:bg-accent-subtle flex h-[38px] cursor-grab items-center gap-2 rounded-lg border bg-white px-2.5 text-left text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <Icon
-                                        className="size-3.5 shrink-0"
-                                        style={{
-                                            color: activeRecipient
-                                                ? recipientColor(
-                                                      indexOfRecipient(
-                                                          activeRecipient.client_id,
-                                                      ),
-                                                  ).solid
-                                                : undefined,
-                                        }}
-                                    />
-                                    <span className="truncate">
-                                        {fieldTypeLabels[type]}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <label className="text-text-secondary flex cursor-pointer items-center gap-2 text-[12.5px]">
-                        <Checkbox
-                            checked={grid}
-                            onCheckedChange={(value) => setGrid(value === true)}
-                        />
-                        Mostrar grade de alinhamento
-                    </label>
-                </div>
-
-                {selected && (
-                    <FieldProperties
-                        field={selected}
-                        recipients={recipients}
-                        disabled={disabled}
-                        onChange={(patch) =>
-                            updateField(selected.client_id, patch)
-                        }
-                        onDelete={() => deleteField(selected.client_id)}
-                        onDuplicate={() => duplicateField(selected.client_id)}
+                            </>
+                        )}
                     />
-                )}
-
-                <div className="border-border bg-card shadow-card flex flex-col gap-2 rounded-xl border p-4">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[13px] font-semibold">
-                            Campos inseridos
-                        </span>
-                        <span className="text-muted-foreground tabular text-[12px]">
-                            {manualFields.length}
-                        </span>
-                    </div>
-
-                    {manualFields.length === 0 && (
-                        <p className="text-muted-foreground py-2 text-[12.5px]">
-                            Nenhum campo posicionado ainda.
-                        </p>
-                    )}
-
-                    {manualFields.map((field) => (
-                        <button
-                            key={field.client_id}
-                            type="button"
-                            onClick={() => {
-                                if (field.page !== 'all') {
-                                    onPageChange(Number(field.page));
-                                }
-
-                                setSelectedId(field.client_id);
-                            }}
-                            className={cn(
-                                'border-muted flex items-center gap-2 border-t py-1.5 text-left text-[12.5px] first:border-t-0',
-                                field.client_id === selectedId &&
-                                    'text-primary font-semibold',
-                            )}
-                        >
-                            <span
-                                aria-hidden
-                                className="size-2 shrink-0 rounded-full"
-                                style={{
-                                    backgroundColor: colorOf(field).solid,
-                                }}
-                            />
-                            <span className="min-w-0 flex-1 truncate">
-                                {tagOf(field)}
-                            </span>
-                            <span className="text-muted-foreground shrink-0">
-                                {field.page === 'all'
-                                    ? 'todas'
-                                    : `pág. ${field.page}`}
-                            </span>
-                        </button>
-                    ))}
-
-                    {autoCount > 0 && (
-                        <p className="text-muted-foreground border-muted border-t pt-1.5 text-[12px]">
-                            + {autoCount}{' '}
-                            {autoCount === 1
-                                ? 'rubrica automática'
-                                : 'rubricas automáticas'}{' '}
-                            geradas pelo servidor.
-                        </p>
-                    )}
-
-                    <label className="text-text-secondary mt-1 flex cursor-pointer items-start gap-2 text-[12.5px]">
-                        <Checkbox
-                            checked={initialsOnAllPages}
-                            disabled={disabled}
-                            onCheckedChange={(value) =>
-                                onInitialsOnAllPagesChange(value === true)
-                            }
-                            className="mt-0.5"
-                        />
-                        <span>
-                            Rubrica em todas as páginas
-                            <span className="text-muted-foreground block text-[11.5px]">
-                                Gera uma rubrica por página para cada
-                                signatário, no rodapé à direita (
-                                {Math.round(INITIALS_ON_ALL_PAGES_RECT.x * 100)}
-                                % da largura).
-                            </span>
-                        </span>
-                    </label>
+                    <p className="text-muted-foreground mt-2 text-[12px] leading-[1.5]">
+                        Clique num campo para selecionar. Setas movem, Shift com
+                        as setas redimensiona, Delete remove.
+                    </p>
                 </div>
 
-                {missingSignature.length > 0 && (
-                    <div className="border-warning-border bg-warning-bg text-warning flex gap-2 rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
-                        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                        <span>
-                            Sem campo de assinatura:{' '}
-                            {missingSignature
-                                .map(
-                                    (recipient, index) =>
-                                        recipient.name ||
-                                        `Signatário ${recipients.indexOf(recipient) + 1 || index + 1}`,
-                                )
-                                .join(', ')}
-                            . Todo signatário precisa de pelo menos um campo de
-                            assinatura.
-                        </span>
-                    </div>
-                )}
+                <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-4">
+                    <div className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-4">
+                        <div className="text-[13px] font-semibold">
+                            Adicionar campo para
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {eligible.map((recipient) => {
+                                const index = indexOfRecipient(
+                                    recipient.client_id,
+                                );
+                                const color = recipientColor(index);
+                                const active =
+                                    recipient.client_id ===
+                                    activeRecipient?.client_id;
+                                const participantRole = roleOf(recipient);
 
-                <InputError message={errors.fields} />
+                                return (
+                                    <button
+                                        key={recipient.client_id}
+                                        type="button"
+                                        onClick={() =>
+                                            setActiveRecipientId(
+                                                recipient.client_id,
+                                            )
+                                        }
+                                        aria-pressed={active}
+                                        style={
+                                            active
+                                                ? {
+                                                      backgroundColor:
+                                                          color.solid,
+                                                      borderColor: color.solid,
+                                                      color: '#ffffff',
+                                                  }
+                                                : { borderColor: undefined }
+                                        }
+                                        className={cn(
+                                            'inline-flex h-[30px] max-w-full items-center gap-1.5 rounded-full border px-[10px] text-[12.5px] font-semibold',
+                                            !active &&
+                                                'border-input text-foreground bg-white',
+                                        )}
+                                    >
+                                        <span
+                                            aria-hidden
+                                            className="size-2 shrink-0 rounded-full"
+                                            style={{
+                                                backgroundColor: active
+                                                    ? '#ffffff'
+                                                    : color.solid,
+                                            }}
+                                        />
+                                        <span className="truncate">
+                                            {recipient.name ||
+                                                `Signatário ${index + 1}`}
+                                        </span>
+                                        {participantRole !== 'signer' && (
+                                            <span
+                                                className={cn(
+                                                    'shrink-0 text-[11px] font-medium',
+                                                    active
+                                                        ? 'text-white/85'
+                                                        : 'text-muted-foreground',
+                                                )}
+                                            >
+                                                ·{' '}
+                                                {participantRoleLabels[
+                                                    participantRole
+                                                ].toLowerCase()}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <p className="text-muted-foreground text-[12px] leading-[1.5]">
+                            Arraste um tipo de campo para a página ou clique
+                            para inserir no centro.
+                        </p>
+
+                        {activeIsApprover && (
+                            <p className="border-primary-soft-border bg-primary-soft text-primary rounded-[10px] border p-2.5 text-[12px] leading-[1.5]">
+                                Aprovadores aprovam o conteúdo sem representação
+                                visual de assinatura: assinatura e rubrica não
+                                estão disponíveis para eles.
+                            </p>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                            {FIELD_TYPES.map((type) => {
+                                const Icon = FIELD_TYPE_ICONS[type];
+                                const blocked =
+                                    activeIsApprover &&
+                                    VISUAL_TYPES.includes(type);
+
+                                return (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        draggable={
+                                            !disabled &&
+                                            !blocked &&
+                                            Boolean(activeRecipient)
+                                        }
+                                        onDragStart={(event) => {
+                                            event.dataTransfer.setData(
+                                                FIELD_DRAG_MIME,
+                                                type,
+                                            );
+                                            event.dataTransfer.effectAllowed =
+                                                'copy';
+                                        }}
+                                        disabled={
+                                            disabled ||
+                                            blocked ||
+                                            !activeRecipient
+                                        }
+                                        title={
+                                            blocked
+                                                ? 'Aprovadores não recebem assinatura nem rubrica'
+                                                : undefined
+                                        }
+                                        onClick={() => addField(type)}
+                                        className="border-border hover:border-primary hover:bg-accent-subtle flex h-[38px] cursor-grab items-center gap-2 rounded-lg border bg-white px-2.5 text-left text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Icon
+                                            className="size-3.5 shrink-0"
+                                            style={{
+                                                color: activeRecipient
+                                                    ? recipientColor(
+                                                          indexOfRecipient(
+                                                              activeRecipient.client_id,
+                                                          ),
+                                                      ).solid
+                                                    : undefined,
+                                            }}
+                                        />
+                                        <span className="truncate">
+                                            {fieldTypeLabels[type]}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <label className="text-text-secondary flex cursor-pointer items-center gap-2 text-[12.5px]">
+                            <Checkbox
+                                checked={grid}
+                                onCheckedChange={(value) =>
+                                    setGrid(value === true)
+                                }
+                            />
+                            Mostrar grade de alinhamento
+                        </label>
+                    </div>
+
+                    {selected && (
+                        <FieldProperties
+                            field={selected}
+                            recipients={recipients}
+                            disabled={disabled}
+                            onChange={(patch) =>
+                                updateField(selected.client_id, patch)
+                            }
+                            onDelete={() => deleteField(selected.client_id)}
+                            onDuplicate={() =>
+                                duplicateField(selected.client_id)
+                            }
+                        />
+                    )}
+
+                    <div className="border-border bg-card shadow-card flex flex-col gap-2 rounded-xl border p-4">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[13px] font-semibold">
+                                {multi
+                                    ? 'Campos neste arquivo'
+                                    : 'Campos inseridos'}
+                            </span>
+                            <span className="text-muted-foreground tabular text-[12px]">
+                                {manualFields.length}
+                            </span>
+                        </div>
+
+                        {manualFields.length === 0 && (
+                            <p className="text-muted-foreground py-2 text-[12.5px]">
+                                Nenhum campo posicionado ainda.
+                            </p>
+                        )}
+
+                        {manualFields.map((field) => (
+                            <button
+                                key={field.client_id}
+                                type="button"
+                                onClick={() => {
+                                    if (field.page !== 'all') {
+                                        onPageChange(Number(field.page));
+                                    }
+
+                                    setSelectedId(field.client_id);
+                                }}
+                                className={cn(
+                                    'border-muted flex items-center gap-2 border-t py-1.5 text-left text-[12.5px] first:border-t-0',
+                                    field.client_id === selectedId &&
+                                        'text-primary font-semibold',
+                                )}
+                            >
+                                <span
+                                    aria-hidden
+                                    className="size-2 shrink-0 rounded-full"
+                                    style={{
+                                        backgroundColor: colorOf(field).solid,
+                                    }}
+                                />
+                                <span className="min-w-0 flex-1 truncate">
+                                    {tagOf(field)}
+                                </span>
+                                <span className="text-muted-foreground shrink-0">
+                                    {field.page === 'all'
+                                        ? 'todas'
+                                        : `pág. ${field.page}`}
+                                </span>
+                            </button>
+                        ))}
+
+                        {autoCount > 0 && (
+                            <p className="text-muted-foreground border-muted border-t pt-1.5 text-[12px]">
+                                + {autoCount}{' '}
+                                {autoCount === 1
+                                    ? 'rubrica automática'
+                                    : 'rubricas automáticas'}{' '}
+                                geradas pelo servidor.
+                            </p>
+                        )}
+
+                        <label className="text-text-secondary mt-1 flex cursor-pointer items-start gap-2 text-[12.5px]">
+                            <Checkbox
+                                checked={initialsOnAllPages}
+                                disabled={disabled}
+                                onCheckedChange={(value) =>
+                                    onInitialsOnAllPagesChange(value === true)
+                                }
+                                className="mt-0.5"
+                            />
+                            <span>
+                                Rubrica em todas as páginas
+                                <span className="text-muted-foreground block text-[11.5px]">
+                                    {multi || rolesInUse
+                                        ? `Gera uma rubrica por página${multi ? ' de cada arquivo' : ''} para cada signatário e testemunha, no rodapé à direita (${Math.round(INITIALS_ON_ALL_PAGES_RECT.x * 100)}% da largura). Aprovadores e visualizadores não rubricam.`
+                                        : `Gera uma rubrica por página para cada signatário, no rodapé à direita (${Math.round(INITIALS_ON_ALL_PAGES_RECT.x * 100)}% da largura).`}
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+
+                    {(multi || rolesInUse) && (
+                        <div className="border-border bg-card shadow-card flex flex-col gap-1.5 rounded-xl border p-4">
+                            <span className="text-[13px] font-semibold">
+                                Por participante
+                            </span>
+                            {recipients.map((recipient, index) => {
+                                const participantRole = roleOf(recipient);
+                                const mine = allManual.filter(
+                                    (field) =>
+                                        field.recipient_client_id ===
+                                        recipient.client_id,
+                                );
+                                const files = new Set(mine.map(documentOf));
+
+                                return (
+                                    <div
+                                        key={recipient.client_id}
+                                        className="border-muted flex items-center gap-2 border-t py-1.5 text-[12.5px] first:border-t-0"
+                                    >
+                                        <span
+                                            aria-hidden
+                                            className="size-2 shrink-0 rounded-full"
+                                            style={{
+                                                backgroundColor:
+                                                    recipientColor(index).solid,
+                                            }}
+                                        />
+                                        <span className="min-w-0 flex-1 truncate">
+                                            {recipient.name ||
+                                                `${participantRoleLabels[participantRole]} ${index + 1}`}
+                                            {participantRole !== 'signer' && (
+                                                <span className="text-muted-foreground">
+                                                    {' '}
+                                                    ·{' '}
+                                                    {participantRoleLabels[
+                                                        participantRole
+                                                    ].toLowerCase()}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="text-muted-foreground tabular shrink-0">
+                                            {participantRole === 'viewer'
+                                                ? 'sem campos'
+                                                : multi
+                                                  ? `${plural(mine.length, 'campo')} · ${plural(files.size, 'arquivo')}`
+                                                  : plural(
+                                                        mine.length,
+                                                        'campo',
+                                                    )}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {missingSignature.length > 0 && (
+                        <div className="border-warning-border bg-warning-bg text-warning flex gap-2 rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
+                            <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                            <span>
+                                Sem campo de assinatura:{' '}
+                                {missingSignature
+                                    .map(
+                                        (recipient, index) =>
+                                            recipient.name ||
+                                            `Signatário ${recipients.indexOf(recipient) + 1 || index + 1}`,
+                                    )
+                                    .join(', ')}
+                                .{' '}
+                                {rolesInUse
+                                    ? 'Signatários e testemunhas precisam de pelo menos um campo de assinatura.'
+                                    : 'Todo signatário precisa de pelo menos um campo de assinatura.'}
+                            </span>
+                        </div>
+                    )}
+
+                    <InputError message={errors.fields} />
+                </div>
             </div>
         </div>
     );
@@ -584,6 +774,18 @@ function FieldProperties({
 }) {
     const options = field.options ?? {};
     const serverFilled = SERVER_FILLED_TYPES.includes(field.type);
+    // Mesmas regras do servidor: nada para visualizador; nada visual para aprovador.
+    const assignable = recipients.filter((recipient) => {
+        const participantRole = roleOf(recipient);
+
+        if (participantRole === 'viewer') {
+            return false;
+        }
+
+        return !(
+            participantRole === 'approver' && VISUAL_TYPES.includes(field.type)
+        );
+    });
 
     return (
         <div className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-4">
@@ -638,12 +840,13 @@ function FieldProperties({
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        {recipients.map((recipient, index) => (
+                        {assignable.map((recipient) => (
                             <SelectItem
                                 key={recipient.client_id}
                                 value={recipient.client_id}
                             >
-                                {recipient.name || `Signatário ${index + 1}`}
+                                {recipient.name ||
+                                    `Signatário ${recipients.indexOf(recipient) + 1}`}
                             </SelectItem>
                         ))}
                     </SelectContent>

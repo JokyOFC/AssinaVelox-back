@@ -145,7 +145,11 @@ class DailyDigest
 
     private function pendingCount(Envelope $envelope): int
     {
+        // "Faltam N assinaturas" conta só quem tem aceite a dar: o visualizador (Fase 2
+        // §2.4) nunca assina, e um envelope só com ele pendente sairia do resumo como se
+        // estivesse travado.
         return $envelope->recipients()
+            ->participating()
             ->whereIn('status', [
                 RecipientStatus::Pending->value,
                 RecipientStatus::Notified->value,

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Models\Recipient;
 use App\Support\IpDisplay;
@@ -81,6 +82,10 @@ class RecipientResource extends JsonResource
                 ?? ($this->notification_count > 1 ? $this->last_notified_at?->toIso8601String() : null),
             'can_resend' => $canResend,
             'can_edit' => $pendingSignature && ($inProgress || ($envelope?->status->isDraftLike() ?? false)),
+            // Fase 2 §2.4 (aditivos).
+            'participant_role' => $this->role->value,
+            'participant_role_label' => $this->role->label(),
+            'acceptance_action' => $acceptance?->action->value,
             'evidence' => $acceptance ? [
                 // `evidence_show_ip` é da ORGANIZAÇÃO (arquitetura §3.1) e vale para todas as
                 // telas, não só para o comprovante do signatário: mostrar o IP inteiro aqui
@@ -110,6 +115,11 @@ class RecipientResource extends JsonResource
      */
     protected function statusLabel(): string
     {
+        // Aprovador não assina: o aceite dele é uma aprovação (Fase 2 §2.4).
+        if ($this->status === RecipientStatus::Signed && $this->role === RecipientRole::Approver) {
+            return 'Aprovado';
+        }
+
         return $this->status->label();
     }
 

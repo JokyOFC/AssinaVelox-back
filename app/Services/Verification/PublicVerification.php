@@ -3,10 +3,14 @@
 namespace App\Services\Verification;
 
 use App\Enums\EnvelopeStatus;
+use App\Enums\RecipientRole;
+use App\Enums\RecipientStatus;
 use App\Enums\SignatureStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\VerificationRecord;
+use App\Models\VerificationRecordDocument;
+use App\Services\Documents\EnvelopeDocuments;
 
 /**
  * Consulta pública por código de verificação (arquitetura §6, ROUTES §4).
@@ -70,6 +74,7 @@ final class PublicVerification
                 'finalVersion',
                 'recipients',
                 'verificationRecord.certificateReference',
+                'verificationRecord.documents',
             ])
             ->where('verification_code', $this->normalize($code))
             ->first();
@@ -100,7 +105,7 @@ final class PublicVerification
         $signature = SignatureNarrative::for($envelope, $record);
         $hashes = HashLedger::values($envelope, $record);
 
-        return [
+        $result = [
             'verification_code' => $envelope->formatted_verification_code,
             // `finalizing` é detalhe do pipeline: para quem consulta de fora é "em andamento".
             'status' => $envelope->status === EnvelopeStatus::Finalizing
@@ -140,6 +145,62 @@ final class PublicVerification
             'recipients' => $this->recipients($envelope),
             'events_summary' => $this->milestones($envelope, $record, $signature),
         ];
+
+        // Fase 2 §2.3 (aditivo): um item por arquivo, com os resumos publicáveis (enviado e
+        // final). A página pública tem uma lista FECHADA de chaves (privacidade §11): as novas
+        // só aparecem quando o envelope de fato tem vários arquivos — com um arquivo, a
+        // resposta é exatamente a da Fase 1.
+        $documents = $this->documents($envelope, $record);
+
+        if (count($documents) > 1) {
+            $result['documents'] = $documents;
+            $result['documents_count'] = count($documents);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Arquivos do envelope com os resumos que a página pública pode mostrar: `sent_sha256`
+     * (a versão apresentada aos participantes) e `final_sha256` (o arquivo final). O resumo
+     * `original` e o `consolidado` continuam fora da página pública (HashLedger).
+     *
+     * Fonte: `verification_record_documents` depois da conclusão; antes dela, as versões
+     * congeladas no envio (sem resumo final, que ainda não existe).
+     *
+     * @return list<array{position: int, name: string, pages: int, sent_sha256: string|null, final_sha256: string|null}>
+     */
+    public function documents(Envelope $envelope, ?VerificationRecord $record): array
+    {
+        $children = $record?->relationLoaded('documents') ? $record->documents : $record?->documents()->get();
+
+        if ($children !== null && $children->isNotEmpty()) {
+            return array_values($children
+                ->map(fn (VerificationRecordDocument $row): array => [
+                    'position' => (int) $row->position,
+                    'name' => $row->name,
+                    'pages' => (int) ($row->page_count ?? 0),
+                    'sent_sha256' => $row->sent_sha256,
+                    'final_sha256' => $row->final_sha256,
+                ])
+                ->all());
+        }
+
+        $rows = [];
+
+        foreach (EnvelopeDocuments::sent($envelope) as $index => $item) {
+            $rows[] = [
+                'position' => (int) $item['document']->position,
+                'name' => $item['document']->name,
+                'pages' => (int) ($item['version']->page_count ?? 0),
+                'sent_sha256' => $item['version']->sha256,
+                // Envelope de um documento finalizado antes da Fase 2: o registro-pai tem o
+                // resumo final; com vários, só a tabela filha o teria.
+                'final_sha256' => $index === 0 && $record !== null ? $record->final_sha256 : null,
+            ];
+        }
+
+        return $rows;
     }
 
     /**
@@ -149,17 +210,34 @@ final class PublicVerification
      */
     private function recipients(Envelope $envelope): array
     {
+        // Lista fechada de chaves (privacidade §11): o papel de domínio só entra quando o
+        // envelope usa papéis além de `signer` (Fase 2 §2.4).
+        $withRoles = $envelope->recipients->contains(fn (Recipient $recipient): bool => $recipient->role !== RecipientRole::Signer);
+
         return array_values($envelope->recipients
-            ->map(fn (Recipient $recipient): array => [
-                'name_masked' => NameMask::mask($recipient->name),
-                // Papel livre digitado pelo remetente ("Locatária", "Fiador"), previsto no §4.2.
-                'role' => is_string($recipient->role_label) && trim($recipient->role_label) !== ''
-                    ? trim($recipient->role_label)
-                    : null,
-                'status' => $recipient->status->value,
-                'status_label' => $recipient->status->label(),
-                'signed_at' => $recipient->signed_at?->toIso8601String(),
-            ])
+            // Visualizadores (Fase 2 §2.4) não participam da coleta: não aparecem na página pública.
+            ->filter(fn (Recipient $recipient): bool => $recipient->participates())
+            ->map(function (Recipient $recipient) use ($withRoles): array {
+                $row = [
+                    'name_masked' => NameMask::mask($recipient->name),
+                    // Papel livre digitado pelo remetente ("Locatária", "Fiador"), previsto no §4.2.
+                    'role' => is_string($recipient->role_label) && trim($recipient->role_label) !== ''
+                        ? trim($recipient->role_label)
+                        : null,
+                    'status' => $recipient->status->value,
+                    'status_label' => $recipient->status === RecipientStatus::Signed && $recipient->role === RecipientRole::Approver
+                        ? 'Aprovado'
+                        : $recipient->status->label(),
+                    'signed_at' => $recipient->signed_at?->toIso8601String(),
+                ];
+
+                if ($withRoles) {
+                    $row['participant_role'] = $recipient->role->value;
+                    $row['participant_role_label'] = $recipient->role->label();
+                }
+
+                return $row;
+            })
             ->all());
     }
 
@@ -179,9 +257,14 @@ final class PublicVerification
         }
 
         foreach ($envelope->recipients as $recipient) {
+            if (! $recipient->participates()) {
+                continue;
+            }
+
             if ($recipient->signed_at !== null) {
                 $milestones[] = [
-                    'label' => 'Aceite registrado · '.NameMask::mask($recipient->name),
+                    'label' => ($recipient->role === RecipientRole::Approver ? 'Aprovação registrada · ' : 'Aceite registrado · ')
+                        .NameMask::mask($recipient->name),
                     'occurred_at' => $recipient->signed_at,
                 ];
             }
@@ -266,6 +349,28 @@ final class PublicVerification
             default => 'none',
         };
 
-        return ['matches' => $matches, 'checked_sha256' => $checked];
+        $documents = $this->documents($envelope, $envelope->verificationRecord);
+
+        if (count($documents) <= 1) {
+            return ['matches' => $matches, 'checked_sha256' => $checked];
+        }
+
+        // Vários documentos (Fase 2 §2.3): o resumo pode ser de QUALQUER um dos arquivos. A
+        // resposta diz qual — sem revelar nada além do que a própria página já lista.
+        foreach (['signed' => 'final_sha256', 'original' => 'sent_sha256'] as $kind => $column) {
+            foreach ($documents as $document) {
+                $value = $document[$column];
+
+                if (is_string($value) && $value !== '' && hash_equals(strtolower($value), $checked)) {
+                    return [
+                        'matches' => $kind,
+                        'checked_sha256' => $checked,
+                        'document' => ['position' => $document['position'], 'name' => $document['name']],
+                    ];
+                }
+            }
+        }
+
+        return ['matches' => 'none', 'checked_sha256' => $checked, 'document' => null];
     }
 }

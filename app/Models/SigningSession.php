@@ -121,6 +121,16 @@ class SigningSession extends Model
         return $this->hasOne(SignatureAcceptance::class);
     }
 
+    /**
+     * Documentos entregues a esta sessão (Fase 2 §2.3).
+     *
+     * @return HasMany<SigningSessionDocument, $this>
+     */
+    public function presentations(): HasMany
+    {
+        return $this->hasMany(SigningSessionDocument::class);
+    }
+
     public function isExpired(): bool
     {
         return $this->expires_at->isPast();

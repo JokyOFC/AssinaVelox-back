@@ -91,6 +91,9 @@
 <h2>1. Identificação</h2>
 <table class="kv">
     <tr><td>Documento</td><td class="strong">{{ $e['envelope']['title'] }}</td></tr>
+    @if (! empty($e['document']))
+        <tr><td>Arquivo desta página</td><td class="strong">{{ $e['document']['position'] }} de {{ $e['document']['count'] }} — {{ $e['document']['name'] }}</td></tr>
+    @endif
     <tr><td>Identificação interna</td><td>{{ $e['envelope']['display_code'] }}</td></tr>
     <tr><td>Código de verificação</td><td class="strong">{{ $e['envelope']['verification_code'] }}</td></tr>
     <tr><td>Organização remetente</td><td>{{ $e['organization']['legal_name'] ?: $e['organization']['name'] }}</td></tr>
@@ -118,6 +121,9 @@
             <td>
                 <span class="strong">{{ $participant['name'] }}</span><br>
                 <span class="small muted">{{ $participant['email'] }}</span>
+                @if (! empty($e['has_roles']) && ! empty($participant['role_label']))
+                    <br><span class="small">Papel: {{ $participant['role_label'] }}</span>
+                @endif
             </td>
             <td>
                 {{ $participant['status_label'] }}
@@ -147,6 +153,9 @@
                 @if ($participant['signature_kind'])
                     <br><span class="muted">Representação visual: {{ $participant['signature_kind'] }}@if ($participant['typed_name']) (“{{ $participant['typed_name'] }}”)@endif</span>
                 @endif
+                @if (! empty($e['has_roles']) && ! empty($participant['action_label']))
+                    <br><span class="muted">Registro: {{ $participant['action_label'] }}@if (($participant['role'] ?? null) === 'approver') (sem representação visual de assinatura)@endif</span>
+                @endif
             </td>
         </tr>
     @endforeach
@@ -156,6 +165,55 @@
     A imagem de assinatura (desenhada, digitada ou enviada) é uma <span class="strong">representação visual</span>
     e não prova, por si só, a autoria. A manifestação de vontade é o aceite eletrônico registrado acima.
 </p>
+@if (! empty($e['viewers']))
+    <p class="small muted">
+        Receberam cópia para acompanhamento, sem registrar aceite (visualizadores):
+        @foreach ($e['viewers'] as $viewer){{ $loop->first ? '' : '; ' }}{{ $viewer['name'] }} ({{ $viewer['email'] }})@endforeach.
+    </p>
+@endif
+
+@if (count($e['documents'] ?? []) > 1)
+    <h2>Documentos deste envelope ({{ count($e['documents']) }})</h2>
+    <p class="small">
+        Esta solicitação reúne {{ count($e['documents']) }} documentos. Cada participante registrou um único aceite que
+        cobre o conjunto; abaixo, por documento, os resumos SHA-256 e quem registrou aceite sobre ele. Cada documento
+        tem o seu próprio arquivo final e o seu próprio resumo <span class="strong">Final</span>, publicados na página
+        de verificação.
+    </p>
+    <table>
+        <thead>
+        <tr>
+            <th style="width: 30%">Documento</th>
+            <th style="width: 40%">Resumos (original · enviado · consolidado)</th>
+            <th style="width: 30%">Aceites registrados</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach ($e['documents'] as $doc)
+            <tr>
+                <td>
+                    <span class="strong">{{ $doc['position'] }}. {{ $doc['name'] }}</span><br>
+                    <span class="small muted">{{ $doc['page_count'] }} página(s)</span>
+                </td>
+                <td class="mono">
+                    {{ $doc['hashes']['original'] ?? '—' }}<br>
+                    {{ $doc['hashes']['sent'] ?? '—' }}<br>
+                    {{ $doc['hashes']['consolidated'] ?? '—' }}
+                </td>
+                <td class="small">
+                    @forelse ($doc['accepted_by'] as $accepted)
+                        {{ $accepted['name'] }}@if ($accepted['role_label']) ({{ $accepted['role_label'] }})@endif
+                        @if ($accepted['accepted_at'])<br><span class="muted">{{ $accepted['accepted_at'] }}</span>@endif
+                        @if (! $loop->last)<br>@endif
+                    @empty
+                        —
+                    @endforelse
+                </td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
+@endif
 
 <h2>3. Linha do tempo</h2>
 @if (count($e['timeline']) === 0)
@@ -192,6 +250,10 @@
     byte a byte: qualquer alteração no arquivo, por menor que seja, produz um resumo completamente diferente.
     <span class="strong">Um resumo não é uma assinatura</span>: ele permite conferir se dois arquivos são idênticos,
     e nada mais. Cada resumo abaixo foi calculado sobre bytes distintos.
+    @if (! empty($e['document']))
+        Os resumos abaixo são do arquivo {{ $e['document']['position'] }} de {{ $e['document']['count'] }}
+        ({{ $e['document']['name'] }}); os dos demais estão na seção “Documentos deste envelope”.
+    @endif
 </p>
 <table>
     <thead>

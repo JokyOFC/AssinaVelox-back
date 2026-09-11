@@ -2,20 +2,31 @@
 
 namespace App\Http\Requests\Members;
 
-use App\Enums\MembershipRole;
+use App\Enums\FolderAccessLevel;
+use App\Enums\Permission;
+use App\Http\Requests\Members\Concerns\ResolvesTargetRole;
 use App\Models\MembershipInvitation;
 use App\Support\CurrentOrganization;
+use App\Support\Permissions;
+use App\Support\PermissionsFolderAccess;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * POST /usuarios/convites (ROUTES §2.10): `emails` (string separada por vírgula OU array,
  * 1–20, cada um válido, não membro e sem convite pendente) + `role ∈ admin | member`.
+ *
+ * Fase 2 (flag `custom_roles`): `role_id` (função personalizada) e `folders[]`
+ * ({folder, level}; "Pastas com acesso", exige `manage_folders`). Anti-escalada: a função
+ * oferecida não pode ter permissões que o ator não tem.
  */
 class StoreInvitationRequest extends FormRequest
 {
+    use ResolvesTargetRole;
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', MembershipInvitation::class) ?? false;
@@ -80,7 +91,22 @@ class StoreInvitationRequest extends FormRequest
                     }
                 },
             ],
-            'role' => ['required', 'string', Rule::in([MembershipRole::Admin->value, MembershipRole::Member->value])],
+            'role' => ['required_without:role_id', 'nullable', 'string', Rule::in(self::ASSIGNABLE_SYSTEM_ROLES)],
+            'role_id' => ['nullable', 'string', 'size:26'],
+            'folders' => ['sometimes', 'array', 'max:500'],
+            'folders.*.folder' => ['required', 'string', 'size:26'],
+            'folders.*.level' => ['required', 'string', Rule::enum(FolderAccessLevel::class)],
+        ];
+    }
+
+    /**
+     * @return array<int, Closure>
+     */
+    public function after(): array
+    {
+        return [
+            fn (Validator $validator) => $this->resolveTargetRole($validator),
+            fn (Validator $validator) => $this->checkFolders($validator),
         ];
     }
 
@@ -93,6 +119,8 @@ class StoreInvitationRequest extends FormRequest
             'emails' => 'e-mails',
             'emails.*' => 'e-mail',
             'role' => 'função',
+            'role_id' => 'função',
+            'folders' => 'pastas com acesso',
         ];
     }
 
@@ -105,6 +133,7 @@ class StoreInvitationRequest extends FormRequest
             'emails.required' => 'Informe pelo menos um e-mail.',
             'emails.max' => 'Convide no máximo 20 e-mails por vez.',
             'emails.*.email' => 'O e-mail :input não é válido.',
+            'role.required_without' => 'Escolha uma função.',
         ];
     }
 
@@ -116,8 +145,36 @@ class StoreInvitationRequest extends FormRequest
         return array_values($this->validated('emails'));
     }
 
-    public function role(): MembershipRole
+    /**
+     * @return array<int, FolderAccessLevel>
+     */
+    public function folderGrants(): array
     {
-        return MembershipRole::from($this->validated('role'));
+        $organization = CurrentOrganization::instance()->get();
+
+        if ($organization === null || ! array_key_exists('folders', $this->validated())) {
+            return [];
+        }
+
+        return PermissionsFolderAccess::parse((int) $organization->getKey(), (array) $this->validated('folders', []));
+    }
+
+    protected function checkFolders(Validator $validator): void
+    {
+        if ($validator->errors()->isNotEmpty() || ! is_array($this->input('folders')) || $this->input('folders') === []) {
+            return;
+        }
+
+        $current = CurrentOrganization::instance();
+
+        if (! Permissions::customRolesEnabled($current->get())) {
+            $validator->errors()->add('folders', 'Acesso por pasta não está disponível no plano desta conta.');
+
+            return;
+        }
+
+        if (! ($current->membership()?->hasPermission(Permission::ManageFolders) ?? false)) {
+            $validator->errors()->add('folders', 'Você não pode definir pastas com acesso.');
+        }
     }
 }

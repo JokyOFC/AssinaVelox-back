@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { formatDateTime, formatVerificationCode, plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { show as verifyShow } from '@/routes/verify';
+import type { AcceptanceAction } from '@/types/enums';
 
 /** Comprovante do aceite, como o servidor o envia (`SignerPageProps::receipt`). */
 export interface SignerReceipt {
@@ -46,6 +47,18 @@ export interface SignerReceipt {
      * próprio aceite, mas não haverá arquivo final — e a tela precisa dizer isso.
      */
     collection_closed?: 'expired' | 'canceled' | 'refused' | null;
+    /** Fase 2 §2.4: o que foi registrado (`sign`, `witness`, `approve`). */
+    action?: AcceptanceAction;
+    /** "Aceite eletrônico", "Aceite eletrônico como testemunha", "Aprovação eletrônica". */
+    action_label?: string;
+    /** Fase 2 §2.3: um item por arquivo coberto pelo aceite. */
+    documents?: {
+        id: string | null;
+        position: number;
+        name: string | null;
+        sha256: string | null;
+        final_pdf_url: string | null;
+    }[];
 }
 
 /** Data e hora em UTC — o carimbo que a declaração de aceite referencia. */
@@ -88,6 +101,10 @@ export function ReceiptCard({
     const code = formatVerificationCode(receipt.verification_code);
     const shortHash = (value: string) =>
         `${value.slice(0, 8)}…${value.slice(-4)}`;
+    // Fase 2 §2.4: o aprovador registra aprovação, não assinatura.
+    const approval = receipt.action === 'approve';
+    const files = receipt.documents ?? [];
+    const multi = files.length > 1;
 
     // Três estados, não dois. Quem assinava por ÚLTIMO caía no ramo "pendente" e
     // lia "você receberá o arquivo final quando todos os participantes
@@ -140,11 +157,17 @@ export function ReceiptCard({
                           ? 'Coleta encerrada'
                           : lastSigner
                             ? 'Aceites concluídos'
-                            : 'Você já assinou'}
+                            : approval
+                              ? 'Você já aprovou'
+                              : 'Você já assinou'}
                 </h1>
                 <p className="text-text-secondary mt-2 text-[13.5px] leading-[1.55]">
-                    <b className="text-foreground">Aceite registrado.</b> Sua
-                    manifestação foi gravada em{' '}
+                    <b className="text-foreground">
+                        {approval
+                            ? 'Aprovação registrada.'
+                            : 'Aceite registrado.'}
+                    </b>{' '}
+                    Sua manifestação foi gravada em{' '}
                     {formatDateTime(receipt.signed_at)} (
                     {formatUtc(receipt.signed_at)} UTC), autenticada por código
                     enviado ao e-mail {emailMasked}. Código de verificação:{' '}
@@ -154,7 +177,13 @@ export function ReceiptCard({
                 {stillWaiting && (
                     <p className="text-text-secondary mt-1.5 text-[13px]">
                         Aguardando{' '}
-                        {plural(receipt.pending_others, 'signatário')}.
+                        {plural(
+                            receipt.pending_others,
+                            receipt.action && receipt.action !== 'sign'
+                                ? 'participante'
+                                : 'signatário',
+                        )}
+                        .
                     </p>
                 )}
             </div>
@@ -168,7 +197,7 @@ export function ReceiptCard({
             <dl className="border-border bg-sidebar grid grid-cols-[104px_1fr] gap-x-3 gap-y-1.5 rounded-[10px] border p-3.5 text-[12px]">
                 <dt className="text-muted-foreground">Comprovante</dt>
                 <dd className="text-foreground font-semibold">
-                    Aceite eletrônico
+                    {receipt.action_label ?? 'Aceite eletrônico'}
                 </dd>
                 <dt className="text-muted-foreground">Data e hora</dt>
                 <dd className="tabular">{formatDateTime(receipt.signed_at)}</dd>
@@ -191,7 +220,35 @@ export function ReceiptCard({
                         <dd className="tabular">{receipt.terms_version}</dd>
                     </>
                 )}
-                {receipt.document_sha256 && (
+                {multi && (
+                    <>
+                        <dt className="text-muted-foreground">Arquivos</dt>
+                        <dd className="flex min-w-0 flex-col gap-1">
+                            {files.map((file) => (
+                                <span
+                                    key={`${file.position}-${file.id}`}
+                                    className="flex min-w-0 flex-col"
+                                >
+                                    <span className="truncate font-semibold">
+                                        {file.position}.{' '}
+                                        {file.name ??
+                                            `Arquivo ${file.position}`}
+                                    </span>
+                                    {file.sha256 && (
+                                        <span className="flex items-center gap-1 font-mono">
+                                            {shortHash(file.sha256)}
+                                            <CopyButton
+                                                value={file.sha256}
+                                                className="size-5"
+                                            />
+                                        </span>
+                                    )}
+                                </span>
+                            ))}
+                        </dd>
+                    </>
+                )}
+                {!multi && receipt.document_sha256 && (
                     <>
                         <dt className="text-muted-foreground">
                             SHA-256 do documento
@@ -251,10 +308,43 @@ export function ReceiptCard({
                 </p>
             )}
 
+            {/* Fase 2 §2.3: com vários arquivos, uma cópia final por arquivo. */}
+            {multi &&
+                receipt.can_download &&
+                files.some((file) => file.final_pdf_url) && (
+                    <div className="flex flex-col gap-1.5">
+                        {files.map(
+                            (file) =>
+                                file.final_pdf_url && (
+                                    <Button
+                                        key={`final-${file.position}`}
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="justify-start"
+                                    >
+                                        <a href={file.final_pdf_url}>
+                                            <Download className="size-4" />
+                                            <span className="truncate">
+                                                Baixar {file.position}.{' '}
+                                                {file.name ??
+                                                    `arquivo ${file.position}`}
+                                            </span>
+                                        </a>
+                                    </Button>
+                                ),
+                        )}
+                    </div>
+                )}
+
             <div className="flex flex-wrap gap-2">
-                {receipt.can_download &&
-                receipt.final_pdf_available &&
-                receipt.final_pdf_url ? (
+                {multi &&
+                receipt.can_download &&
+                files.some(
+                    (file) => file.final_pdf_url,
+                ) ? null : receipt.can_download &&
+                  receipt.final_pdf_available &&
+                  receipt.final_pdf_url ? (
                     <Button
                         asChild
                         variant="outline"

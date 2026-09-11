@@ -29,6 +29,20 @@ export type RecipientStatus =
 
 export type SigningOrder = 'sequential' | 'parallel';
 
+/**
+ * Papel de domínio do participante (`App\Enums\RecipientRole`, Fase 2 §2.4).
+ * Não confundir com `role` do destinatário, que é o rótulo livre ("Locatária").
+ *
+ *   signer   = aceite eletrônico com representação visual
+ *   witness  = aceite eletrônico como testemunha (declaração própria)
+ *   approver = aprovação eletrônica, SEM representação visual de assinatura
+ *   viewer   = só recebe o documento e a cópia final; não registra aceite
+ */
+export type ParticipantRole = 'signer' | 'witness' | 'approver' | 'viewer';
+
+/** O que um aceite registrou (`App\Enums\AcceptanceAction`, Fase 2 §2.4). */
+export type AcceptanceAction = 'sign' | 'witness' | 'approve';
+
 export type DocumentSourceType = 'pdf' | 'docx' | 'image';
 
 export type DocumentProcessingStatus =
@@ -158,7 +172,25 @@ export type AuditEventType =
     | 'envelope.duplicated'
     | 'plan.consumption_reserved'
     | 'plan.consumption_committed'
-    | 'plan.consumption_released';
+    | 'plan.consumption_released'
+    // Fase 2 §2.3/§2.4 (docs/fase-2/multi-documento-e-papeis.md §10)
+    | 'documents.reordered'
+    | 'approval.recorded'
+    | 'document.finalized'
+    // Fase 2 §2.5 (docs/fase-2/lembretes-e-agendamento.md §6)
+    | 'envelope.scheduled'
+    | 'envelope.schedule_canceled'
+    | 'reminder.sent'
+    | 'reminder.skipped'
+    // Fase 2 §2.14 (docs/fase-2/permissoes-e-times.md)
+    | 'role.created'
+    | 'role.updated'
+    | 'role.deleted'
+    | 'membership.role_changed'
+    | 'team.created'
+    | 'team.updated'
+    | 'team.deleted'
+    | 'folder_access.updated';
 
 /** Cor/semântica de um evento na timeline (derivado no backend). */
 export type AuditEventKind = 'ok' | 'info' | 'warn';

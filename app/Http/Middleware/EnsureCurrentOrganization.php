@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Enums\MembershipStatus;
+use App\Models\Impersonation;
 use App\Models\Membership;
 use App\Models\User;
+use App\Services\Impersonation\ImpersonationManager;
 use App\Support\CurrentOrganization;
 use Closure;
 use Illuminate\Http\Request;
@@ -19,6 +21,11 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Define App\Support\CurrentOrganization (organização + membership) para o escopo global,
  * policies e props compartilhadas, e sincroniza `users.current_organization_id`.
+ *
+ * Durante "acessar como" (Fase 2) a sessão foi autorizada para UMA organização: só ela é
+ * resolvida, sem fallback, e nada é gravado na conta do alvo. Sem membership ATIVA do alvo
+ * nessa organização (suspenso ou removido no meio da sessão), a sessão de suporte é
+ * encerrada e o login volta ao admin — o suporte nunca passa a navegar outra organização.
  */
 class EnsureCurrentOrganization
 {
@@ -30,6 +37,10 @@ class EnsureCurrentOrganization
 
         if (! $user instanceof User) {
             abort(401);
+        }
+
+        if (ImpersonationManager::active($request)) {
+            return $this->handleImpersonation($request, $user, $next);
         }
 
         $membership = $this->resolveMembership($request, $user);
@@ -53,6 +64,43 @@ class EnsureCurrentOrganization
         if ($user->current_organization_id !== $organization->getKey()) {
             $user->forceFill(['current_organization_id' => $organization->getKey()])->saveQuietly();
         }
+
+        return $next($request);
+    }
+
+    protected function handleImpersonation(Request $request, User $user, Closure $next): Response
+    {
+        $manager = app(ImpersonationManager::class);
+        $impersonation = $manager->current($request);
+
+        $membership = $impersonation !== null
+            && $impersonation->ended_at === null
+            && $user->getKey() === $impersonation->target_user_id
+                ? $this->activeMembership($user, (int) $impersonation->organization_id)
+                : null;
+
+        if ($membership === null) {
+            if ($impersonation !== null) {
+                $manager->end($impersonation, Impersonation::END_INVALID);
+            }
+
+            $admin = $manager->stop($request, Impersonation::END_INVALID);
+            $message = 'A sessão de suporte foi encerrada: o usuário não tem mais acesso ativo a esta organização.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 409);
+            }
+
+            return $admin !== null && $impersonation !== null
+                ? redirect()->route('admin.organizations.show', ['organization' => $impersonation->organization->ulid])->with('warning', $message)
+                : redirect()->route('login')->with('warning', $message);
+        }
+
+        CurrentOrganization::instance()->set($membership->organization, $membership);
+
+        // A organização da sessão foi fixada no início; `users.current_organization_id` do
+        // alvo (a organização preferida DELE) não é tocada pela navegação do suporte.
+        $request->session()->put(self::SESSION_KEY, $membership->organization_id);
 
         return $next($request);
     }

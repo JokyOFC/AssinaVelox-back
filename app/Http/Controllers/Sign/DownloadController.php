@@ -10,6 +10,7 @@ use App\Http\Middleware\ResolveSignerToken;
 use App\Models\DocumentVersion;
 use App\Models\SignatureAcceptance;
 use App\Services\Documents\DocumentStorage;
+use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Signing\AcceptanceReceipt;
 use App\Services\Signing\SignerAudit;
 use App\Services\Signing\SignerContext;
@@ -78,7 +79,7 @@ class DownloadController extends Controller
 
         return $type === 'evidence'
             ? $this->evidence($context, $acceptance)
-            : $this->signed($context);
+            : $this->signed($context, $request);
     }
 
     private function evidence(SignerContext $context, ?SignatureAcceptance $acceptance): Response
@@ -105,15 +106,27 @@ class DownloadController extends Controller
         ]);
     }
 
-    private function signed(SignerContext $context): Response
+    private function signed(SignerContext $context, Request $request): Response
     {
-        $version = $context->envelope->status === EnvelopeStatus::Completed
-            && $context->envelope->final_document_version_id !== null
-                ? DocumentVersion::withoutOrganizationScope()
-                    ->whereKey($context->envelope->final_document_version_id)
-                    ->where('kind', DocumentVersionKind::Final->value)
-                    ->first()
-                : null;
+        // Fase 2 §2.3: `?document={ulid}` escolhe o arquivo final de um documento do envelope.
+        $ulid = $request->query('document');
+        $document = null;
+
+        if (is_string($ulid) && $ulid !== '') {
+            $document = EnvelopeDocuments::find($context->envelope, $ulid);
+
+            abort_if($document === null, 404, 'Arquivo indisponível.');
+        }
+
+        $finalId = $document !== null ? $document->final_version_id : $context->envelope->final_document_version_id;
+
+        $version = $context->envelope->status === EnvelopeStatus::Completed && $finalId !== null
+            ? DocumentVersion::withoutOrganizationScope()
+                ->whereKey($finalId)
+                ->where('organization_id', $context->envelope->organization_id)
+                ->where('kind', DocumentVersionKind::Final->value)
+                ->first()
+            : null;
 
         abort_if(
             $version === null,
@@ -129,7 +142,9 @@ class DownloadController extends Controller
         ]);
 
         $filename = $this->storage->downloadFilename(
-            $context->envelope->title.' (assinado)',
+            $document !== null && (int) $document->position > 1
+                ? $context->envelope->title.' — '.$document->name.' (assinado)'
+                : $context->envelope->title.' (assinado)',
             $context->envelope->display_code,
             'pdf',
         );

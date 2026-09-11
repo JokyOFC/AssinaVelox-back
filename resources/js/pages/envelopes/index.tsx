@@ -6,6 +6,7 @@ import {
     MoreHorizontal,
     Plus,
     RefreshCw,
+    Tag as TagIcon,
     XCircle,
 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
@@ -25,6 +26,8 @@ import { PageHeader } from '@/components/page-header';
 import { RailNavButton, UnderlineTabs } from '@/components/segmented-control';
 import { EnvelopeStatusBadge } from '@/components/status/envelope-status-badge';
 import { TablePagination } from '@/components/table-pagination';
+import { BulkTagDialog } from '@/components/tags/bulk-tag-dialog';
+import { TagChipList, type TagOption } from '@/components/tags/tag-chip';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -69,6 +72,7 @@ import {
     index as envelopesIndex,
     show as envelopeShow,
 } from '@/routes/envelopes';
+import { detach as detachTag } from '@/routes/envelopes/tags';
 import { store as storeFolder } from '@/routes/folders';
 import type {
     EnvelopeListItem,
@@ -101,6 +105,8 @@ export interface EnvelopesIndexProps {
         recipient: string;
         creator: string | null;
         sort: Sort;
+        /** Fase 2 — etiquetas (App\Services\Tags\EnvelopeTagIndex). */
+        tag?: string | null;
     };
     summary: { total: number; awaiting: number; storage_used_bytes: number };
     tabs: Record<EnvelopeTab, number>;
@@ -108,6 +114,16 @@ export interface EnvelopesIndexProps {
     creators: UserRef[];
     envelopes: Paginated<EnvelopeListItem>;
     can: { create_folder: boolean; bulk_cancel: boolean };
+    /**
+     * Fase 2 — etiquetas (flag `tags`). Ausente ou `enabled: false`: nada de
+     * etiqueta aparece e a lista fica idêntica à Fase 1.
+     */
+    tagging?: {
+        enabled: boolean;
+        can_manage: boolean;
+        available: TagOption[];
+        by_envelope: Record<string, TagOption[]>;
+    };
 }
 
 const SORT_LABELS: Record<Sort, string> = {
@@ -135,6 +151,7 @@ export default function EnvelopesIndex({
     creators,
     envelopes,
     can,
+    tagging,
 }: EnvelopesIndexProps) {
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [pending, setPending] = useState<PendingAction>(null);
@@ -142,6 +159,14 @@ export default function EnvelopesIndex({
     const [folderDialog, setFolderDialog] = useState(false);
     const [moveOpen, setMoveOpen] = useState(false);
     const [moveTarget, setMoveTarget] = useState<string>('__none');
+    const [tagOpen, setTagOpen] = useState(false);
+    const tagsEnabled = tagging?.enabled === true;
+
+    const removeTag = (row: EnvelopeListItem, tag: TagOption) => {
+        router.delete(detachTag.url({ envelope: row.id, tag: tag.id }), {
+            preserveScroll: true,
+        });
+    };
 
     const apply = (next: Partial<EnvelopesIndexProps['filters']>) => {
         router.get(
@@ -210,22 +235,47 @@ export default function EnvelopesIndex({
             key: 'title',
             header: 'Documento',
             width: 'minmax(0,2.6fr)',
-            cell: (row) => (
-                <TitleCell
-                    icon={<FileText className="size-[17px]" />}
-                    title={row.title}
-                    href={envelopeShow(row.id).url}
-                    onClick={() => router.visit(envelopeShow(row.id).url)}
-                    meta={[
-                        row.display_code,
-                        row.document?.pages
-                            ? `PDF · ${plural(row.document.pages, 'pág')}`
-                            : null,
-                    ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                />
-            ),
+            cell: (row) => {
+                const title = (
+                    <TitleCell
+                        icon={<FileText className="size-[17px]" />}
+                        title={row.title}
+                        href={envelopeShow(row.id).url}
+                        onClick={() => router.visit(envelopeShow(row.id).url)}
+                        meta={[
+                            row.display_code,
+                            row.document?.pages
+                                ? `PDF · ${plural(row.document.pages, 'pág')}`
+                                : null,
+                        ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                    />
+                );
+                const rowTags = tagsEnabled
+                    ? (tagging?.by_envelope[row.id] ?? [])
+                    : [];
+
+                if (rowTags.length === 0) {
+                    return title;
+                }
+
+                return (
+                    <div className="flex min-w-0 flex-col gap-1">
+                        {title}
+                        <div className="pl-12">
+                            <TagChipList
+                                tags={rowTags}
+                                onRemove={
+                                    row.can.update
+                                        ? (tag) => removeTag(row, tag)
+                                        : undefined
+                                }
+                            />
+                        </div>
+                    </div>
+                );
+            },
         },
         {
             key: 'folder',
@@ -360,6 +410,7 @@ export default function EnvelopesIndex({
         !!filters.q ||
         !!filters.creator ||
         !!filters.folder ||
+        !!filters.tag ||
         filters.status !== 'all';
 
     return (
@@ -484,6 +535,19 @@ export default function EnvelopesIndex({
                                 label: c.name,
                             }))}
                         />
+                        {tagsEnabled &&
+                            (tagging?.available.length ?? 0) > 0 && (
+                                <FilterChip
+                                    label="Etiqueta"
+                                    value={filters.tag ?? null}
+                                    onChange={(tag) => apply({ tag })}
+                                    options={(tagging?.available ?? []).map(
+                                        (t) => ({ value: t.id, label: t.name }),
+                                    )}
+                                    icon={<TagIcon className="size-3.5" />}
+                                    allLabel="Todas"
+                                />
+                            )}
                     </FilterBar>
 
                     <BulkActionBar
@@ -506,6 +570,17 @@ export default function EnvelopesIndex({
                         >
                             <RefreshCw className="size-3.5" /> Reenviar convites
                         </Button>
+                        {tagsEnabled && (
+                            <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={() => setTagOpen(true)}
+                                disabled={busy}
+                            >
+                                <TagIcon className="size-3.5" /> Adicionar
+                                etiqueta
+                            </Button>
+                        )}
                         {can.bulk_cancel && (
                             <Button
                                 variant="destructive"
@@ -567,6 +642,17 @@ export default function EnvelopesIndex({
                 open={folderDialog}
                 onOpenChange={setFolderDialog}
             />
+
+            {tagsEnabled && (
+                <BulkTagDialog
+                    open={tagOpen}
+                    onOpenChange={setTagOpen}
+                    envelopeIds={[...selected]}
+                    available={tagging?.available ?? []}
+                    canManage={tagging?.can_manage ?? false}
+                    onApplied={() => setSelected(new Set())}
+                />
+            )}
 
             <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
                 <DialogContent>

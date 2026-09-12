@@ -25,7 +25,10 @@ class UpdateNotificationPreferencesRequest extends FormRequest
         $rules = ['preferences' => ['required', 'array']];
 
         foreach (NotificationPreferences::events() as $event) {
-            $rules["preferences.{$event}"] = ['present', 'array'];
+            // Eventos condicionais só vêm quando a linha aparece na tela.
+            $rules["preferences.{$event}"] = in_array($event, NotificationPreferences::CONDITIONAL, true)
+                ? ['sometimes', 'array']
+                : ['present', 'array'];
             $rules["preferences.{$event}.*"] = ['string', Rule::in(NotificationPreferences::CHANNELS)];
         }
 

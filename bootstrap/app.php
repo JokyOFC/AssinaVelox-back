@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Middleware\ApiAuthenticate;
+use App\Http\Middleware\ApiEnsureEnabled;
+use App\Http\Middleware\ApiIdempotency;
+use App\Http\Middleware\ApiRateLimit;
+use App\Http\Middleware\ApiRequestLogger;
+use App\Http\Middleware\ApiRequireAbility;
 use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\EnforceImpersonationReadOnly;
 use App\Http\Middleware\EnforceSessionIdleTimeout;
@@ -14,6 +20,7 @@ use App\Http\Middleware\ResetCurrentOrganization;
 use App\Http\Middleware\ResolveSignerToken;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\ThrottleSensitiveRoutes;
+use App\Services\Api\ApiProblem;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -28,6 +35,8 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        // API REST v1 (Fase 2 §2.15, docs/fase-2/api-v1.md): prefixo `/api`, grupo `api` abaixo.
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -92,12 +101,37 @@ return Application::configure(basePath: dirname(__DIR__))
             // Fluxo público do signatário (docs/fluxo-do-signatario.md).
             'signer' => ResolveSignerToken::class,
             'signer.verified' => EnsureSignerVerified::class,
+            // API REST v1 (docs/fase-2/api-v1.md): ability exigida pela rota e Idempotency-Key.
+            'api.ability' => ApiRequireAbility::class,
+            'api.idempotent' => ApiIdempotency::class,
+        ]);
+
+        /*
+         * API REST v1 (docs/fase-2/api-v1.md). O grupo `api` padrão é SUBSTITUÍDO por esta
+         * pilha, nesta ordem: registro da requisição (mede e grava tudo, até os erros) → flag
+         * global (404) → token Bearer, organização e flag do plano (401/404) → limite por token
+         * e por organização (429) → binding por ULID, escopado à organização DO TOKEN (404).
+         * Sem sessão, cookie ou CSRF. Nas rotas: `api.ability:*` e `api.idempotent`.
+         */
+        $middleware->group('api', [
+            ApiRequestLogger::class,
+            ApiEnsureEnabled::class,
+            ApiAuthenticate::class,
+            ApiRateLimit::class,
+            SubstituteBindings::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('webhooks/*') || $request->expectsJson(),
         );
+
+        // API v1: todo e qualquer erro sai como problem+json (RFC 9457) com a mesma forma — 400, 401, 403,
+        // 404, 409, 422, 429 e 500 —, sem stack nem mensagem interna (App\Services\Api\ApiProblem).
+        // Só muda a RESPOSTA: o registro no log continua como antes.
+        $exceptions->render(function (Throwable $exception, Request $request) {
+            return $request->is('api', 'api/*') ? ApiProblem::fromThrowable($exception) : null;
+        });
 
         /**
          * As páginas de erro só exibem mensagens escritas pela aplicação (`abort(404, '…')`,

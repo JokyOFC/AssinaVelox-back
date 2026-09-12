@@ -1,6 +1,11 @@
 <?php
 
+use App\Jobs\Billing\ReconcilePaymentsJob;
 use App\Jobs\Dossier\PurgeExpiredDossierExports;
+use App\Models\ApiRequestLog;
+use App\Services\RestHooks\RestHookSubscriptions;
+use App\Services\Webhooks\WebhookPruner;
+use App\Services\Webhooks\WebhookRetrySweeper;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -218,4 +223,66 @@ Schedule::command('participant-a1:maintain')
     ->everyFifteenMinutes()
     ->withoutOverlapping(10)
     ->runInBackground()
+    ->onOneServer();
+
+/*
+| Fase 2, onda D (D-HOOK) — webhooks de saída (docs/fase-2/webhooks.md §5).
+|
+| `webhooks:retry`: a cada minuto, despacha as retentativas vencidas (backoff 1 min → 24 h,
+| teto de 8 tentativas) e, como rede de segurança, a primeira tentativa cujo job se perdeu;
+| também apaga segredos anteriores cuja janela de rotação acabou. Inerte com a flag
+| `outbound_webhooks` desligada.
+|
+| `webhooks:prune`: diário; apaga entregas encerradas e endpoints removidos há mais de
+| `webhooks.retention_days`. Não toca em `audit_events`.
+*/
+Artisan::command('webhooks:retry', function (WebhookRetrySweeper $sweeper): void {
+    $count = $sweeper->run();
+    $this->info("Entregas de webhook despachadas: {$count}");
+})->purpose('Despacha as retentativas vencidas dos webhooks de saída');
+
+Artisan::command('webhooks:prune', function (WebhookPruner $pruner): void {
+    $result = $pruner->run();
+    $this->info("Entregas removidas: {$result['deliveries']}; endpoints removidos em definitivo: {$result['endpoints']}");
+})->purpose('Remove o histórico vencido dos webhooks de saída');
+
+Schedule::command('webhooks:retry')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->runInBackground()
+    ->onOneServer();
+
+Schedule::command('webhooks:prune')
+    ->dailyAt('04:55')
+    ->withoutOverlapping(30)
+    ->onOneServer();
+
+/*
+| Fase 2, onda D (integração I-2D — docs/fase-2/entrega-fase-2.md §4).
+|
+| `rest-hooks:prune`: de hora em hora remove as assinaturas REST Hook cujo token venceu, foi
+| revogado fora da tela ou não existe mais. Até a varredura rodar, o motor já não entrega a elas.
+|
+| Registros de requisição da API (aba "Logs"): retenção de `assinavelox.api.request_logs.retention_days`
+| (padrão 30 dias) pelo `MassPrunable` do model; a limpeza oportunista do gravador continua.
+|
+| Conciliação diária dos pagamentos (D-PAY §5): inerte com `extended_payments` desligada; só
+| aponta divergências, nunca corrige pagamento.
+*/
+Artisan::command('rest-hooks:prune', function (RestHookSubscriptions $subscriptions): void {
+    $this->info('Assinaturas REST Hook removidas: '.$subscriptions->pruneInactive());
+})->purpose('Remove as assinaturas REST Hook de tokens vencidos, revogados ou apagados');
+
+Schedule::command('rest-hooks:prune')
+    ->hourlyAt(25)
+    ->withoutOverlapping(30)
+    ->onOneServer();
+
+Schedule::command('model:prune', ['--model' => [ApiRequestLog::class]])
+    ->dailyAt('04:40')
+    ->withoutOverlapping(30)
+    ->onOneServer();
+
+Schedule::job(new ReconcilePaymentsJob)
+    ->dailyAt('04:10')
     ->onOneServer();

@@ -49,6 +49,7 @@ use App\Services\Signing\Certificates\ParticipantSignatureViews;
 use App\Services\Signing\Channels\ChannelAvailability;
 use App\Services\Tags\EnvelopeTagIndex;
 use App\Services\Templates\TemplatesFeature;
+use App\Services\Webhooks\WebhookPresenter;
 use App\Support\CurrentOrganization;
 use App\Support\OrganizationSettings;
 use Illuminate\Database\Eloquent\Builder;
@@ -226,6 +227,11 @@ class EnvelopeController extends Controller
             // Fase 2 §2.12 (K-A1, integração I-2C): só quando há pedidos de assinatura com o
             // certificado do próprio participante.
             ...ParticipantSignatureViews::evidenceProps($envelope),
+            // Fase 2 §2.16 (integração I-2D): linha "Webhook" nos Detalhes — só com a flag
+            // ligada e endpoint ativo ou entrega para este envelope; senão a prop nem existe.
+            ...(($webhook = app(WebhookPresenter::class)->envelopeSummary($envelope, CurrentOrganization::instance()->membership())) !== null
+                ? ['webhook' => $webhook]
+                : []),
         ]);
     }
 

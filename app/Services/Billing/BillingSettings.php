@@ -182,4 +182,104 @@ final readonly class BillingSettings
     {
         return (string) $this->config->get('assinavelox.queues.billing', 'billing');
     }
+
+    // -- Fase 2, onda D (flag `extended_payments`) ------------------------------------
+
+    /**
+     * Interruptor da plataforma (roadmap §1 T8). Desligado, nenhum dos métodos abaixo muda
+     * comportamento algum.
+     */
+    public function extendedPayments(): bool
+    {
+        return $this->config->get('assinavelox.features.extended_payments', false) === true;
+    }
+
+    /**
+     * Famílias habilitadas por configuração, na ordem canônica.
+     *
+     * @return list<'pix'|'boleto'|'card'>
+     */
+    public function enabledMethodFamilies(): array
+    {
+        $raw = (string) $this->config->get('assinavelox.mercadopago.enabled_methods', 'pix,boleto,card');
+        $wanted = array_map(static fn (string $value): string => strtolower(trim($value)), explode(',', $raw));
+
+        return array_values(array_filter(['pix', 'boleto', 'card'], static fn (string $family): bool => in_array($family, $wanted, true)));
+    }
+
+    /**
+     * `date_of_expiration` dos meios offline e Pix, em horas, limitado a 1 h .. 30 dias.
+     */
+    public function offlineExpirationHours(): int
+    {
+        return min(720, max(1, (int) $this->config->get('assinavelox.mercadopago.offline_expiration_hours', 72)));
+    }
+
+    /**
+     * `user_id` do vendedor para o cabeçalho X-Caller-Id (obrigatoriedade NÃO CONFIRMADA).
+     */
+    public function sellerUserId(): ?string
+    {
+        $value = $this->config->get('assinavelox.mercadopago.seller_user_id');
+
+        return is_scalar($value) && (string) $value !== '' ? (string) $value : null;
+    }
+
+    public function reconciliationWindowDays(): int
+    {
+        return min(30, max(1, (int) $this->config->get('assinavelox.mercadopago.reconciliation.window_days', 2)));
+    }
+
+    public function reconciliationPageSize(): int
+    {
+        return min(100, max(1, (int) $this->config->get('assinavelox.mercadopago.reconciliation.page_size', 30)));
+    }
+
+    public function reconciliationMaxPages(): int
+    {
+        return min(200, max(1, (int) $this->config->get('assinavelox.mercadopago.reconciliation.max_pages', 20)));
+    }
+
+    /**
+     * Quem pode pedir estorno: `platform_admin` sempre; `owner` só se listado.
+     *
+     * @return list<string>
+     */
+    public function refundInitiators(): array
+    {
+        $raw = (string) $this->config->get('assinavelox.billing.refunds.initiators', 'platform_admin');
+        $values = array_map(static fn (string $value): string => strtolower(trim($value)), explode(',', $raw));
+
+        return array_values(array_unique(['platform_admin', ...array_filter($values, static fn (string $value): bool => $value === 'owner')]));
+    }
+
+    public function ownerCanRequestRefund(): bool
+    {
+        return in_array('owner', $this->refundInitiators(), true);
+    }
+
+    public function ownerRefundWindowDays(): int
+    {
+        return max(0, (int) $this->config->get('assinavelox.billing.refunds.owner_window_days', 7));
+    }
+
+    public function refundMaxAgeDays(): int
+    {
+        return min(180, max(1, (int) $this->config->get('assinavelox.billing.refunds.max_age_days', 180)));
+    }
+
+    public function alertEmail(): ?string
+    {
+        $value = $this->config->get('assinavelox.billing.alert_email');
+
+        return is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL) !== false ? $value : null;
+    }
+
+    /**
+     * @return 'disabled'|'simulated'
+     */
+    public function preapprovalDriver(): string
+    {
+        return $this->config->get('assinavelox.mercadopago.preapproval.driver', 'disabled') === 'simulated' ? 'simulated' : 'disabled';
+    }
 }

@@ -10,19 +10,24 @@ use App\Models\Organization;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\AdminLog\ToolFlags;
+use App\Services\Api\ApiFeature;
+use App\Services\Billing\BillingSettings;
 use App\Services\Branding\BrandingFeature;
 use App\Services\Branding\BrandingPresenter;
 use App\Services\Dossier\DossierFeature;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\Reminders\RemindersFeature;
+use App\Services\Fiscal\FiscalFeature;
 use App\Services\Identity\IdentityFeatures;
 use App\Services\InPerson\PresenceFeatures;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Services\PublicForms\PublicFormsFeature;
+use App\Services\RestHooks\RestHooksFeature;
 use App\Services\Retention\RetentionFeature;
 use App\Services\Signing\Channels\ChannelFeatures;
 use App\Services\Templates\TemplatesFeature;
 use App\Services\Timestamp\TimestampFeatures;
+use App\Services\Webhooks\WebhooksFeature;
 use App\Support\CurrentOrganization;
 use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Builder;
@@ -94,7 +99,8 @@ class HandleInertiaRequests extends Middleware
 
         return [
             'templates' => TemplatesFeature::enabled($organization),
-            'api_integrations' => false,
+            // Fase 2, onda D (D-API): era a chave reservada da Fase 1; agora global E plano.
+            'api_integrations' => ApiFeature::enabled($organization),
             'reminders' => app(RemindersFeature::class)->enabledFor($organization),
             'sms_whatsapp' => $channels[ChannelFeatures::SMS_WHATSAPP],
             'branding' => BrandingFeature::enabled($organization),
@@ -128,6 +134,13 @@ class HandleInertiaRequests extends Middleware
             'retention_policies' => RetentionFeature::enabled($organization),
             'operator_tsa' => TimestampFeatures::operatorTsa(),
             'pades_bt' => TimestampFeatures::padesBt(),
+            // Fase 2, onda D (docs/fase-2/entrega-fase-2.md). `outbound_webhooks` e `rest_hooks`:
+            // global E plano (`rest_hooks` exige também a API e os webhooks). `extended_payments`
+            // e `fiscal_invoices`: só a chave da plataforma — a cobrança é da operadora, não do plano.
+            'outbound_webhooks' => WebhooksFeature::enabled($organization),
+            'rest_hooks' => RestHooksFeature::enabled($organization),
+            'extended_payments' => app(BillingSettings::class)->extendedPayments(),
+            'fiscal_invoices' => FiscalFeature::enabled(),
         ];
     }
 

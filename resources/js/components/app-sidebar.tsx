@@ -240,7 +240,12 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     title: 'API e integrações',
                     href: integrationsIndex(),
                     icon: Code,
-                    phase2: true,
+                    // Fase 2 §2.15–§2.17: sem a tag quando a API ou os webhooks
+                    // estão ligados para a organização.
+                    phase2: !(
+                        (features?.api_integrations ?? false) ||
+                        (features?.outbound_webhooks ?? false)
+                    ),
                 },
                 {
                     key: 'settings',
@@ -280,8 +285,10 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     title: 'Planos e faturamento',
                     href: adminBilling(),
                     icon: CreditCard,
-                    phase2: true,
-                    disabled: true,
+                    // Fase 2 §2.20 (onda D): a página real só existe com
+                    // `extended_payments` ligada; desligada, o placeholder da Fase 1.
+                    phase2: !(features?.extended_payments ?? false),
+                    disabled: !(features?.extended_payments ?? false),
                 },
                 {
                     key: 'admin-users',

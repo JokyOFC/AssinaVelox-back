@@ -7,7 +7,10 @@ use App\Enums\PaymentEnvironment;
 use App\Enums\PaymentStatus;
 use App\Integrations\Dto\GatewayPayment;
 use App\Integrations\Payments\CheckoutProGateway;
+use App\Integrations\Payments\MercadoPagoGateway;
+use App\Jobs\Billing\IssueFiscalInvoiceJob;
 use App\Models\Payment;
+use App\Services\Fiscal\FiscalFeature;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -40,7 +43,15 @@ class SyncPaymentFromGateway
     public function __construct(
         private readonly CheckoutProGateway $gateway,
         private readonly ActivateSubscription $activator,
+        // Fase 2, onda D: só usados com a flag `extended_payments` (e `fiscal_invoices`) ligada.
+        private readonly ?PaymentReversalEffects $effects = null,
+        private readonly ?BillingSettings $settings = null,
     ) {}
+
+    private function extended(): bool
+    {
+        return ($this->settings ?? app(BillingSettings::class))->extendedPayments();
+    }
 
     /**
      * @return array{outcome: string, payment: Payment|null, reason: string|null}
@@ -109,6 +120,17 @@ class SyncPaymentFromGateway
         $previous = $payment->status;
         $this->apply($payment, $remote, $incoming);
 
+        if ($this->extended()) {
+            // Estornos aceitos como `in_process`/`authorized` são concluídos por esta consulta
+            // (sem linha `pending`, nada é consultado).
+            app(RefreshPendingRefunds::class)->handle($payment);
+        }
+
+        if ($this->extended() && $previous !== $incoming) {
+            // Estorno total e contestação só têm efeito no plano depois desta CONSULTA.
+            ($this->effects ?? app(PaymentReversalEffects::class))->afterTransition($payment, $previous, $incoming);
+        }
+
         if ($incoming === PaymentStatus::Approved) {
             if ($previous !== PaymentStatus::Approved) {
                 BillingTrail::record($payment->organization_id, AuditEventType::PaymentApproved, [
@@ -122,6 +144,11 @@ class SyncPaymentFromGateway
             }
 
             $this->activator->handle($payment);
+
+            if ($previous !== PaymentStatus::Approved && FiscalFeature::enabled()) {
+                // Roadmap §2.21: NFS-e disparada em `payments.approved`, idempotente por pagamento.
+                IssueFiscalInvoiceJob::dispatch((int) $payment->getKey());
+            }
 
             return ['outcome' => 'processed', 'payment' => $payment, 'reason' => null];
         }
@@ -158,6 +185,45 @@ class SyncPaymentFromGateway
             ->first();
     }
 
+    /**
+     * Fase 2, onda D: o que a consulta traz além do Fase 1 — família do meio, soma estornada,
+     * validade do Pix/boleto e última atualização no provedor. Tudo lido do `raw` já saneado
+     * (sem pagador e sem cartão).
+     *
+     * @return array<string, mixed>
+     */
+    private function extendedAttributes(Payment $payment, GatewayPayment $remote, PaymentStatus $status): array
+    {
+        $raw = $remote->raw;
+        $attributes = [];
+
+        if (is_string($raw['payment_type_id'] ?? null) && $raw['payment_type_id'] !== '') {
+            $attributes['payment_type_id'] = mb_substr($raw['payment_type_id'], 0, 32);
+        }
+
+        if (array_key_exists('transaction_amount_refunded', $raw)) {
+            $attributes['refunded_cents'] = min((int) $payment->amount_cents, MercadoPagoGateway::toCents($raw['transaction_amount_refunded']));
+        } elseif ($status === PaymentStatus::Refunded) {
+            $attributes['refunded_cents'] = (int) $payment->amount_cents;
+        }
+
+        foreach (['expires_at' => 'date_of_expiration', 'provider_updated_at' => 'date_last_updated'] as $column => $key) {
+            if (is_string($raw[$key] ?? null) && $raw[$key] !== '') {
+                try {
+                    $attributes[$column] = Carbon::parse($raw[$key]);
+                } catch (\Throwable) {
+                    // Data fora do formato: ignorada, nunca inventada.
+                }
+            }
+        }
+
+        if ($status === PaymentStatus::Cancelled && $payment->cancelled_at === null) {
+            $attributes['cancelled_at'] = Carbon::now();
+        }
+
+        return $attributes;
+    }
+
     private function apply(Payment $payment, GatewayPayment $remote, PaymentStatus $status): void
     {
         DB::transaction(function () use ($payment, $remote, $status): void {
@@ -175,6 +241,10 @@ class SyncPaymentFromGateway
                 $attributes['paid_at'] = $remote->approvedAt !== null
                     ? Carbon::instance($remote->approvedAt)
                     : ($payment->paid_at ?? Carbon::now());
+            }
+
+            if ($this->extended()) {
+                $attributes = [...$attributes, ...$this->extendedAttributes($payment, $remote, $status)];
             }
 
             $payment->forceFill($attributes)->save();

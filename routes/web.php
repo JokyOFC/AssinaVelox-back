@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditController as AdminAuditController;
+use App\Http\Controllers\Admin\BillingActionController as AdminBillingActionController;
+use App\Http\Controllers\Admin\BillingController as AdminBillingController;
 use App\Http\Controllers\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\PlaceholderController as AdminPlaceholderController;
@@ -9,6 +11,7 @@ use App\Http\Controllers\Batch\BatchLinkController;
 use App\Http\Controllers\Batch\BatchSigningController;
 use App\Http\Controllers\Billing\BillingCheckoutController;
 use App\Http\Controllers\Billing\BillingController;
+use App\Http\Controllers\Billing\PaymentActionController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
 use App\Http\Controllers\Billing\PlanController;
 use App\Http\Controllers\DashboardController;
@@ -29,6 +32,9 @@ use App\Http\Controllers\Identity\CnpjLookupController;
 use App\Http\Controllers\InPerson\InPersonHostController;
 use App\Http\Controllers\InPerson\KioskController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\Integrations\KeysController;
+use App\Http\Controllers\Integrations\WebhookDeliveryController;
+use App\Http\Controllers\Integrations\WebhookEndpointController;
 use App\Http\Controllers\Members\InvitationAcceptController;
 use App\Http\Controllers\Members\InvitationController;
 use App\Http\Controllers\Members\MembershipController;
@@ -333,6 +339,29 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
     Route::get('api-integracoes', [IntegrationController::class, 'index'])->name('integrations.index');
     Route::get('api-integracoes/chaves', [IntegrationController::class, 'keys'])->middleware('org.role:owner,admin')->name('integrations.keys');
     Route::get('api-integracoes/logs', [IntegrationController::class, 'logs'])->middleware('org.role:owner,admin')->name('integrations.logs');
+    // Fase 2 §2.15 (D-PLAT) — criar e revogar chaves da API pela tela. Flag `api_integrations`
+    // desligada: 404. Sem `org.role`: `manage_integrations` conferida no controller e no
+    // ApiTokenManager (anti-escalada). A criação responde com a página (token exibido uma vez).
+    Route::post('api-integracoes/chaves', [KeysController::class, 'store'])->middleware('throttle:10,1')->name('integrations.keys.store');
+    Route::delete('api-integracoes/chaves/{apiToken}', [KeysController::class, 'destroy'])->middleware('throttle:30,1')->name('integrations.keys.destroy');
+
+    // Fase 2 §2.16 — webhooks de saída (D-HOOK, docs/fase-2/webhooks.md §9). Flag
+    // `outbound_webhooks` desligada: 404 em todas (middleware dos controllers). Sem `org.role`:
+    // `manage_integrations` na WebhookEndpointPolicy. A entrega é resolvida dentro do endpoint.
+    Route::prefix('api-integracoes/webhooks')->name('integrations.webhooks.')->scopeBindings()->group(function (): void {
+        Route::get('/', [WebhookEndpointController::class, 'index'])->name('index');
+        Route::post('/', [WebhookEndpointController::class, 'store'])->middleware('throttle:30,1')->name('store');
+        Route::get('{webhookEndpoint}', [WebhookEndpointController::class, 'show'])->name('show');
+        Route::patch('{webhookEndpoint}', [WebhookEndpointController::class, 'update'])->middleware('throttle:30,1')->name('update');
+        Route::delete('{webhookEndpoint}', [WebhookEndpointController::class, 'destroy'])->name('destroy');
+        Route::post('{webhookEndpoint}/pausar', [WebhookEndpointController::class, 'pause'])->name('pause');
+        Route::post('{webhookEndpoint}/reativar', [WebhookEndpointController::class, 'resume'])->middleware('throttle:30,1')->name('resume');
+        Route::post('{webhookEndpoint}/segredo/rotacionar', [WebhookEndpointController::class, 'rotateSecret'])->middleware('throttle:10,1')->name('secret.rotate');
+        Route::post('{webhookEndpoint}/segredo/encerrar-anterior', [WebhookEndpointController::class, 'expirePreviousSecret'])->name('secret.expire_previous');
+        Route::post('{webhookEndpoint}/testar', [WebhookEndpointController::class, 'test'])->middleware('throttle:10,1')->name('test');
+        Route::get('{webhookEndpoint}/entregas/{delivery}', [WebhookDeliveryController::class, 'show'])->name('deliveries.show');
+        Route::post('{webhookEndpoint}/entregas/{delivery}/reenviar', [WebhookDeliveryController::class, 'resend'])->middleware('throttle:30,1')->name('deliveries.resend');
+    });
 
     // Usuários e convites (owner/admin)
     Route::middleware('org.role:owner,admin')->group(function (): void {
@@ -403,6 +432,17 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
             Route::post('plano/reativar', [BillingController::class, 'resume'])->name('billing.resume');
             Route::patch('plano/faturamento', [BillingController::class, 'updateProfile'])->name('billing.profile.update');
             Route::get('plano/pagamentos/{payment}/recibo', [PaymentReceiptController::class, 'show'])->name('billing.payments.receipt');
+
+            // Fase 2, onda D (D-PAY — docs/fase-2/pagamentos-e-fiscal.md). Flag `extended_payments`
+            // desligada: 404. Estorno pelo proprietário só quando a política da instalação permite.
+            Route::post('plano/pagamentos/{payment}/cancelar', [PaymentActionController::class, 'cancel'])
+                ->middleware('throttle:20,1')
+                ->name('billing.payments.cancel');
+            // Só o proprietário: verificado por permissão no controller (`delete_organization`,
+            // a mesma de `billing.cancel`), não por `org.role` — Fase 2 autoriza por permissão.
+            Route::post('plano/pagamentos/{payment}/estorno', [PaymentActionController::class, 'refund'])
+                ->middleware(['password.confirm', 'throttle:10,1'])
+                ->name('billing.payments.refund');
         });
 
         Route::get('plano/retorno/{outcome}', [BillingCheckoutController::class, 'return'])
@@ -445,7 +485,30 @@ Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin')->name
     Route::get('clientes/exportar', [AdminOrganizationController::class, 'export'])->name('organizations.export');
     Route::get('clientes/{organization}', [AdminOrganizationController::class, 'show'])->name('organizations.show');
 
-    Route::get('faturamento', AdminPlaceholderController::class)->name('billing.index');
+    // Fase 2, onda D (D-PAY — docs/fase-2/pagamentos-e-fiscal.md): flag `extended_payments`;
+    // desligada, a página é o placeholder da Fase 1 e as ações respondem 404. Leitura sem
+    // documentos + operações financeiras explícitas (senha confirmada onde move dinheiro).
+    Route::get('faturamento', [AdminBillingController::class, 'index'])->name('billing.index');
+    Route::prefix('faturamento')->name('billing.')->group(function (): void {
+        Route::post('pagamentos/{payment}/estorno', [AdminBillingActionController::class, 'refund'])
+            ->where('payment', '[A-Za-z0-9]{26}')
+            ->middleware(['password.confirm', 'throttle:20,1'])
+            ->name('payments.refund');
+        Route::post('pagamentos/{payment}/cancelar', [AdminBillingActionController::class, 'cancel'])
+            ->where('payment', '[A-Za-z0-9]{26}')
+            ->middleware(['password.confirm', 'throttle:20,1'])
+            ->name('payments.cancel');
+        Route::post('pagamentos/{payment}/reconsultar', [AdminBillingActionController::class, 'resync'])
+            ->where('payment', '[A-Za-z0-9]{26}')
+            ->middleware('throttle:30,1')
+            ->name('payments.resync');
+        Route::post('conciliar', [AdminBillingActionController::class, 'reconcile'])->middleware('throttle:6,1')->name('reconcile');
+        Route::post('meios', [AdminBillingActionController::class, 'refreshMethods'])->middleware('throttle:6,1')->name('methods.refresh');
+        Route::post('divergencias/{item}/revisar', [AdminBillingActionController::class, 'resolveDivergence'])
+            ->whereNumber('item')
+            ->middleware('throttle:60,1')
+            ->name('divergences.resolve');
+    });
     // Fase 2 (docs/fase-2/tags-relatorios-e-logs.md): flags `admin_users`, `admin_audit` e
     // `impersonation`; desligadas, as páginas continuam o placeholder da Fase 1.
     Route::get('usuarios', [AdminUserController::class, 'index'])->name('users.index');

@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property int $envelopes_used
  * @property int $envelopes_reserved
  * @property string|null $provider
+ * @property Carbon|null $paid_cycle_refunded_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Plan $plan
@@ -50,6 +51,8 @@ class Subscription extends Model
         'envelopes_used',
         'envelopes_reserved',
         'provider',
+        // Fase 2, onda D (D-PAY): ciclo pago estornado por inteiro — volta ao Grátis no fim do período.
+        'paid_cycle_refunded_at',
     ];
 
     /** @var array<string, mixed> */
@@ -74,6 +77,7 @@ class Subscription extends Model
             'cancel_at_period_end' => 'boolean',
             'envelopes_used' => 'integer',
             'envelopes_reserved' => 'integer',
+            'paid_cycle_refunded_at' => 'datetime',
         ];
     }
 

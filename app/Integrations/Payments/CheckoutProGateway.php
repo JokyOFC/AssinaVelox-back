@@ -17,8 +17,12 @@ use App\Integrations\Payments\Exceptions\PaymentGatewayException;
  * quando `createCheckoutPreference()` não conclui, não sabemos se o provedor criou a
  * preferência. Antes de criar outra, consultamos por `external_reference` — nunca
  * recriamos às cegas.
+ *
+ * Fase 2, onda D: estende também `PaymentOperations` (estorno, cancelamento, contestação,
+ * busca e meios de pagamento). Quem usa essas operações só o faz com a flag
+ * `extended_payments` ligada.
  */
-interface CheckoutProGateway extends PaymentGateway
+interface CheckoutProGateway extends PaymentGateway, PaymentOperations
 {
     /**
      * Preferência já existente para o nosso `external_reference`, ou null.

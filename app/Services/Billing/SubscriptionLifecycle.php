@@ -228,6 +228,9 @@ class SubscriptionLifecycle
             ->whereIn('status', [SubscriptionStatus::Active->value, SubscriptionStatus::Trialing->value])
             ->whereNotNull('current_period_end')
             ->where('current_period_end', '<', $cutoff)
+            // Fase 2, onda D: ciclo estornado por inteiro não é dívida — vai direto ao Grátis
+            // (expireRefundedCycles). Sem a flag a coluna é sempre nula e nada muda.
+            ->whereNull('paid_cycle_refunded_at')
             ->whereHas('plan', fn ($plan) => $plan->where('price_cents', '>', 0))
             ->orderBy('id');
 
@@ -241,6 +244,7 @@ class SubscriptionLifecycle
             $applied = Subscription::withoutOrganizationScope()
                 ->whereKey($subscription->getKey())
                 ->whereIn('status', [SubscriptionStatus::Active->value, SubscriptionStatus::Trialing->value])
+                ->whereNull('paid_cycle_refunded_at')
                 ->update(['status' => SubscriptionStatus::PastDue->value, 'updated_at' => Carbon::now()]);
 
             if ($applied === 0) {
@@ -289,10 +293,43 @@ class SubscriptionLifecycle
             }
         }
 
+        return $changed + $this->expireRefundedCycles($limit);
+    }
+
+    /**
+     * Fase 2, onda D — política conservadora de estorno total (docs/fase-2/pagamentos-e-fiscal.md
+     * §4): a assinatura cujo ciclo pago foi estornado por inteiro vale até o fim do período e,
+     * vencido ele, volta ao Grátis sem passar por `past_due` (não há dívida a cobrar). Só existe
+     * assinatura com `paid_cycle_refunded_at` quando a flag `extended_payments` está ligada.
+     */
+    public function expireRefundedCycles(?int $limit = null): int
+    {
+        $query = Subscription::withoutOrganizationScope()
+            ->whereIn('status', [SubscriptionStatus::Active->value, SubscriptionStatus::Trialing->value])
+            ->whereNotNull('paid_cycle_refunded_at')
+            ->whereNotNull('current_period_end')
+            ->where('current_period_end', '<=', Carbon::now())
+            ->orderBy('id');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        $changed = 0;
+
+        foreach ($query->with('plan')->get() as $subscription) {
+            if ($this->expireOne($subscription, [SubscriptionStatus::Active, SubscriptionStatus::Trialing], 'paid_cycle_refunded')) {
+                $changed++;
+            }
+        }
+
         return $changed;
     }
 
-    private function expireOne(Subscription $subscription): bool
+    /**
+     * @param  list<SubscriptionStatus>  $fromStatuses
+     */
+    private function expireOne(Subscription $subscription, array $fromStatuses = [SubscriptionStatus::PastDue], ?string $reason = null): bool
     {
         $free = Plan::query()->where('code', Plan::CODE_FREE)->first();
 
@@ -307,10 +344,10 @@ class SubscriptionLifecycle
 
         $planCode = $subscription->plan->code;
 
-        $applied = DB::transaction(function () use ($subscription, $free): bool {
+        $applied = DB::transaction(function () use ($subscription, $free, $fromStatuses): bool {
             $applied = Subscription::withoutOrganizationScope()
                 ->whereKey($subscription->getKey())
-                ->where('status', SubscriptionStatus::PastDue->value)
+                ->whereIn('status', array_map(static fn (SubscriptionStatus $status): string => $status->value, $fromStatuses))
                 ->update([
                     'status' => SubscriptionStatus::Expired->value,
                     'canceled_at' => Carbon::now(),
@@ -347,11 +384,17 @@ class SubscriptionLifecycle
             return false;
         }
 
-        BillingTrail::record($subscription->organization_id, AuditEventType::SubscriptionExpired, [
-            'plan' => $planCode,
-            'fallback_plan' => Plan::CODE_FREE,
-            'expired_days' => $this->settings->expiredDays(),
-        ]);
+        BillingTrail::record($subscription->organization_id, AuditEventType::SubscriptionExpired, $reason === null
+            ? [
+                'plan' => $planCode,
+                'fallback_plan' => Plan::CODE_FREE,
+                'expired_days' => $this->settings->expiredDays(),
+            ]
+            : [
+                'plan' => $planCode,
+                'fallback_plan' => Plan::CODE_FREE,
+                'reason' => $reason,
+            ]);
 
         Log::info('billing.subscription.expired', [
             'organization_id' => $subscription->organization_id,

@@ -293,3 +293,25 @@ Justificativa: há contrato estável possível, mas ligar em produção exigiria
 - **Validação automática pelo VALIDAR / Verificador do ITI.** Não há API confirmada; o uso fica manual, como checklist por release.
 
 **Não implementar:** liveness/face match (regra fixa 2).
+
+## 7. Correções posteriores à pesquisa
+
+Registradas durante a execução, depois da síntese acima. Prevalecem sobre as tabelas das seções 2 e 3.
+
+1. **Socialite e o provedor OpenID Connect rejeitados (2026-09-11).** O ensaio de instalação mostrou
+   que `laravel/socialite` 5.31.0 depende de `league/oauth1-client` 1.11, que só aceita
+   `guzzlehttp/guzzle` ^6 ou ^7. O projeto usa Guzzle 8.2, e a fixação de IP contra SSRF dos
+   webhooks de saída (§2.16, risco R6) foi provada nessa versão; rebaixar o Guzzle invalidaria essa
+   prova. Com isso, `socialiteproviders/manager` e `socialiteproviders/openidconnect` também saem.
+   **Decisão:** o login corporativo por OIDC (§3.9) usa adaptador próprio sobre o HTTP Client do
+   Laravel e `firebase/php-jwt` 7.x (sem dependência de Guzzle) para validar `id_token` pelas chaves
+   JWKS do provedor, conferindo `iss`, `aud`, `exp`, `nonce` e `at_hash`, com PKCE. Continua classe B
+   (sem provedor de identidade de teste do proprietário).
+2. **Pacotes da Fase 3 efetivamente instalados:** `onelogin/php-saml` 4.3.2 (com
+   `robrichards/xmlseclibs` 3.1.5), `openspout/openspout` 5.3.0 (leitura de XLSX na geração em lote,
+   presa à linha 5.3 por causa do PHP 8.3), `firebase/php-jwt` 7.x; no pdftool, `pdfplumber` 0.11.10,
+   `pypdfium2` 5.13.0 e `pdfminer.six` 20260107. O ensaio confirmou que nenhum pacote já instalado
+   muda de versão.
+3. **Fixação de IP em HTTPS (§2.16).** A integração da onda D provou o pino apenas em HTTP. Um
+   teste de integração com servidor HTTPS local e certificado de teste entra na onda E, antes de
+   qualquer recomendação de ligar os webhooks de saída em produção.

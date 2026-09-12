@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Webhooks;
 use App\Http\Controllers\Controller;
 use App\Integrations\Payments\MercadoPagoGateway;
 use App\Integrations\Payments\MercadoPagoSignature;
+use App\Jobs\Billing\SyncMercadoPagoChargeback;
+use App\Jobs\Billing\SyncMercadoPagoMerchantOrder;
 use App\Jobs\Billing\SyncMercadoPagoPayment;
 use App\Models\PaymentWebhookReceipt;
+use App\Services\Billing\BillingSettings;
 use App\Services\Billing\WebhookReceipts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,6 +48,7 @@ class MercadoPagoController extends Controller
     public function __construct(
         private readonly MercadoPagoSignature $signature,
         private readonly WebhookReceipts $receipts,
+        private readonly BillingSettings $settings,
     ) {}
 
     public function handle(Request $request): JsonResponse
@@ -114,14 +118,43 @@ class MercadoPagoController extends Controller
         }
 
         if ($type !== 'payment') {
-            $this->receipts->markIgnored($receipt, 'topic_not_handled');
+            // Fase 2, onda D: com `extended_payments`, contestações e ordens comerciais viram
+            // consulta ao provedor (a assinatura já foi validada acima, exatamente como no
+            // tópico `payment`). Desligada, tudo continua `ignored` como na Fase 1.
+            $job = $this->extendedTopicJob($type, $dataId, (int) $receipt->getKey());
 
-            return response()->json(['received' => true, 'ignored' => 'topic_not_handled']);
+            if ($job === null) {
+                $this->receipts->markIgnored($receipt, 'topic_not_handled');
+
+                return response()->json(['received' => true, 'ignored' => 'topic_not_handled']);
+            }
+
+            dispatch($job);
+
+            return response()->json(['received' => true]);
         }
 
         SyncMercadoPagoPayment::dispatch($dataId, (int) $receipt->getKey());
 
         return response()->json(['received' => true]);
+    }
+
+    /**
+     * Tópicos documentados (docs/integracoes/mercado-pago.md §4.2): `chargebacks` /
+     * `topic_chargebacks_wh` → GET /v1/chargebacks/{id}; `merchant_order` /
+     * `topic_merchant_order_wh` → GET /merchant_orders/{id}. Só com a flag `extended_payments`.
+     */
+    private function extendedTopicJob(string $type, string $dataId, int $receiptId): SyncMercadoPagoChargeback|SyncMercadoPagoMerchantOrder|null
+    {
+        if (! $this->settings->extendedPayments()) {
+            return null;
+        }
+
+        return match ($type) {
+            'chargebacks', 'topic_chargebacks_wh' => new SyncMercadoPagoChargeback($dataId, $receiptId),
+            'merchant_order', 'topic_merchant_order_wh' => new SyncMercadoPagoMerchantOrder($dataId, $receiptId),
+            default => null,
+        };
     }
 
     /**

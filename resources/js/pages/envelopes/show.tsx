@@ -16,7 +16,7 @@ import {
     ShieldCheck,
     XCircle,
 } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { AvatarInitials, recipientTone } from '@/components/avatar-initials';
 import { SendBatchLinkButton } from '@/components/batch/send-batch-link-button';
@@ -162,6 +162,20 @@ export interface EnvelopeShowProps {
      * mostra só o resumo e remete às evidências, onde a lista completa é publicada.
      */
     participant_signatures?: EvidenceParticipantSignature[];
+    /**
+     * Fase 2 §2.16 (`WebhookPresenter::envelopeSummary`): última entrega de webhook deste
+     * documento. Ausente com a flag desligada ou sem endpoint ativo — tela da Fase 1.
+     */
+    webhook?: EnvelopeWebhookSummary | null;
+}
+
+export interface EnvelopeWebhookSummary {
+    status: string | null;
+    status_label: string;
+    event_label: string | null;
+    at: string | null;
+    /** Histórico do endpoint; só para quem gerencia a API e as integrações. */
+    href: string | null;
 }
 
 /**
@@ -184,6 +198,7 @@ export default function EnvelopeShow({
     reminders,
     legal_hold = null,
     participant_signatures = [],
+    webhook = null,
 }: EnvelopeShowProps) {
     const { errors } = usePage().props;
     const [currentTab, setCurrentTab] = useState<Tab>(tab ?? 'signers');
@@ -1076,6 +1091,39 @@ export default function EnvelopeShow({
                                                   ? `${reminders.scheduled_send.at_local} (${reminders.scheduled_send.timezone})`
                                                   : '—',
                                           ],
+                                      ]
+                                    : []),
+                                ...(webhook
+                                    ? [
+                                          [
+                                              'Webhook',
+                                              <span key="webhook">
+                                                  {[
+                                                      webhook.status_label,
+                                                      webhook.event_label,
+                                                      webhook.at
+                                                          ? formatDateTime(
+                                                                webhook.at,
+                                                            )
+                                                          : null,
+                                                  ]
+                                                      .filter(Boolean)
+                                                      .join(' · ')}
+                                                  {webhook.href && (
+                                                      <>
+                                                          {' · '}
+                                                          <Link
+                                                              href={
+                                                                  webhook.href
+                                                              }
+                                                              className="text-primary underline-offset-2 hover:underline"
+                                                          >
+                                                              Ver histórico
+                                                          </Link>
+                                                      </>
+                                                  )}
+                                              </span>,
+                                          ] as [string, ReactNode],
                                       ]
                                     : []),
                             ].map(([label, value]) => (

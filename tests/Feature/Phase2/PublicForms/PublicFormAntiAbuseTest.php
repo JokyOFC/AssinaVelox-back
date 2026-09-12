@@ -78,6 +78,11 @@ test('envio mais rápido que o tempo mínimo é recusado; carimbo adulterado, de
 });
 
 test('o carimbo emitido pela página funciona depois do tempo mínimo', function () {
+    // Relógio congelado: o FillTimer usa Carbon::now(). Com o relógio real, sob a suíte
+    // paralela, abrir e enviar podia passar dos 3 s mínimos e o envio "rápido demais" era
+    // aceito (falha intermitente vista na integração I-2D). Nenhuma asserção mudou.
+    $this->freezeTime();
+
     $timer = $this->get(route('form_fill.show', ['token' => $this->form->public_token]))->viewData('page')['props']['antiabuse']['timer'];
 
     publicFormSubmit($this->form, $this->values, ['started' => $timer])->assertSessionHasErrors('form');

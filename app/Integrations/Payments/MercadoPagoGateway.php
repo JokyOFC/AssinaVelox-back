@@ -6,10 +6,17 @@ use App\Enums\PaymentEnvironment;
 use App\Integrations\Dto\CheckoutPreference;
 use App\Integrations\Dto\CheckoutPreferenceRequest;
 use App\Integrations\Dto\GatewayPayment;
+use App\Integrations\Payments\Dto\GatewayChargeback;
 use App\Integrations\Payments\Dto\GatewayMerchantOrder;
+use App\Integrations\Payments\Dto\GatewayPaymentMethod;
+use App\Integrations\Payments\Dto\GatewayPaymentPage;
+use App\Integrations\Payments\Dto\GatewayPaymentSummary;
+use App\Integrations\Payments\Dto\GatewayRefund;
 use App\Integrations\Payments\Exceptions\PaymentGatewayException;
 use App\Services\Billing\BillingSettings;
+use App\Services\Billing\PaymentMethodPolicy;
 use DateTimeImmutable;
+use DateTimeInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
@@ -65,6 +72,8 @@ class MercadoPagoGateway implements CheckoutProGateway
     public function __construct(
         private readonly HttpFactory $http,
         private readonly BillingSettings $settings,
+        // Fase 2, onda D: só é consultada com a flag `extended_payments` ligada.
+        private readonly ?PaymentMethodPolicy $methods = null,
     ) {}
 
     public function name(): string
@@ -186,10 +195,16 @@ class MercadoPagoGateway implements CheckoutProGateway
             callback: fn (PendingRequest $client): Response => $client->get('/v1/payments/'.rawurlencode($providerPaymentId)),
         );
 
-        $payload = $response->json();
+        return $this->toGatewayPayment($response->json(), 'get_payment', $correlationId);
+    }
 
+    /**
+     * @param  mixed  $payload
+     */
+    private function toGatewayPayment($payload, string $operation, string $correlationId): GatewayPayment
+    {
         if (! is_array($payload) || ! isset($payload['id'])) {
-            throw PaymentGatewayException::malformedResponse('get_payment', 'sem campo id', $correlationId);
+            throw PaymentGatewayException::malformedResponse($operation, 'sem campo id', $correlationId);
         }
 
         return new GatewayPayment(
@@ -258,6 +273,239 @@ class MercadoPagoGateway implements CheckoutProGateway
         );
     }
 
+    // -- Fase 2, onda D: operações ampliadas (PaymentOperations) ----------------------
+
+    public function refundPayment(string $providerPaymentId, ?int $amountCents, string $idempotencyKey, ?string $correlationId = null): GatewayRefund
+    {
+        $this->assertConfigured();
+
+        $correlationId ??= (string) Str::ulid();
+
+        $response = $this->send(
+            operation: 'create_refund',
+            correlationId: $correlationId,
+            // Chave gravada em `payment_refunds` ANTES desta chamada: qualquer repetição (do
+            // retry do cliente HTTP ou de uma nova tentativa depois de um timeout) leva a mesma.
+            idempotencyKey: $idempotencyKey,
+            callback: fn (PendingRequest $client): Response => $amountCents === null
+                // Sem `amount` no corpo = estorno integral (referência oficial).
+                ? $client->withBody('{}', 'application/json')->post('/v1/payments/'.rawurlencode($providerPaymentId).'/refunds')
+                : $client->post('/v1/payments/'.rawurlencode($providerPaymentId).'/refunds', [
+                    'amount' => round($amountCents / 100, 2),
+                ]),
+        );
+
+        return $this->toGatewayRefund($response->json(), $providerPaymentId, 'create_refund', $correlationId);
+    }
+
+    public function listRefunds(string $providerPaymentId): array
+    {
+        $this->assertConfigured();
+
+        $correlationId = (string) Str::ulid();
+
+        $response = $this->send(
+            operation: 'list_refunds',
+            correlationId: $correlationId,
+            idempotencyKey: null,
+            callback: fn (PendingRequest $client): Response => $client->get('/v1/payments/'.rawurlencode($providerPaymentId).'/refunds'),
+        );
+
+        $payload = $response->json();
+        $items = is_array($payload) && array_is_list($payload)
+            ? $payload
+            : (is_array($payload) && is_array($payload['results'] ?? null) ? $payload['results'] : []);
+
+        $refunds = [];
+
+        foreach ($items as $item) {
+            if (is_array($item) && isset($item['id'])) {
+                $refunds[] = $this->toGatewayRefund($item, $providerPaymentId, 'list_refunds', $correlationId);
+            }
+        }
+
+        return $refunds;
+    }
+
+    public function cancelPayment(string $providerPaymentId, string $idempotencyKey, ?string $correlationId = null): GatewayPayment
+    {
+        $this->assertConfigured();
+
+        $correlationId ??= (string) Str::ulid();
+
+        $response = $this->send(
+            operation: 'cancel_payment',
+            correlationId: $correlationId,
+            idempotencyKey: $idempotencyKey,
+            // O campo `status` "aceita exclusivamente o status cancelled" (referência oficial).
+            callback: fn (PendingRequest $client): Response => $client->put('/v1/payments/'.rawurlencode($providerPaymentId), [
+                'status' => 'cancelled',
+            ]),
+        );
+
+        return $this->toGatewayPayment($response->json(), 'cancel_payment', $correlationId);
+    }
+
+    public function getChargeback(string $chargebackId): GatewayChargeback
+    {
+        $this->assertConfigured();
+
+        $correlationId = (string) Str::ulid();
+        $callerId = $this->settings->sellerUserId();
+
+        $response = $this->send(
+            operation: 'get_chargeback',
+            correlationId: $correlationId,
+            idempotencyKey: null,
+            // `X-Caller-Id` ("ID do usuário autenticado (seller) e dono do recurso"): a
+            // obrigatoriedade para conta própria é NÃO CONFIRMADA; enviado quando configurado.
+            callback: fn (PendingRequest $client): Response => ($callerId !== null ? $client->withHeaders(['X-Caller-Id' => $callerId]) : $client)
+                ->get('/v1/chargebacks/'.rawurlencode($chargebackId)),
+        );
+
+        $payload = $response->json();
+
+        if (! is_array($payload) || ! isset($payload['id'])) {
+            throw PaymentGatewayException::malformedResponse('get_chargeback', 'sem campo id', $correlationId);
+        }
+
+        $paymentIds = [];
+
+        foreach ((array) ($payload['payments'] ?? []) as $payment) {
+            $id = is_array($payment) ? ($payment['id'] ?? null) : $payment;
+
+            if (is_scalar($id) && (string) $id !== '') {
+                $paymentIds[] = (string) $id;
+            }
+        }
+
+        return new GatewayChargeback(
+            chargebackId: (string) $payload['id'],
+            providerPaymentIds: array_values(array_unique($paymentIds)),
+            amountCents: self::toCents($payload['amount'] ?? 0),
+            currency: (string) ($payload['currency'] ?? 'BRL'),
+            reason: isset($payload['reason']) && is_scalar($payload['reason']) ? mb_substr((string) $payload['reason'], 0, 191) : null,
+            coverageApplied: isset($payload['coverage_applied']) ? (bool) $payload['coverage_applied'] : null,
+            documentationStatus: isset($payload['documentation_status']) && is_string($payload['documentation_status']) ? $payload['documentation_status'] : null,
+            documentationDeadline: self::toDate($payload['date_documentation_deadline'] ?? null),
+            liveMode: (bool) ($payload['live_mode'] ?? false),
+        );
+    }
+
+    public function searchPayments(DateTimeInterface $begin, DateTimeInterface $end, int $offset, int $limit): GatewayPaymentPage
+    {
+        $this->assertConfigured();
+
+        $correlationId = (string) Str::ulid();
+
+        $response = $this->send(
+            operation: 'search_payments',
+            correlationId: $correlationId,
+            idempotencyKey: null,
+            // Parâmetros documentados: sort, criteria, range + begin_date/end_date, limit, offset.
+            // O formato exato das datas não está no brief (NÃO CONFIRMADO): ISO 8601 em UTC.
+            callback: fn (PendingRequest $client): Response => $client->get('/v1/payments/search', [
+                'sort' => 'date_last_updated',
+                'criteria' => 'asc',
+                'range' => 'date_last_updated',
+                'begin_date' => Carbon::instance($begin)->utc()->format('Y-m-d\TH:i:s\Z'),
+                'end_date' => Carbon::instance($end)->utc()->format('Y-m-d\TH:i:s\Z'),
+                'limit' => $limit,
+                'offset' => $offset,
+            ]),
+        );
+
+        $payload = $response->json();
+
+        if (! is_array($payload) || ! is_array($payload['results'] ?? null)) {
+            throw PaymentGatewayException::malformedResponse('search_payments', 'sem results', $correlationId);
+        }
+
+        $results = [];
+
+        foreach ($payload['results'] as $item) {
+            if (! is_array($item) || ! isset($item['id'])) {
+                continue;
+            }
+
+            $results[] = new GatewayPaymentSummary(
+                providerPaymentId: (string) $item['id'],
+                status: (string) ($item['status'] ?? 'pending'),
+                statusDetail: isset($item['status_detail']) ? (string) $item['status_detail'] : null,
+                externalReference: isset($item['external_reference']) ? (string) $item['external_reference'] : null,
+                amountCents: self::toCents($item['transaction_amount'] ?? 0),
+                currency: (string) ($item['currency_id'] ?? 'BRL'),
+                liveMode: (bool) ($item['live_mode'] ?? false),
+                paymentTypeId: isset($item['payment_type_id']) ? (string) $item['payment_type_id'] : null,
+                lastUpdatedAt: self::toDate($item['date_last_updated'] ?? null),
+            );
+        }
+
+        $paging = is_array($payload['paging'] ?? null) ? $payload['paging'] : [];
+
+        return new GatewayPaymentPage(
+            results: $results,
+            total: (int) ($paging['total'] ?? count($results)),
+            offset: (int) ($paging['offset'] ?? $offset),
+            limit: (int) ($paging['limit'] ?? $limit),
+        );
+    }
+
+    public function listPaymentMethods(): array
+    {
+        $this->assertConfigured();
+
+        $correlationId = (string) Str::ulid();
+
+        $response = $this->send(
+            operation: 'list_payment_methods',
+            correlationId: $correlationId,
+            idempotencyKey: null,
+            callback: fn (PendingRequest $client): Response => $client->get('/v1/payment_methods'),
+        );
+
+        $payload = $response->json();
+
+        if (! is_array($payload) || ! array_is_list($payload)) {
+            throw PaymentGatewayException::malformedResponse('list_payment_methods', 'resposta não é lista', $correlationId);
+        }
+
+        $methods = [];
+
+        foreach ($payload as $item) {
+            if (! is_array($item) || ! isset($item['id'])) {
+                continue;
+            }
+
+            $methods[] = new GatewayPaymentMethod(
+                id: (string) $item['id'],
+                name: isset($item['name']) ? (string) $item['name'] : null,
+                paymentTypeId: isset($item['payment_type_id']) ? (string) $item['payment_type_id'] : null,
+                status: isset($item['status']) ? (string) $item['status'] : null,
+            );
+        }
+
+        return $methods;
+    }
+
+    /**
+     * @param  mixed  $payload
+     */
+    private function toGatewayRefund($payload, string $providerPaymentId, string $operation, string $correlationId): GatewayRefund
+    {
+        if (! is_array($payload) || ! isset($payload['id'])) {
+            throw PaymentGatewayException::malformedResponse($operation, 'sem campo id', $correlationId);
+        }
+
+        return new GatewayRefund(
+            refundId: (string) $payload['id'],
+            providerPaymentId: (string) ($payload['payment_id'] ?? $providerPaymentId),
+            amountCents: self::toCents($payload['amount'] ?? 0),
+            status: (string) ($payload['status'] ?? 'in_process'),
+            createdAt: self::toDate($payload['date_created'] ?? null),
+        );
+    }
+
     // -- Corpo da preferência ---------------------------------------------------------
 
     /**
@@ -310,6 +558,15 @@ class MercadoPagoGateway implements CheckoutProGateway
 
         $paymentMethods = [];
         $excluded = $this->settings->excludedPaymentTypes();
+
+        if ($this->settings->extendedPayments()) {
+            // Fase 2, onda D: famílias fora da configuração ou inativas na conta (última consulta
+            // a GET /v1/payment_methods) saem por `excluded_payment_types`; Pix e boleto ganham
+            // prazo próprio em `date_of_expiration` (guia do Checkout Pro; ≥ 3 dias recomendado).
+            $excluded = ($this->methods ?? app(PaymentMethodPolicy::class))
+                ->excludedPaymentTypes($this->name(), $this->environment());
+            $body['date_of_expiration'] = Carbon::now()->addHours($this->settings->offlineExpirationHours())->toIso8601String();
+        }
 
         if ($excluded !== []) {
             $paymentMethods['excluded_payment_types'] = array_map(

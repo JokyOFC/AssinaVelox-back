@@ -12,10 +12,12 @@ use App\Enums\DocumentVersionKind;
 use App\Enums\EnvelopeStatus;
 use App\Enums\FolderAccessLevel;
 use App\Enums\MembershipRole;
+use App\Enums\PaymentStatus;
 use App\Enums\Permission;
 use App\Enums\RecipientStatus;
 use App\Enums\SigningOrder;
 use App\Enums\SigningSessionStatus;
+use App\Models\ApiToken;
 use App\Models\AuditEvent;
 use App\Models\AuthChallenge;
 use App\Models\CertificateReference;
@@ -29,6 +31,7 @@ use App\Models\Membership;
 use App\Models\MembershipInvitation;
 use App\Models\Organization;
 use App\Models\Payment;
+use App\Models\PaymentRefund;
 use App\Models\Plan;
 use App\Models\PlanConsumption;
 use App\Models\Recipient;
@@ -44,6 +47,7 @@ use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\VerificationRecord;
+use App\Models\WebhookEndpoint;
 use App\Services\Branding\BrandingManager;
 use App\Services\PublicForms\PublicFormManager;
 use App\Services\PublicForms\PublicFormSchema;
@@ -55,6 +59,7 @@ use App\Services\Tags\TagColor;
 use App\Services\Tags\TagManager;
 use App\Services\Templates\TemplateManager;
 use App\Services\Timestamp\TsaToolRunner;
+use App\Services\Webhooks\WebhookSignature;
 use App\Support\CurrentOrganization;
 use App\Support\PermissionsSystemRoles;
 use Illuminate\Database\Seeder;
@@ -99,6 +104,9 @@ class DemoOrganizationSeeder extends Seeder
         // Onda C (docs/fase-2/onda-c-relatorio.md §6). `operator_tsa` e `pades_bt` são da
         // plataforma (só o .env), não de plano.
         'participant_a1', 'dossier_export', 'retention_policies',
+        // Onda D (docs/fase-2/entrega-fase-2.md §5). `extended_payments` e `fiscal_invoices`
+        // são da plataforma (só o .env), não de plano.
+        'api_integrations', 'outbound_webhooks', 'rest_hooks',
     ];
 
     /**
@@ -281,7 +289,7 @@ class DemoOrganizationSeeder extends Seeder
             ->forOrganization($org)->ofPlan($plan)->active()
             ->create(['provider' => 'mercadopago']);
 
-        Payment::factory()->forSubscription($subscription)->approved()->create();
+        $approvedPayment = Payment::factory()->forSubscription($subscription)->approved()->create();
         Payment::factory()->forSubscription($subscription)->pending()->create([
             'created_at' => now()->subMonth(),
             'updated_at' => now()->subMonth(),
@@ -325,6 +333,96 @@ class DemoOrganizationSeeder extends Seeder
         $this->seedHorizontePhase2($org, $owner, $admin, $locacoes, $vendas);
         $this->seedHorizonteWaveB($org, $owner);
         $this->seedHorizonteWaveC($org, $owner);
+        $this->seedHorizonteWaveD($org, $owner, $subscription, $approvedPayment);
+    }
+
+    /**
+     * Fase 2, onda D (docs/fase-2/entrega-fase-2.md §5) na Horizonte:
+     *  - uma chave de API de exemplo — só o hash vai para o banco; o texto é descartado aqui e
+     *    NUNCA impresso (a tela mostra só o prefixo);
+     *  - um endpoint de webhook para um destino INVÁLIDO (`.invalid` nunca resolve), pausado,
+     *    para a tela de webhooks ter o que mostrar sem que nada saia para a rede;
+     *  - um estorno parcial aprovado no pagamento aprovado e um pagamento antigo estornado por
+     *    inteiro, para o painel interno de faturamento.
+     * As flags de plano ficam ligadas na Horizonte e desligadas na Vega; a interface só aparece
+     * com os interruptores globais `ASSINAVELOX_FEATURE_*` (e `extended_payments` só pelo .env).
+     */
+    private function seedHorizonteWaveD(Organization $org, User $owner, Subscription $subscription, Payment $approvedPayment): void
+    {
+        $secret = (string) config('sanctum.token_prefix', '').Str::random(40);
+
+        $token = new ApiToken;
+        $token->forceFill([
+            'tokenable_type' => $owner->getMorphClass(),
+            'tokenable_id' => $owner->getKey(),
+            'organization_id' => $org->id,
+            'created_by_user_id' => $owner->id,
+            'name' => 'Integração ERP (demonstração)',
+            'token' => hash('sha256', $secret),
+            'token_prefix' => mb_substr($secret, 0, 8),
+            'abilities' => ['envelopes:read', 'envelopes:write', 'envelopes:send', 'documents:read', 'templates:read', 'templates:use'],
+            'expires_at' => now()->addDays(90),
+        ])->save();
+        unset($secret);
+
+        $webhookSecret = WebhookSignature::generateSecret();
+        WebhookEndpoint::withoutOrganizationScope()->create([
+            'organization_id' => $org->id,
+            'created_by_user_id' => $owner->id,
+            'url' => 'https://destino-invalido.invalid/assinavelox/webhooks',
+            'description' => 'Demonstração — destino inválido, pausado (nada é entregue)',
+            'events' => ['envelope.completed', 'recipient.signed'],
+            'secret' => $webhookSecret,
+            'secret_hint' => WebhookSignature::hint($webhookSecret),
+            'is_active' => false,
+            'paused_at' => now(),
+            'paused_reason' => WebhookEndpoint::PAUSED_MANUAL,
+            'consecutive_failures' => 0,
+            'source' => WebhookEndpoint::SOURCE_WEB,
+        ]);
+        unset($webhookSecret);
+
+        // Estorno parcial aprovado (não muda plano nem cota — política conservadora).
+        $approvedPayment->forceFill(['refunded_cents' => 1_000])->save();
+        PaymentRefund::withoutOrganizationScope()->create([
+            'organization_id' => $org->id,
+            'payment_id' => $approvedPayment->id,
+            'provider' => $approvedPayment->provider,
+            'provider_refund_id' => 'demo-refund-parcial-1',
+            'amount_cents' => 1_000,
+            'currency' => $approvedPayment->currency ?? 'BRL',
+            'kind' => PaymentRefund::KIND_PARTIAL,
+            'status' => PaymentRefund::STATUS_APPROVED,
+            'provider_status' => 'approved',
+            'reason' => 'Demonstração: desconto concedido',
+            'initiator' => PaymentRefund::INITIATOR_PLATFORM_ADMIN,
+            'idempotency_key' => (string) Str::uuid(),
+            'requested_at' => now()->subDays(2),
+            'confirmed_at' => now()->subDays(2),
+        ]);
+
+        // Pagamento de um ciclo antigo, estornado por inteiro.
+        $old = Payment::factory()->forSubscription($subscription)->approved()->create([
+            'created_at' => now()->subMonths(2),
+            'updated_at' => now()->subMonths(2),
+        ]);
+        $old->forceFill(['status' => PaymentStatus::Refunded, 'refunded_cents' => $old->amount_cents, 'paid_at' => now()->subMonths(2), 'activated_at' => now()->subMonths(2)])->save();
+        PaymentRefund::withoutOrganizationScope()->create([
+            'organization_id' => $org->id,
+            'payment_id' => $old->id,
+            'provider' => $old->provider,
+            'provider_refund_id' => 'demo-refund-total-1',
+            'amount_cents' => $old->amount_cents,
+            'currency' => $old->currency ?? 'BRL',
+            'kind' => PaymentRefund::KIND_TOTAL,
+            'status' => PaymentRefund::STATUS_APPROVED,
+            'provider_status' => 'approved',
+            'reason' => 'Demonstração: cobrança em duplicidade',
+            'initiator' => PaymentRefund::INITIATOR_PLATFORM_ADMIN,
+            'idempotency_key' => (string) Str::uuid(),
+            'requested_at' => now()->subMonths(2)->addDay(),
+            'confirmed_at' => now()->subMonths(2)->addDay(),
+        ]);
     }
 
     /**

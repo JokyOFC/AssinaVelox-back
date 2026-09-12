@@ -107,6 +107,15 @@ final class AdminEventCatalog
                     AuditEventType::SenderDomainDeleted,
                 ],
             ],
+            // Fase 2, onda D (D-API): criação e revogação de chaves de API. Payload só com o
+            // ULID, o nome, as abilities e a validade — nunca o texto, o hash ou o prefixo.
+            'integrations' => [
+                'label' => 'API e integrações',
+                'events' => [
+                    AuditEventType::ApiTokenCreated,
+                    AuditEventType::ApiTokenRevoked,
+                ],
+            ],
             'support' => [
                 'label' => 'Acessos do suporte',
                 'events' => [

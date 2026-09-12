@@ -162,6 +162,8 @@ class ActivateSubscription
             'current_period_end' => $this->periodEnd($start, $payment),
             'canceled_at' => null,
             'cancel_at_period_end' => false,
+            // Fase 2, onda D: um novo pagamento aprovado encerra o efeito de um estorno total.
+            'paid_cycle_refunded_at' => null,
             'provider' => $payment->provider,
             'envelopes_used' => 0,
             'envelopes_reserved' => $this->openReservations($subscription),

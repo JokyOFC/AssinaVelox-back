@@ -71,10 +71,66 @@ return [
         // Fase 2, onda C — K-RET (docs/fase-2/retencao-e-preservacao.md). Organização (esta
         // chave E plano). Uma preservação já criada continua valendo com a flag desligada.
         'retention_policies' => filter_var(env('ASSINAVELOX_FEATURE_RETENTION_POLICIES', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda D — D-API (docs/fase-2/api-v1.md). Organização (esta chave E plano). Era
+        // a chave reservada da Fase 1. Desligada: `/api/v1/*` responde 404 e nenhum token autentica.
+        'api_integrations' => filter_var(env('ASSINAVELOX_FEATURE_API_INTEGRATIONS', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda D — D-PAY (docs/fase-2/pagamentos-e-fiscal.md). PLATAFORMA (só esta chave):
+        // a cobrança é da operadora, não de um plano. `extended_payments` liga meios configuráveis,
+        // estorno, cancelamento, chargeback, conciliação e o painel admin.billing.index;
+        // `fiscal_invoices` liga o status de NFS-e por pagamento (a emissão real segue bloqueada).
+        'extended_payments' => filter_var(env('ASSINAVELOX_FEATURE_EXTENDED_PAYMENTS', false), FILTER_VALIDATE_BOOLEAN),
+        'fiscal_invoices' => filter_var(env('ASSINAVELOX_FEATURE_FISCAL_INVOICES', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda D — D-HOOK (docs/fase-2/webhooks.md). Organização (esta chave E plano).
+        // Desligada: nenhuma entrega é criada, nenhuma chamada sai e as rotas de gestão dão 404.
+        // Condição de ativação (viabilidade R6): o teste do pino de IP precisa estar verde.
+        'outbound_webhooks' => filter_var(env('ASSINAVELOX_FEATURE_OUTBOUND_WEBHOOKS', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 2, onda D — D-PLAT (docs/fase-2/integracoes-no-code.md). Organização (esta chave E
+        // plano). REST Hooks (assinatura dinâmica de webhooks pela API, padrão de n8n/Zapier/Make).
+        // Só valem com `api_integrations` E `outbound_webhooks` também ligadas: sem a API não há
+        // token; sem o motor de webhooks nada seria entregue. Desligada: as rotas dão 404.
+        'rest_hooks' => filter_var(env('ASSINAVELOX_FEATURE_REST_HOOKS', false), FILTER_VALIDATE_BOOLEAN),
         // Plataforma (só a config global).
         'admin_users' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_USERS', false), FILTER_VALIDATE_BOOLEAN),
         'admin_audit' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_AUDIT', false), FILTER_VALIDATE_BOOLEAN),
         'impersonation' => filter_var(env('ASSINAVELOX_FEATURE_IMPERSONATION', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    // Fase 2 §2.15 — API REST v1 (D-API, docs/fase-2/api-v1.md). Só vale com
+    // `features.api_integrations` ligada (global E plano).
+    'api' => [
+        'rate_limit' => [
+            // Balde por token e balde pela organização do token (vários tokens dividem este).
+            'per_token_per_minute' => (int) env('ASSINAVELOX_API_RATE_PER_TOKEN', 120),
+            'per_organization_per_minute' => (int) env('ASSINAVELOX_API_RATE_PER_ORGANIZATION', 600),
+            // Tentativas com token inválido por IP antes do 429.
+            'failed_auth_per_minute' => (int) env('ASSINAVELOX_API_FAILED_AUTH_PER_MINUTE', 30),
+        ],
+        'idempotency' => [
+            // Por quanto tempo a resposta de uma `Idempotency-Key` é repetida.
+            'ttl_hours' => (int) env('ASSINAVELOX_API_IDEMPOTENCY_TTL_HOURS', 24),
+            // Reserva de uma chave em processamento; vencida, outra requisição pode retomá-la.
+            'lock_seconds' => (int) env('ASSINAVELOX_API_IDEMPOTENCY_LOCK_SECONDS', 60),
+        ],
+        'request_logs' => [
+            // Retenção curta do registro mínimo das requisições (aba "Logs").
+            'retention_days' => (int) env('ASSINAVELOX_API_REQUEST_LOG_RETENTION_DAYS', 30),
+        ],
+        'tokens' => [
+            'max_active_per_organization' => (int) env('ASSINAVELOX_API_MAX_ACTIVE_TOKENS', 50),
+            'max_expiration_days' => (int) env('ASSINAVELOX_API_TOKEN_MAX_EXPIRATION_DAYS', 365),
+        ],
+        'page_size' => [
+            'default' => (int) env('ASSINAVELOX_API_PAGE_SIZE', 25),
+            'max' => (int) env('ASSINAVELOX_API_PAGE_SIZE_MAX', 100),
+        ],
+    ],
+
+    // Fase 2 §2.17 — REST Hooks (D-PLAT, docs/fase-2/integracoes-no-code.md). Só vale com
+    // `features.rest_hooks`, `api_integrations` e `outbound_webhooks` ligadas. O teto de
+    // endpoints por organização (`webhooks.max_endpoints_per_organization`) continua valendo.
+    'rest_hooks' => [
+        // Assinaturas ativas por token (cada Zap/cenário/fluxo costuma criar uma).
+        'max_subscriptions_per_token' => (int) env('ASSINAVELOX_REST_HOOKS_MAX_PER_TOKEN', 10),
     ],
 
     // Fase 2 §2.3 — teto de arquivos por envelope com `features.multi_document` ligada
@@ -378,6 +434,57 @@ return [
         'max_per_organization' => (int) env('ASSINAVELOX_SENDER_DOMAINS_MAX', 5),
         // Parte local do remetente próprio: {from_local_part}@{domínio verificado}.
         'from_local_part' => env('ASSINAVELOX_SENDER_DOMAIN_LOCAL_PART', 'assinaturas'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 2, onda D §2.16 — webhooks de saída (D-HOOK)
+    |--------------------------------------------------------------------------
+    |
+    | docs/fase-2/webhooks.md. Flag `features.outbound_webhooks` (global E plano).
+    |
+    | Proteção contra SSRF (App\Support\Http\OutboundUrlGuard): só https; `allow_http` só vale
+    | FORA de produção (em produção é ignorado, qualquer que seja o valor); IP literal nunca;
+    | DNS resolvido antes e TODOS os endereços precisam ser públicos; conexão pinada no
+    | endereço validado (CURLOPT_RESOLVE); sem redirecionamento; sem proxy de ambiente.
+    | `testing_allowed_cidrs` existe só para o teste de integração com servidor local e também
+    | é ignorado em produção.
+    |
+    | Retentativas: `backoff_seconds[n-1]` é a espera depois da n-ésima tentativa falha
+    | (1 min, 5 min, 30 min, 2 h, 12 h, 24 h, 24 h); na `max_attempts`-ésima a entrega vira
+    | `exhausted`. Tempo esgotado conta como falha (resultado DESCONHECIDO, T5): o receptor
+    | deduplica pelo X-AssinaVelox-Delivery-Id.
+    */
+    'webhooks' => [
+        'allow_http' => filter_var(
+            env('ASSINAVELOX_WEBHOOKS_ALLOW_HTTP', in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        // Portas além de 443 (https) aceitas no cadastro. Lista separada por vírgula.
+        'allowed_ports' => array_values(array_filter(array_map('intval', explode(',', (string) env('ASSINAVELOX_WEBHOOKS_ALLOWED_PORTS', '443'))))),
+        'testing_allowed_cidrs' => [],
+        'connect_timeout_seconds' => (float) env('ASSINAVELOX_WEBHOOKS_CONNECT_TIMEOUT', 5),
+        'timeout_seconds' => (float) env('ASSINAVELOX_WEBHOOKS_TIMEOUT', 10),
+        // Bytes da resposta lidos e guardados no histórico (o resto nunca é lido).
+        'response_excerpt_bytes' => (int) env('ASSINAVELOX_WEBHOOKS_RESPONSE_EXCERPT_BYTES', 512),
+        'max_attempts' => (int) env('ASSINAVELOX_WEBHOOKS_MAX_ATTEMPTS', 8),
+        'backoff_seconds' => [60, 300, 1800, 7200, 43200, 86400, 86400],
+        // Tentativas falhas SEGUIDAS (qualquer entrega) até o endpoint ser pausado com aviso.
+        'pause_after_consecutive_failures' => (int) env('ASSINAVELOX_WEBHOOKS_PAUSE_AFTER_FAILURES', 20),
+        // Janela recomendada ao receptor para aceitar o X-AssinaVelox-Timestamp.
+        'signature_tolerance_seconds' => 300,
+        // Convivência do segredo anterior depois da rotação (0 = encerra na hora).
+        'secret_rotation_overlap_hours' => (int) env('ASSINAVELOX_WEBHOOKS_ROTATION_OVERLAP_HOURS', 24),
+        'max_rotation_overlap_hours' => 168,
+        'max_endpoints_per_organization' => (int) env('ASSINAVELOX_WEBHOOKS_MAX_ENDPOINTS', 10),
+        // Se o job inicial se perder, a varredura `webhooks:retry` tenta depois disto.
+        'initial_fallback_seconds' => 60,
+        'retry_batch_size' => (int) env('ASSINAVELOX_WEBHOOKS_RETRY_BATCH_SIZE', 200),
+        // Entregas encerradas (entregue, esgotada, cancelada) saem do histórico depois disto.
+        'retention_days' => (int) env('ASSINAVELOX_WEBHOOKS_RETENTION_DAYS', 30),
+        // `default` para funcionar com qualquer worker; recomenda-se uma fila própria.
+        'queue' => env('ASSINAVELOX_WEBHOOKS_QUEUE', 'default'),
+        'user_agent' => 'AssinaVelox-Webhooks/1.0',
     ],
 
     /*
@@ -956,6 +1063,31 @@ return [
         // Tipos de pagamento excluídos da preferência (lista separada por vírgula).
         // `account_money` NÃO pode ser excluído (regra do provedor).
         'excluded_payment_types' => env('MERCADOPAGO_EXCLUDED_PAYMENT_TYPES', ''),
+
+        // -- Fase 2, onda D (flag `extended_payments`; desligada, nada abaixo é lido) -----------
+        // Famílias oferecidas no Checkout Pro: `pix`, `boleto`, `card` (lista por vírgula). Uma
+        // família só é oferecida quando está aqui E, se já houver consulta a GET /v1/payment_methods,
+        // quando a conta tem um meio dela com status `active` (nada de supor disponibilidade).
+        'enabled_methods' => env('MERCADOPAGO_ENABLED_METHODS', 'pix,boleto,card'),
+        // `date_of_expiration` da preferência (pagamentos offline e Pix), em horas. A doc do Checkout
+        // Pro recomenda ao menos 3 dias; o valor é limitado a 1 h..30 dias.
+        'offline_expiration_hours' => (int) env('MERCADOPAGO_OFFLINE_EXPIRATION_HOURS', 72),
+        // `user_id` do vendedor, enviado como X-Caller-Id em GET /v1/chargebacks/{id}. A
+        // obrigatoriedade para conta própria é NÃO CONFIRMADA; sem valor, o cabeçalho não vai.
+        'seller_user_id' => env('MERCADOPAGO_SELLER_USER_ID'),
+        // Conciliação diária por GET /v1/payments/search (janela por date_last_updated). O teto de
+        // `limit`/`offset` é NÃO CONFIRMADO: páginas de 30 (padrão documentado) e no máximo N páginas.
+        'reconciliation' => [
+            'window_days' => (int) env('MERCADOPAGO_RECONCILIATION_WINDOW_DAYS', 2),
+            'page_size' => (int) env('MERCADOPAGO_RECONCILIATION_PAGE_SIZE', 30),
+            'max_pages' => (int) env('MERCADOPAGO_RECONCILIATION_MAX_PAGES', 20),
+        ],
+        // Assinaturas recorrentes (preapproval) — classe B. `disabled` (padrão) | `simulated`
+        // (simulador identificado, só fora de produção). Não existe driver real: faltam conta
+        // vendedora real, decisão sobre Q20 e confirmação dos meios aceitos.
+        'preapproval' => [
+            'driver' => env('MERCADOPAGO_PREAPPROVAL_DRIVER', 'disabled'),
+        ],
     ],
 
     /*
@@ -973,6 +1105,35 @@ return [
             'legal_name' => env('ASSINAVELOX_OPERATOR_LEGAL_NAME'),
             'tax_id' => env('ASSINAVELOX_OPERATOR_TAX_ID'),
         ],
+
+        // -- Fase 2, onda D (flag `extended_payments`) ------------------------------------------
+        // Política de estorno (decisão pendente §4.5 item 28 — adotada a CONSERVADORA, registrada
+        // como decisão do proprietário em docs/fase-2/pagamentos-e-fiscal.md §4):
+        //  - total: cancela a renovação do ciclo pago e a organização volta ao Grátis ao FIM do
+        //    período, sem passar por `past_due`; a cota já consumida não é devolvida;
+        //  - parcial: não altera plano nem cota.
+        // `initiators`: quem pode pedir — `platform_admin` sempre; `owner` só se listado aqui (e só
+        // estorno TOTAL, dentro de `owner_window_days` da aprovação).
+        'refunds' => [
+            'initiators' => env('ASSINAVELOX_BILLING_REFUND_INITIATORS', 'platform_admin'),
+            'owner_window_days' => (int) env('ASSINAVELOX_BILLING_OWNER_REFUND_WINDOW_DAYS', 7),
+            // Prazo documentado do provedor: 180 dias a partir da aprovação.
+            'max_age_days' => (int) env('ASSINAVELOX_BILLING_REFUND_MAX_AGE_DAYS', 180),
+        ],
+        // Alertas da cobrança (chargeback, divergência de conciliação). Sempre vão para o log com
+        // `alert=`; com um e-mail aqui, também para a caixa da equipe.
+        'alert_email' => env('ASSINAVELOX_BILLING_ALERT_EMAIL'),
+    ],
+
+    /*
+    | Fase 2, onda D §2.21 — NFS-e (flag `fiscal_invoices`, classe B). `provider`:
+    | `none` (padrão: nenhum provedor; cada pagamento mostra "não emitida — integração fiscal
+    | pendente"), `simulated` (simulador identificado, só fora de produção; NUNCA emite nota) ou
+    | `sefin_nacional` (adaptador do Sistema Nacional NFS-e, DESABILITADO até a operadora entregar
+    | CNPJ, município IBGE, regime, cadastro no CNC, certificado para mTLS/XMLDSig e parecer contábil).
+    */
+    'fiscal' => [
+        'provider' => env('ASSINAVELOX_FISCAL_PROVIDER', 'none'),
     ],
 
     // Suporte/ajuda exibidos na UI.

@@ -22,6 +22,9 @@ enum DeliveryPurpose: string
     case Reminder = 'reminder';
     case ScheduledSend = 'scheduled_send';
 
+    // Fase 2 §2.16 (onda D): aviso de que um endpoint de webhook foi pausado automaticamente.
+    case WebhookFailed = 'webhook_failed';
+
     public function label(): string
     {
         return match ($this) {
@@ -39,6 +42,7 @@ enum DeliveryPurpose: string
             self::ProductNews => 'Novidades do produto',
             self::Reminder => 'Lembrete automático',
             self::ScheduledSend => 'Envio agendado',
+            self::WebhookFailed => 'Webhook pausado',
         };
     }
 }

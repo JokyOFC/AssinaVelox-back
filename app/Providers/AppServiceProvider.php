@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\Membership;
 use App\Models\Organization;
+use App\Services\Api\ApiDocumentation;
+use App\Services\Api\ApiRateLimits;
 use App\Services\Envelopes\Contracts\RotatesInvitations;
 use App\Services\Envelopes\Sending\EnvelopeNotifications;
 use App\Services\Envelopes\Sending\ExpireEnvelopes;
@@ -61,6 +63,19 @@ class AppServiceProvider extends ServiceProvider
         $this->configureTrustedProxies();
         $this->configureAbsoluteUrls();
         $this->configureRateLimiting();
+        $this->configureApi();
+    }
+
+    /**
+     * API REST v1 (Fase 2 §2.15, docs/fase-2/api-v1.md): limitador `api` (um balde por token e
+     * outro pela organização do token) e o gate `viewApiDocs` da documentação OpenAPI
+     * (Scramble), com o esquema Bearer.
+     */
+    protected function configureApi(): void
+    {
+        RateLimiter::for('api', fn (Request $request): array => ApiRateLimits::for($request));
+
+        ApiDocumentation::configure();
     }
 
     /**

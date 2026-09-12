@@ -3,6 +3,7 @@
 namespace App\Services\Organizations;
 
 use App\Models\Membership;
+use App\Models\WebhookEndpoint;
 
 /**
  * Preferências de notificação por membership (usuário × organização), eventos × canais.
@@ -68,7 +69,37 @@ class NotificationPreferences
                 'default' => ['database'],
                 'locked' => ['mail' => true],
             ],
+            // Fase 2 §2.16 (onda D, roadmap §2.0): só aparece na tela quando a organização tem
+            // endpoint de webhook ({@see self::CONDITIONAL}). Produzido por
+            // WebhookEndpointPausedNotification, só para quem tem `manage_integrations`.
+            'webhook_failed' => [
+                'label' => 'Webhook pausado',
+                'description' => 'Um endpoint parou de receber eventos (falhas seguidas ou responsável sem acesso)',
+                'default' => ['mail', 'database'],
+                'locked' => [],
+            ],
         ];
+    }
+
+    /**
+     * Eventos que só aparecem na tela quando fazem sentido para a organização. Ausentes do
+     * formulário (linha oculta), a preferência salva continua a que era.
+     *
+     * @var list<string>
+     */
+    public const CONDITIONAL = ['webhook_failed'];
+
+    /**
+     * O evento aparece na tela para esta membership?
+     */
+    public function visible(Membership $membership, string $event): bool
+    {
+        return match ($event) {
+            'webhook_failed' => WebhookEndpoint::withoutOrganizationScope()
+                ->where('organization_id', $membership->organization_id)
+                ->exists(),
+            default => true,
+        };
     }
 
     /**
@@ -108,6 +139,10 @@ class NotificationPreferences
         $rows = [];
 
         foreach (self::catalog() as $event => $definition) {
+            if (in_array($event, self::CONDITIONAL, true) && ! $this->visible($membership, $event)) {
+                continue;
+            }
+
             $rows[] = [
                 'key' => $event,
                 'label' => $definition['label'],
@@ -137,9 +172,15 @@ class NotificationPreferences
     public function save(Membership $membership, array $preferences): void
     {
         $clean = [];
+        $current = $this->for($membership);
 
         foreach (self::catalog() as $event => $definition) {
-            $channels = array_values(array_intersect(self::CHANNELS, (array) ($preferences[$event] ?? [])));
+            // Linha oculta (evento condicional ausente do formulário): mantém o que valia.
+            $submitted = in_array($event, self::CONDITIONAL, true) && ! array_key_exists($event, $preferences)
+                ? $current[$event]
+                : ($preferences[$event] ?? []);
+
+            $channels = array_values(array_intersect(self::CHANNELS, (array) $submitted));
 
             // Canais travados nunca são ativados pelo usuário.
             foreach ($definition['locked'] as $channel => $locked) {

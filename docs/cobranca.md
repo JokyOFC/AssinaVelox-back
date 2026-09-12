@@ -9,6 +9,14 @@ aparece aqui com a mesma marcação, nunca como fato.
 Decisões de produto: `docs/design/RECONCILIACAO.md` §4 (Q20 pagamento avulso por ciclo,
 Q21 sem cartão salvo e sem nota fiscal) e `docs/design/ROUTES_AND_PAGES.md` §2.15/§2.16.
 
+> **Fase 2, onda D (D-PAY).** Atrás das flags da plataforma `extended_payments` e
+> `fiscal_invoices` (ambas **desligadas** por padrão) existem: meios configuráveis (Pix, boleto,
+> cartão) com `date_of_expiration`, estorno total e parcial, cancelamento de pendente, contestação
+> e ordem comercial pelo webhook, conciliação diária, o painel `admin.billing.index`, o contrato de
+> assinaturas recorrentes (classe B, produção desabilitada) e a NFS-e por contrato (classe B,
+> emissão real bloqueada). Tudo em [`docs/fase-2/pagamentos-e-fiscal.md`](fase-2/pagamentos-e-fiscal.md).
+> **Com as flags desligadas, este documento continua descrevendo exatamente o comportamento.**
+
 ---
 
 ## 1. O modelo de cobrança em uma frase
@@ -455,6 +463,11 @@ ambiente. Nunca token, chave de webhook, e-mail completo ou dado de cartão.
 ---
 
 ## 13. O que **não** está implementado
+
+> Com a flag `extended_payments` ligada, as linhas "Pix e boleto", "Nota fiscal", "Reembolso e
+> cancelamento pela interface", "Ordem comercial" e "Contestações" abaixo passam a ter o
+> comportamento descrito em [`docs/fase-2/pagamentos-e-fiscal.md`](fase-2/pagamentos-e-fiscal.md)
+> §2–§8 e §11. Recorrência automática continua fora (classe B, §10 daquele documento).
 
 | Item                                        | Situação                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

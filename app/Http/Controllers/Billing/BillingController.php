@@ -7,13 +7,18 @@ use App\Enums\PaymentStatus;
 use App\Enums\PlanBillingPeriod;
 use App\Enums\SubscriptionStatus;
 use App\Http\Controllers\Controller;
+use App\Integrations\Payments\CheckoutProGateway;
 use App\Models\DocumentVersion;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Services\Billing\BillingProfile;
+use App\Services\Billing\BillingSettings;
+use App\Services\Billing\PaymentMethodPolicy;
 use App\Services\Billing\PaymentMethods;
 use App\Services\Billing\SubscriptionLifecycle;
+use App\Services\Fiscal\FiscalFeature;
+use App\Services\Fiscal\FiscalInvoiceStatus;
 use App\Support\CurrentOrganization;
 use App\Support\TaxId;
 use Illuminate\Http\RedirectResponse;
@@ -40,7 +45,11 @@ use Inertia\Response;
  */
 class BillingController extends Controller
 {
-    public function __construct(private readonly SubscriptionLifecycle $lifecycle) {}
+    public function __construct(
+        private readonly SubscriptionLifecycle $lifecycle,
+        private readonly BillingSettings $settings,
+        private readonly CheckoutProGateway $gateway,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -55,8 +64,11 @@ class BillingController extends Controller
          * as datas visíveis fora de ordem (um pendente de agosto acima de um pago de setembro).
          * A ordenação segue exatamente o valor exibido. `COALESCE` existe em MySQL e SQLite.
          */
+        $fiscal = FiscalFeature::enabled();
+
         $payments = Payment::query()
-            ->with('plan')
+            // Fase 2, onda D: a situação fiscal só é carregada com a flag `fiscal_invoices`.
+            ->with($fiscal ? ['plan', 'fiscalInvoice'] : ['plan'])
             ->orderByRaw('COALESCE(paid_at, created_at) DESC')
             ->orderByDesc('id')
             ->paginate(12)
@@ -67,6 +79,9 @@ class BillingController extends Controller
             ->orderByDesc('paid_at')
             ->orderByDesc('id')
             ->first();
+
+        $extended = $this->settings->extendedPayments();
+        $isOwner = $request->user()->can('delete', $organization);
 
         $payments->through(fn (Payment $payment): array => [
             'id' => $payment->ulid,
@@ -82,6 +97,9 @@ class BillingController extends Controller
                 ? route('billing.payments.receipt', ['payment' => $payment->ulid])
                 : null,
             'mp_payment_id' => $payment->provider_payment_id,
+            // Fase 2, onda D — só com as flags ligadas (desligadas, a linha é a da Fase 1).
+            ...($extended ? $this->extendedPaymentRow($payment, $isOwner) : []),
+            ...($fiscal ? ['fiscal' => FiscalInvoiceStatus::forPayment($payment, $payment->fiscalInvoice)] : []),
         ]);
 
         $checkoutReturn = $request->session()->get('checkout_return');
@@ -144,7 +162,47 @@ class BillingController extends Controller
                 ->exists(),
             'checkout_return' => is_string($checkoutReturn) ? $checkoutReturn : null,
             'checkout_error' => is_string($checkoutError) ? $checkoutError : null,
+            // Fase 2, onda D: presentes só com as flags ligadas.
+            ...($extended ? ['extended' => [
+                'methods' => array_map(
+                    // `available`: true/false pela última consulta à conta vendedora; null = nunca
+                    // consultada (a tela diz "configurado, ainda não confirmado", em vez de supor).
+                    static fn (array $family): array => ['key' => $family['key'], 'label' => $family['label'], 'offered' => $family['offered'], 'available' => $family['available']],
+                    app(PaymentMethodPolicy::class)->families($this->gateway->name(), $this->gateway->environment()),
+                ),
+                'offline_expiration_hours' => $this->settings->offlineExpirationHours(),
+                'owner_refunds' => [
+                    'allowed' => $this->settings->ownerCanRequestRefund() && $isOwner,
+                    'window_days' => $this->settings->ownerRefundWindowDays(),
+                ],
+            ]] : []),
+            ...($fiscal ? ['fiscal_invoices' => ['enabled' => true, 'notice' => FiscalInvoiceStatus::NOT_ISSUED]] : []),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function extendedPaymentRow(Payment $payment, bool $isOwner): array
+    {
+        $pending = in_array($payment->status, [PaymentStatus::Pending, PaymentStatus::InProcess, PaymentStatus::Authorized], true);
+        $paidAt = $payment->paid_at;
+        $withinWindow = $paidAt !== null && $paidAt->gte(now()->subDays($this->settings->ownerRefundWindowDays()));
+
+        return [
+            'currency' => $payment->currency,
+            'refunded_cents' => (int) $payment->refunded_cents,
+            'method_label' => $payment->payment_method_id !== null ? PaymentMethods::label($payment->payment_method_id) : null,
+            'expires_at' => $payment->expires_at?->toIso8601String(),
+            'can_cancel' => $pending,
+            'can_request_refund' => $isOwner
+                && $this->settings->ownerCanRequestRefund()
+                && $payment->status === PaymentStatus::Approved
+                && (int) $payment->refunded_cents === 0
+                && $payment->provider_payment_id !== null
+                && $payment->provider === $this->gateway->name()
+                && $withinWindow,
+        ];
     }
 
     /**

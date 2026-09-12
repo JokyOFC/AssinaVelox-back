@@ -21,7 +21,14 @@ import { BillingProfileCard } from '@/components/billing/billing-profile-card';
 import { CurrentPlanCard } from '@/components/billing/current-plan-card';
 import { CycleUsageCard } from '@/components/billing/cycle-usage-card';
 import { PaymentMethodCard } from '@/components/billing/payment-method-card';
-import { PaymentsTable } from '@/components/billing/payments-table';
+import {
+    type BillingPayment,
+    PaymentsTable,
+} from '@/components/billing/payments-table';
+import {
+    RefundDialog,
+    type RefundTarget,
+} from '@/components/billing/refund-dialog';
 import { SandboxPriceNotice } from '@/components/billing/sandbox-notice';
 import { useVisitLoading } from '@/components/billing/use-visit-loading';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -35,6 +42,10 @@ import {
     index as billingIndex,
     resume as resumeSubscription,
 } from '@/routes/billing';
+import {
+    cancel as cancelPendingPayment,
+    refund as requestPaymentRefund,
+} from '@/routes/billing/payments';
 import { index as plansIndex } from '@/routes/plans';
 import type {
     BillingProfile,
@@ -58,6 +69,20 @@ export interface BillingProps {
     checkout_return?: CheckoutOutcome | null;
     /** Mensagem de falha ao abrir o checkout, quando o servidor a expõe. */
     checkout_error?: string | null;
+    /** Fase 2, onda D — só com a flag `extended_payments` ligada. */
+    extended?: {
+        /** `available`: confirmado na conta do Mercado Pago; `null` = ainda não consultado. */
+        methods: {
+            key: string;
+            label: string;
+            offered: boolean;
+            available: boolean | null;
+        }[];
+        offline_expiration_hours: number;
+        owner_refunds: { allowed: boolean; window_days: number };
+    } | null;
+    /** Fase 2, onda D — só com a flag `fiscal_invoices` ligada. */
+    fiscal_invoices?: { enabled: boolean; notice: string } | null;
 }
 
 /**
@@ -81,8 +106,19 @@ export default function Billing({
     pending_checkout,
     checkout_return = null,
     checkout_error = null,
+    extended = null,
+    fiscal_invoices = null,
 }: BillingProps) {
     const [cancelOpen, setCancelOpen] = useState(false);
+    const [cancelPayment, setCancelPayment] = useState<BillingPayment | null>(
+        null,
+    );
+    const [cancelingPayment, setCancelingPayment] = useState(false);
+    const [refundTarget, setRefundTarget] = useState<RefundTarget | null>(null);
+    const refundPassword = useConfirmsPassword({
+        description:
+            'Pedir estorno é uma ação protegida. Confirme sua senha para continuar.',
+    });
     const [canceling, setCanceling] = useState(false);
     const [resuming, setResuming] = useState(false);
     const [paying, setPaying] = useState(false);
@@ -369,7 +405,114 @@ export default function Billing({
                 />
             </div>
 
-            <PaymentsTable payments={payments} loading={loadingPayments} />
+            {extended && (
+                <p className="text-muted-foreground flex items-start gap-2 text-[12.5px] leading-[1.55]">
+                    <CreditCard
+                        aria-hidden
+                        className="mt-px size-3.5 shrink-0"
+                    />
+                    <span>
+                        {extended.methods.some(
+                            (method) =>
+                                method.offered && method.available === null,
+                        )
+                            ? 'Meios configurados para o checkout: '
+                            : 'Meios aceitos no checkout: '}
+                        <b className="text-text-secondary">
+                            {extended.methods
+                                .filter((method) => method.offered)
+                                .map((method) => method.label)
+                                .join(' · ') || 'Saldo em conta Mercado Pago'}
+                        </b>
+                        {extended.methods.some(
+                            (method) =>
+                                method.offered && method.available === null,
+                        ) &&
+                            ' (ainda não confirmados na conta do Mercado Pago)'}
+                        . Pix e boleto gerados vencem em{' '}
+                        {formatNumber(
+                            Math.max(
+                                1,
+                                Math.round(
+                                    extended.offline_expiration_hours / 24,
+                                ),
+                            ),
+                        )}{' '}
+                        {Math.round(extended.offline_expiration_hours / 24) <= 1
+                            ? 'dia'
+                            : 'dias'}
+                        ; depois disso, basta pagar de novo.
+                    </span>
+                </p>
+            )}
+
+            <PaymentsTable
+                payments={payments as Paginated<BillingPayment>}
+                loading={loadingPayments}
+                fiscal={fiscal_invoices !== null}
+                onCancel={extended && can.manage ? setCancelPayment : undefined}
+                onRequestRefund={
+                    extended?.owner_refunds.allowed
+                        ? (payment) =>
+                              setRefundTarget({
+                                  id: payment.id,
+                                  label: payment.description,
+                                  refundable_cents:
+                                      payment.amount_cents -
+                                      (payment.refunded_cents ?? 0),
+                                  currency: payment.currency ?? 'BRL',
+                                  fully_refundable:
+                                      (payment.refunded_cents ?? 0) === 0,
+                              })
+                        : undefined
+                }
+            />
+
+            {extended && (
+                <>
+                    <ConfirmDialog
+                        open={cancelPayment !== null}
+                        onOpenChange={(open) => !open && setCancelPayment(null)}
+                        destructive
+                        processing={cancelingPayment}
+                        title="Cancelar este pagamento pendente?"
+                        description="O Pix ou boleto gerado deixa de valer e nada é cobrado. Para pagar o plano depois, basta iniciar um novo pagamento."
+                        confirmLabel="Cancelar pagamento"
+                        cancelLabel="Voltar"
+                        onConfirm={() => {
+                            if (!cancelPayment) {
+                                return;
+                            }
+
+                            setCancelingPayment(true);
+                            router.post(
+                                cancelPendingPayment.url(cancelPayment.id),
+                                {},
+                                {
+                                    preserveScroll: true,
+                                    onFinish: () => {
+                                        setCancelingPayment(false);
+                                        setCancelPayment(null);
+                                    },
+                                },
+                            );
+                        }}
+                    />
+
+                    <RefundDialog
+                        target={refundTarget}
+                        onOpenChange={(open) => !open && setRefundTarget(null)}
+                        submitUrl={
+                            refundTarget
+                                ? requestPaymentRefund.url(refundTarget.id)
+                                : null
+                        }
+                        allowPartial={false}
+                        password={refundPassword}
+                    />
+                    {refundPassword.dialog}
+                </>
+            )}
 
             {!can.manage && (
                 <p className="text-muted-foreground flex items-start gap-2 text-[12.5px]">

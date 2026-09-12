@@ -165,9 +165,17 @@ enum AuditEventType: string
     case ParticipantSignatureExpired = 'participant_signature.expired';
     case EnvelopeAwaitingParticipantSignatures = 'envelope.awaiting_participant_signatures';
 
+    // Fase 2, onda D — API REST v1 (D-API, docs/fase-2/api-v1.md §2). Eventos da ORGANIZAÇÃO
+    // (`envelope_id` nulo). Payload só com o ULID, o nome, as abilities e a validade — nunca o
+    // texto do token, o hash ou o prefixo.
+    case ApiTokenCreated = 'api_token.created';
+    case ApiTokenRevoked = 'api_token.revoked';
+
     public function label(): string
     {
         return match ($this) {
+            self::ApiTokenCreated => 'Chave de API criada',
+            self::ApiTokenRevoked => 'Chave de API revogada',
             self::ParticipantCertificateRequested => 'Participante optou por assinar com o próprio certificado',
             self::ParticipantCertificateWithdrawn => 'Participante desistiu de assinar com o próprio certificado',
             self::ParticipantCertificateSubmitted => 'Certificado do participante conferido e autorizado para uso',

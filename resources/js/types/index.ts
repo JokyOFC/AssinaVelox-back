@@ -138,6 +138,18 @@ export interface Features {
     pades_bt?: boolean;
     /** §2.19 — retenção e preservação. */
     retention_policies?: boolean;
+    /*
+     * Fase 2, onda D — `api_integrations` (acima) deixou de ser sempre `false`. Opcionais pelo
+     * mesmo motivo das ondas anteriores: ausente = desligada.
+     */
+    /** §2.16 — webhooks de saída (global E plano). */
+    outbound_webhooks?: boolean;
+    /** §2.17 — REST Hooks (exige também a API e os webhooks). */
+    rest_hooks?: boolean;
+    /** §2.20 — pagamentos ampliados (só a chave da plataforma). */
+    extended_payments?: boolean;
+    /** §2.21 — status de NFS-e por pagamento (só a chave da plataforma; emissão real bloqueada). */
+    fiscal_invoices?: boolean;
 }
 
 export interface SharedProps {

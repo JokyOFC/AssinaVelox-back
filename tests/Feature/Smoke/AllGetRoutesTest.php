@@ -45,8 +45,13 @@ require_once __DIR__.'/../Support/OrganizationHelpers.php';
 | - `docs/api*` e `_scramble/*`: documentação OpenAPI do Scramble. Por padrão responde 403
 |   fora do ambiente local (gate `viewApiDocs`), que é o comportamento desejado até a onda
 |   da API definir quem pode vê-la — e essa onda terá teste próprio para isso.
+| - `api/*`: API REST v1 (Fase 2 §2.15, docs/fase-2/api-v1.md). Não é página de sessão por
+|   papel: autentica só por token Bearer (sem cookie), responde 404 com a flag
+|   `api_integrations` desligada e tem matriz própria (isolamento em todas as rotas, abilities,
+|   401/403/404/409/422/429, flag desligada) em tests/Feature/Phase2/Api. O mesmo vale para o
+|   gate da documentação, testado ali.
 */
-const SMOKE_EXCLUDED_URI_PREFIXES = ['horizon', '_inertia', 'storage/', 'sanctum/', 'docs/api', '_scramble/'];
+const SMOKE_EXCLUDED_URI_PREFIXES = ['horizon', '_inertia', 'storage/', 'sanctum/', 'docs/api', '_scramble/', 'api/'];
 
 /**
  * Rotas que respondem 404 de propósito neste contexto: ou continuam esqueleto (Wave C),
@@ -127,6 +132,11 @@ const SMOKE_OVERRIDES = [
     // desligada — o padrão — status e download do dossiê respondem 404.
     'dossiers.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'dossiers.download' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 2 §2.16 (D-HOOK, docs/fase-2/webhooks.md): com a flag `outbound_webhooks`
+    // desligada — o padrão — a gestão de webhooks responde 404 para todos.
+    'integrations.webhooks.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'integrations.webhooks.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'integrations.webhooks.deliveries.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
 ];
 
 /**
@@ -172,6 +182,9 @@ function smokeRouteParameters(string $name, array $ctx): array
         'form_fill.confirm.show' => ['token' => str_repeat('c', 40), 'confirmation' => str_repeat('d', 48)],
         // Fase 2 §2.13 (K-TSA): ULID sintético — flag `dossier_export` desligada responde 404.
         'dossiers.show', 'dossiers.download' => ['dossierExport' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 2 §2.16 (D-HOOK): ULIDs sintéticos — flag `outbound_webhooks` desligada responde 404.
+        'integrations.webhooks.show' => ['webhookEndpoint' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        'integrations.webhooks.deliveries.show' => ['webhookEndpoint' => '01HZZZZZZZZZZZZZZZZZZZZZZZ', 'delivery' => '01HZZZZZZZZZZZZZZZZZZZZZZY'],
         default => [],
     };
 }

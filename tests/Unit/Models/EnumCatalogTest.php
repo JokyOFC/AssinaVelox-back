@@ -116,9 +116,12 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
         'envelope.awaiting_participant_signatures',
     ];
 
+    // Fase 2, onda D — tokens da API v1 (D-API, docs/fase-2/api-v1.md §2). Só acréscimos (T7).
+    $api = ['api_token.created', 'api_token.revoked'];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1])
-        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1));
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api])
+        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api));
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

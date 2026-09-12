@@ -3,3 +3,5 @@ reportlab==5.0.1
 pyHanko==0.37.0
 Pillow
 pytest
+pdfplumber==0.11.10
+pypdfium2==5.13.0

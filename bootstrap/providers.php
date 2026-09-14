@@ -5,6 +5,7 @@ use App\Providers\AppServiceProvider;
 use App\Providers\AuthServiceProvider;
 use App\Providers\FortifyServiceProvider;
 use App\Providers\HorizonServiceProvider;
+use App\Services\Risk\RiskServiceProvider;
 use App\Services\Webhooks\WebhooksServiceProvider;
 
 return [
@@ -14,4 +15,5 @@ return [
     HorizonServiceProvider::class,
     IntegrationsServiceProvider::class,
     WebhooksServiceProvider::class,
+    RiskServiceProvider::class,
 ];

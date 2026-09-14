@@ -6,6 +6,9 @@ use App\Http\Controllers\Admin\BillingController as AdminBillingController;
 use App\Http\Controllers\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\PlaceholderController as AdminPlaceholderController;
+use App\Http\Controllers\Admin\RiskAppealController;
+use App\Http\Controllers\Admin\RiskReportController as AdminRiskReportController;
+use App\Http\Controllers\Admin\RiskReviewController as AdminRiskReviewController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Batch\BatchLinkController;
 use App\Http\Controllers\Batch\BatchSigningController;
@@ -65,6 +68,7 @@ use App\Http\Controllers\Sign\CaptureController as SignCaptureController;
 use App\Http\Controllers\Sign\CertificateController as SignCertificateController;
 use App\Http\Controllers\Sign\DocumentController as SignDocumentController;
 use App\Http\Controllers\Sign\DownloadController as SignDownloadController;
+use App\Http\Controllers\Sign\GovBrReturnController as SignGovBrReturnController;
 use App\Http\Controllers\Sign\OtpController;
 use App\Http\Controllers\Sign\RefusalController;
 use App\Http\Controllers\Sign\SignatureController;
@@ -172,6 +176,26 @@ Route::prefix('assinar/{token}')
         Route::post('certificado/desistir', [SignCertificateController::class, 'withdraw'])->middleware('throttle:20,10,sign-certificate-withdraw')->name('certificate.withdraw');
         Route::post('certificado/conferir', [SignCertificateController::class, 'inspect'])->middleware('throttle:10,10,sign-certificate-inspect')->name('certificate.inspect');
         Route::post('certificado', [SignCertificateController::class, 'store'])->middleware('throttle:6,10,sign-certificate-store')->name('certificate.store');
+        // Fase 3 §3.4 (P3-EXT, docs/fase-3/assinatura-externa-a3.md): assinatura do participante
+        // por componente local (A3) — o servidor prepara a revisão e o digest, o componente assina,
+        // o servidor incorpora e valida. JSON; 404 com a flag `a3_signing` desligada. O simulador
+        // só existe em teste/local (FakeLocalSigner) e tudo o que assina é rotulado "simulado".
+        Route::get('externa', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'show'])->middleware('throttle:60,1,sign-external-show')->name('external.show');
+        Route::post('externa/intencao', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'intent'])->middleware('throttle:20,10,sign-external-intent')->name('external.intent');
+        Route::post('externa/desistir', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'withdraw'])->middleware('throttle:20,10,sign-external-withdraw')->name('external.withdraw');
+        Route::post('externa/preparar', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'prepare'])->middleware('throttle:30,10,sign-external-prepare')->name('external.prepare');
+        Route::post('externa/assinatura', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'submit'])->middleware('throttle:30,10,sign-external-submit')->name('external.submit');
+        Route::get('externa/simulador/certificado', [\App\Http\Controllers\Sign\ExternalSimulatorController::class, 'certificate'])->middleware('throttle:30,10,sign-external-simulator')->name('external.simulator.certificate');
+        Route::post('externa/simulador/assinar', [\App\Http\Controllers\Sign\ExternalSimulatorController::class, 'sign'])->middleware('throttle:30,10,sign-external-simulator-sign')->name('external.simulator.sign');
+        // Fase 3 §3.5 (P3-GOV, docs/fase-3/gov-br.md): o participante assina no portal gov.br e
+        // DEVOLVE o PDF. JSON (exceto o download da revisão reservada); 404 com a flag
+        // `govbr_return` desligada. Autenticação no serviço, como no A1 do participante.
+        Route::get('gov-br', [SignGovBrReturnController::class, 'show'])->middleware('throttle:60,1,sign-govbr-show')->name('govbr.show');
+        Route::post('gov-br/intencao', [SignGovBrReturnController::class, 'intent'])->middleware('throttle:20,10,sign-govbr-intent')->name('govbr.intent');
+        Route::post('gov-br/desistir', [SignGovBrReturnController::class, 'withdraw'])->middleware('throttle:20,10,sign-govbr-withdraw')->name('govbr.withdraw');
+        Route::post('gov-br/reservar', [SignGovBrReturnController::class, 'reserve'])->middleware('throttle:20,10,sign-govbr-reserve')->name('govbr.reserve');
+        Route::get('gov-br/{pedido}/revisao', [SignGovBrReturnController::class, 'download'])->where('pedido', '[0-9A-Za-z]{26}')->middleware('throttle:30,10,sign-govbr-download')->name('govbr.download');
+        Route::post('gov-br/{pedido}/devolver', [SignGovBrReturnController::class, 'upload'])->where('pedido', '[0-9A-Za-z]{26}')->middleware('throttle:10,10,sign-govbr-upload')->name('govbr.upload');
     });
 
 // -- Assinatura em lote (Fase 2 §2.7, C-PRES — docs/fase-2/presencial-e-lote.md §3) -------
@@ -518,6 +542,17 @@ Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin')->name
     Route::post('clientes/{organization}/acessar-como', [AdminImpersonationController::class, 'store'])
         ->middleware('throttle:6,1')
         ->name('organizations.impersonate');
+    // Fase 3 §3.7 (P3-RISK — docs/fase-3/antifraude.md): fila de revisão humana do antifraude e
+    // relatório de precisão. Flag `antifraud` desligada: 404.
+    Route::get('antifraude', [AdminRiskReviewController::class, 'index'])->name('risk.index');
+    Route::get('antifraude/precisao', [AdminRiskReportController::class, 'precision'])->name('risk.precision');
+    Route::get('antifraude/casos/{review}', [AdminRiskReviewController::class, 'show'])
+        ->where('review', '[A-Za-z0-9]{26}')
+        ->name('risk.show');
+    Route::post('antifraude/casos/{review}/decisao', [AdminRiskReviewController::class, 'decide'])
+        ->where('review', '[A-Za-z0-9]{26}')
+        ->middleware('throttle:30,1')
+        ->name('risk.decide');
     Route::get('configuracoes', AdminPlaceholderController::class)->name('settings.index');
 });
 
@@ -550,6 +585,90 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
     Route::get('dossies/{dossierExport}/baixar', [DossierDownloadController::class, 'show'])
         ->middleware('throttle:download')
         ->name('dossiers.download');
+});
+
+// -- Fase 3 §3.10 (P3-AFF) — programa de afiliados (docs/fase-3/afiliados.md) ---------------
+// Flag `affiliates` (plataforma) desligada: todas respondem 404 e o cadastro não muda.
+// O sistema CALCULA comissões e monta lotes; o repasse é manual, fora da plataforma.
+Route::get('indicacao/{code}', [\App\Http\Controllers\Affiliates\ReferralLinkController::class, 'show'])
+    ->where('code', '[A-Za-z0-9]{6,16}')
+    ->middleware('throttle:public')
+    ->name('affiliates.link');
+
+Route::middleware(['auth', 'verified'])->prefix('afiliados')->name('affiliates.')->group(function (): void {
+    Route::get('/', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'index'])->name('index');
+    Route::post('/', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'apply'])
+        ->middleware('throttle:10,1')
+        ->name('apply');
+    Route::put('repasse', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'updatePayout'])
+        ->middleware(['password.confirm', 'throttle:10,1'])
+        ->name('payout.update');
+    Route::post('indicacoes/{referral}/revisao', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'requestReview'])
+        ->where('referral', '[A-Za-z0-9]{26}')
+        ->middleware('throttle:10,1')
+        ->name('referrals.review');
+    Route::get('comissoes/exportar', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'export'])
+        ->middleware('throttle:10,1')
+        ->name('commissions.export');
+});
+
+Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin/afiliados')->name('admin.affiliates.')->group(function (): void {
+    Route::get('/', [\App\Http\Controllers\Admin\AffiliateController::class, 'index'])->name('index');
+
+    Route::get('lotes', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'index'])->name('payouts.index');
+    Route::post('lotes', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('payouts.store');
+    Route::get('lotes/{batch}', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'show'])
+        ->where('batch', '[A-Za-z0-9]{26}')
+        ->name('payouts.show');
+    Route::post('lotes/{batch}/pago', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'markPaid'])
+        ->where('batch', '[A-Za-z0-9]{26}')
+        ->middleware(['password.confirm', 'throttle:10,1'])
+        ->name('payouts.paid');
+    Route::post('lotes/{batch}/cancelar', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'cancel'])
+        ->where('batch', '[A-Za-z0-9]{26}')
+        ->middleware('throttle:10,1')
+        ->name('payouts.cancel');
+    Route::get('lotes/{batch}/exportar', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'export'])
+        ->where('batch', '[A-Za-z0-9]{26}')
+        ->middleware('throttle:20,1')
+        ->name('payouts.export');
+
+    Route::post('indicacoes/{referral}/revisar', [\App\Http\Controllers\Admin\AffiliateReferralController::class, 'review'])
+        ->where('referral', '[A-Za-z0-9]{26}')
+        ->middleware('throttle:30,1')
+        ->name('referrals.review');
+
+    Route::prefix('{affiliate}')->where(['affiliate' => '[A-Za-z0-9]{26}'])->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\Admin\AffiliateController::class, 'show'])->name('show');
+        Route::post('aprovar', [\App\Http\Controllers\Admin\AffiliateController::class, 'approve'])
+            ->middleware(['password.confirm', 'throttle:30,1'])
+            ->name('approve');
+        Route::post('recusar', [\App\Http\Controllers\Admin\AffiliateController::class, 'reject'])
+            ->middleware('throttle:30,1')
+            ->name('reject');
+        Route::post('suspender', [\App\Http\Controllers\Admin\AffiliateController::class, 'suspend'])
+            ->middleware(['password.confirm', 'throttle:30,1'])
+            ->name('suspend');
+        Route::post('reativar', [\App\Http\Controllers\Admin\AffiliateController::class, 'reactivate'])
+            ->middleware(['password.confirm', 'throttle:30,1'])
+            ->name('reactivate');
+        Route::put('taxa', [\App\Http\Controllers\Admin\AffiliateController::class, 'updateRate'])
+            ->middleware(['password.confirm', 'throttle:30,1'])
+            ->name('rate.update');
+    });
+});
+
+// -- Fase 3 §3.7 (P3-RISK) — revisão de segurança pela ORGANIZAÇÃO (LGPD art. 20) -------------
+// Canal registrado para pedir revisão da observação/suspensão do antifraude. Ver o estado:
+// qualquer membro; pedir: owner/admin (checado no controller — sem `org.role`, que exigiria
+// uma permissão nova no catálogo de App\Support\Permissions). Flag `antifraud` desligada: 404.
+Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): void {
+    Route::get('revisao-de-seguranca', [RiskAppealController::class, 'show'])->name('risk.appeal.show');
+    Route::post('revisao-de-seguranca', [RiskAppealController::class, 'store'])
+        ->middleware('throttle:5,60')
+        ->name('risk.appeal.store');
 });
 
 require __DIR__.'/settings.php';

@@ -10,7 +10,7 @@
 - Entregas saem **pela fila**, com **retentativas** (1 min → 24 h, teto de 8), **histórico** por tentativa, **reenvio manual**, **pausa automática** após N falhas seguidas (com aviso a quem gerencia integrações) e **idempotência** por (endpoint, tipo, id do evento).
 - Toda chamada passa pela **proteção contra SSRF** (`App\Support\Http\OutboundUrlGuard`, código próprio): só https, DNS resolvido antes, todos os endereços públicos, **conexão pinada no IP validado** (`CURLOPT_RESOLVE`), sem redirecionamento, sem proxy de ambiente, porta restrita — no cadastro **e** a cada tentativa.
 - **Flag `outbound_webhooks`** (global E plano), **desligada por padrão**. Desligada: nenhuma entrega é criada, nenhuma chamada sai, o gancho nem consulta o banco, a varredura não faz nada e as rotas de gestão respondem 404.
-- **Condição de ativação (R6):** o teste de integração do pino (`tests/Feature/Phase2/Webhooks/PinnedConnectionTest.php`) precisa estar verde no ambiente-alvo. Ele está verde nesta máquina com Guzzle 8.2 / libcurl 8.16 / PHP 8.3 (Windows). Ver §6.4 — o teste encontrou e corrigiu um caso em que o pino **não** era aplicado.
+- **Condição de ativação (R6):** os testes de integração do pino (`tests/Feature/Phase2/Webhooks/PinnedConnectionTest.php`, em HTTP, e `HttpsPinTest.php`, em HTTPS com SNI e certificado — §6.5) precisam estar verdes no ambiente-alvo. Ele está verde nesta máquina com Guzzle 8.2 / libcurl 8.16 / PHP 8.3 (Windows). Ver §6.4 — o teste encontrou e corrigiu um caso em que o pino **não** era aplicado.
 
 ## 2. Catálogo de eventos
 
@@ -268,7 +268,21 @@ A mensagem ao usuário é **a mesma** para "não resolve" e "resolve para endere
 5. Tempo esgotado real vira `unknown`.
 6. Com `http_proxy`, `HTTPS_PROXY` e `ALL_PROXY` apontando para uma porta morta, a entrega continua saindo direto (proxy de ambiente ignorado).
 
-**Não coberto localmente:** o caminho **HTTPS** (SNI + certificado) com o pino — o servidor embutido do PHP não fala TLS. O mecanismo é o mesmo `CURLOPT_RESOLVE` com o nome mantido na URL, que é o comportamento documentado do libcurl. Recomenda-se, antes de ligar a flag em produção, um teste de fumaça com um endpoint https real de homologação.
+### 6.5 Pino de IP em HTTPS — o que `HttpsPinTest` provou (viabilidade §7 item 3)
+
+A lacuna acima (o servidor embutido do PHP não fala TLS) foi fechada por `tests/Feature/Phase2/Webhooks/HttpsPinTest.php`, com TLS real e sem sair da máquina:
+
+- **Montagem.** Em tempo de teste, `tests/Support/Https/make_certs.py` (o `cryptography` do venv do pdftool) gera uma **AC de teste** e quatro certificados de servidor: `good` (SAN DNS `hooks.assinavelox.test`), `wrong` (SAN DNS `outro.assinavelox.test`), `iponly` (só SAN IP `127.0.0.1`, sem nome) e `rogue` (nome certo, emitido por **outra** AC, não confiável). `tests/Support/Https/https_server.py` (módulo `ssl` do Python) sobe um servidor HTTPS em `127.0.0.1:<porta livre>`, registra o **SNI** de cada ClientHello e cada requisição, e é encerrado no teardown pelo PID que o teste iniciou (`HttpsTestServer::stop()`; a árvore do processo cai junto). O nome usa o TLD reservado `.test`, que o DNS do sistema **não resolve**: se a conexão acontece, foi pelo pino. `testing_allowed_cidrs` libera `127.0.0.1/32` só nesse teste (ignorado em produção).
+- **Confiança sem desligar a verificação.** O transporte fixa `verify => true` e o Guzzle 8.2 recusa `CURLOPT_CAINFO` dentro de `curl`. O teste instala um middleware global **só de teste** que troca `verify: true` pelo caminho da AC de teste — `VERIFYPEER` e `VERIFYHOST=2` continuam ligados, só a âncora muda — e registra as opções recebidas, provando que o transporte pediu `verify: true` e pinou `nome:porta:127.0.0.1`. O código de produção **não mudou**.
+
+Resultados (Guzzle 8.2.0, libcurl 8.16.0 com OpenSSL 3.0.18, PHP 8.3, Windows 11; estável em 3 execuções seguidas):
+
+1. **Entrega HTTPS real pelo pino:** chega ao servidor, SNI recebido = `hooks.assinavelox.test`, `Host` = nome:porta, assinatura confere, `primary_ip` = `127.0.0.1`. Controle negativo: sem pino o nome não conecta.
+2. **O DNS muda entre a validação e a conexão:** o guard valida (`127.0.0.1`), o DNS passa a dizer `127.0.0.2`, onde há um **segundo servidor com certificado válido para o nome**. A requisição pinada vai para `127.0.0.1`; o segundo servidor não recebe nem um ClientHello. Controle: revalidando, a conexão vai para `127.0.0.2` e é aceita — só o pino o mantinha de fora.
+3. **Verificação pelo NOME, não pelo IP:** o certificado `good` não tem SAN de IP e é aceito; o `iponly` (válido para o IP da conexão, sem o nome) é **recusado**. Com `wrong` e `rogue` também. Nos três casos o servidor recebe o ClientHello com SNI = nome, mas **nenhum byte HTTP** (cabeçalhos, corpo, assinatura) é enviado; o resultado é `failed`/`connection_failed` (cURL 60) e, na entrega real, fica agendada a retentativa — nunca uma nova tentativa sem verificação.
+4. **Nada disso reabre SSRF:** sem a exceção de teste o mesmo nome (→ `127.0.0.1`) é recusado (`blocked_address`); IP literal em `https://127.0.0.1:<porta>` é recusado; rebinding para `10.0.0.5` depois do cadastro é bloqueado a cada tentativa antes de qualquer conexão (o servidor não vê nem o handshake); 302 HTTPS para `https://127.0.0.1/internal` não é seguido.
+
+**Nenhuma correção foi necessária:** `CURLOPT_RESOLVE` com o nome mantido na URL faz o libcurl conectar no IP pinado usando o nome para SNI e para a verificação do certificado. **Continua valendo para ligar em produção:** rodar `PinnedConnectionTest` e `HttpsPinTest` verdes no ambiente-alvo (a versão do libcurl/TLS de lá pode ser outra) e fazer um teste de fumaça com um endpoint https real de homologação e AC pública.
 
 ## 7. Isolamento e mínimo privilégio
 
@@ -357,11 +371,12 @@ Reaproveitar o motor; **não** duplicar lógica de rede, segredo ou entrega.
 
 ## 13. Testes
 
-`tests/Feature/Phase2/Webhooks/` — nenhum acessa a rede (DNS falso + `Http::fake()` + `preventStrayRequests`), exceto `PinnedConnectionTest`, que conecta só em `127.0.0.1`.
+`tests/Feature/Phase2/Webhooks/` — nenhum acessa a rede (DNS falso + `Http::fake()` + `preventStrayRequests`), exceto `PinnedConnectionTest` e `HttpsPinTest`, que conectam só em loopback (`127.0.0.1`/`127.0.0.2`).
 
 | Arquivo                     | Cobre                                                                                                                                                                                                                                                                                                                                                                       |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SsrfGuardTest.php`         | cada faixa bloqueada (IPv4, IPv6, IPv4 embutido/mapeado), nome que resolve para interno, resposta mista, IP literal em decimal/octal/hex/curto/IPv6/zona, host interno, credenciais, barra invertida/controle, porta, esquemas, http e exceção de teste recusados em produção, mensagem sem oráculo, IDN, recusa no cadastro, revalidação a cada entrega                    |
+| `HttpsPinTest.php`          | pino em **HTTPS** real (AC e certificados gerados no teste): SNI/Host = nome, DNS que muda após a validação não desvia a conexão, certificado de outro nome / só-IP / AC estranha recusado sem enviar bytes HTTP, SSRF continua fechado (§6.5) |
 | `PinnedConnectionTest.php`  | **R6**: pino real via `CURLOPT_RESOLVE`, controle negativo, endereço da conexão = pino, redirecionamento real não seguido, timeout real = `unknown`, proxy de ambiente ignorado                                                                                                                                                                                             |
 | `SignatureTest.php`         | HMAC confere e muda com 1 byte, janela de 5 min, formato do segredo, entrega real verificável, segredo cifrado e fora da serialização, segredo antigo só dentro da janela, encerrar convivência, no máximo dois segredos                                                                                                                                                    |
 | `DeliveryLifecycleTest.php` | entrega enfileirada (job sem segredo/URL), histórico, backoff e teto de 8 com relógio congelado, timeout = desconhecido, 3xx não seguido, pausa automática + aviso, sucesso zera falhas, reenvio manual com o mesmo id, reenvio recusado com endpoint pausado, idempotência (gancho e job duplicados), trava, dois endpoints, filtro de eventos, endpoint removido, limpeza |

@@ -10,6 +10,7 @@ use App\Models\Envelope;
 use App\Models\VerificationRecord;
 use App\Services\Pdf\Dto\ValidationResult;
 use App\Services\Signing\Certificates\ParticipantSignatureNarrative;
+use App\Services\Signing\External\ExternalSignatureNarrative;
 
 /**
  * Linguagem honesta para a situação da assinatura (arquitetura §2).
@@ -78,6 +79,12 @@ final class SignatureNarrative
             ];
         }
 
+        // Fase 3 §3.4 (P3-EXT): assinatura de participante feita fora da plataforma (componente
+        // local A3 ou externo, inclusive o simulador) — linguagem própria, mesmo formato (T1).
+        if ($status->hasExternalParticipantSignatures()) {
+            return ExternalSignatureNarrative::for($envelope, $record);
+        }
+
         // Fase 2 §2.12 (K-A1): assinaturas com o certificado A1 dos próprios participantes
         // (com ou sem a da operadora por último) — linguagem própria, mesmo formato.
         if ($status->hasParticipantSignatures()) {
@@ -135,6 +142,9 @@ final class SignatureNarrative
             SignatureStatus::CompanyA1 => 'Concluído · assinado com certificado da operadora',
             SignatureStatus::ParticipantsA1 => 'Concluído · assinado com certificado dos participantes',
             SignatureStatus::Mixed => 'Concluído · assinado com certificados dos participantes e da operadora',
+            // Fase 3 §3.4 (P3-EXT): rótulo por meio, com "simulado" quando for o caso.
+            SignatureStatus::ParticipantA3,
+            SignatureStatus::ParticipantExternal => ExternalSignatureNarrative::statusLabel($envelope, $record),
             SignatureStatus::None => 'Concluído · aceite eletrônico com evidências',
         };
     }

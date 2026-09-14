@@ -5,6 +5,7 @@ namespace App\Services\Envelopes\Finalization;
 use App\Enums\AuditEventType;
 use App\Enums\CertificateEnvironment;
 use App\Enums\DocumentVersionKind;
+use App\Enums\ExternalSignatureKind;
 use App\Enums\ParticipantSignatureRequestStatus;
 use App\Enums\SignatureStatus;
 use App\Jobs\Envelopes\ApplyParticipantSignatureDeadline;
@@ -214,6 +215,39 @@ final class ParticipantSignatureStage
             ->where('envelope_id', $envelope->getKey())
             ->where('status', ParticipantSignatureRequestStatus::Applied->value)
             ->count();
+    }
+
+    /**
+     * Fase 3 §3.4 (P3-EXT): como {@see self::statusFor()}, mas com o MEIO de cada assinatura do
+     * documento (T1). Sem assinatura feita fora da plataforma, o resultado é exatamente o de
+     * `statusFor()` — o pipeline da Fase 2 não muda. Com ao menos uma, o valor é
+     * `participant_external` (qualquer uma sem origem em token comprovada, inclusive o
+     * simulador) ou `participant_a3` (todas de componente real, certificado A3).
+     */
+    public function statusForDocument(Document $document, bool $operator, int $participantSignatures): SignatureStatus
+    {
+        $status = $this->statusFor($operator, $participantSignatures);
+
+        if ($participantSignatures === 0) {
+            return $status;
+        }
+
+        $kinds = ParticipantSignature::withoutOrganizationScope()
+            ->where('document_id', $document->getKey())
+            ->whereNotNull('signature_status')
+            ->pluck('signature_status')
+            ->map(static fn ($value): string => (string) $value)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($kinds === []) {
+            return $status;
+        }
+
+        return in_array(ExternalSignatureKind::ParticipantA3->value, $kinds, true) && count($kinds) === 1
+            ? SignatureStatus::ParticipantA3
+            : SignatureStatus::ParticipantExternal;
     }
 
     public function statusFor(bool $operator, int $participantSignatures): SignatureStatus

@@ -7,6 +7,8 @@ use App\Models\Envelope;
 use App\Models\ParticipantSignature;
 use App\Models\ParticipantSignatureRequest;
 use App\Models\VerificationRecord;
+use App\Services\Signing\External\ExternalSignatureService;
+use App\Services\Signing\External\ExternalSignatureViews;
 use App\Services\Verification\NameMask;
 use Illuminate\Support\Collection;
 
@@ -168,7 +170,9 @@ final class ParticipantSignatureViews
      */
     public static function evidenceProps(Envelope $envelope): array
     {
-        $list = self::forEvidence($envelope);
+        // Fase 3 §3.4 (P3-EXT): as assinaturas por componente local entram na MESMA lista, com
+        // `kind` e rótulos próprios (participant_a3 / participant_external, "simulado").
+        $list = [...self::forEvidence($envelope), ...ExternalSignatureViews::forEvidence($envelope)];
 
         return $list === [] ? [] : ['participant_signatures' => $list];
     }
@@ -180,7 +184,7 @@ final class ParticipantSignatureViews
      */
     public static function publicProps(Envelope $envelope): array
     {
-        $list = self::forPublic($envelope);
+        $list = [...self::forPublic($envelope), ...ExternalSignatureViews::forPublic($envelope)];
 
         return $list === [] ? [] : ['participant_signatures' => $list];
     }
@@ -235,6 +239,9 @@ final class ParticipantSignatureViews
                 'signatures.signedVersion' => fn ($query) => $query->withoutGlobalScopes(),
             ])
             ->where('envelope_id', $envelope->getKey())
+            // Fase 3 §3.4 (P3-EXT): pedidos por componente local têm lista e rótulos próprios
+            // (ExternalSignatureViews) — aqui ficam só os do A1 por arquivo (T1).
+            ->where(fn ($query) => $query->whereNull('signature_method')->orWhere('signature_method', '<>', ExternalSignatureService::METHOD))
             ->orderBy('id')
             ->get();
     }

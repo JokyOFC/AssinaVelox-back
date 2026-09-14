@@ -68,6 +68,13 @@ return [
         'operator_tsa' => filter_var(env('ASSINAVELOX_FEATURE_OPERATOR_TSA', false), FILTER_VALIDATE_BOOLEAN),
         'pades_bt' => filter_var(env('ASSINAVELOX_FEATURE_PADES_BT', false), FILTER_VALIDATE_BOOLEAN),
         'dossier_export' => filter_var(env('ASSINAVELOX_FEATURE_DOSSIER_EXPORT', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3, onda E — P3-LTV (docs/fase-3/longo-prazo.md). PLATAFORMA (só esta chave).
+        // `pades_ltv` exige `operator_tsa` e liga a assinatura B-T/B-LT/B-LTA no pdftool, o estado
+        // técnico `verification_records.ltv_status` e o re-carimbo de arquivamento. NUNCA muda o
+        // perfil anunciado. `pades_ltv_advertise` (separada) é a ÚNICA que permite exibir um perfil
+        // além de PAdES-B-B, e só pode ser ligada depois do checklist de LtvProfilePolicy (T2).
+        'pades_ltv' => filter_var(env('ASSINAVELOX_FEATURE_PADES_LTV', false), FILTER_VALIDATE_BOOLEAN),
+        'pades_ltv_advertise' => filter_var(env('ASSINAVELOX_FEATURE_PADES_LTV_ADVERTISE', false), FILTER_VALIDATE_BOOLEAN),
         // Fase 2, onda C — K-RET (docs/fase-2/retencao-e-preservacao.md). Organização (esta
         // chave E plano). Uma preservação já criada continua valendo com a flag desligada.
         'retention_policies' => filter_var(env('ASSINAVELOX_FEATURE_RETENTION_POLICIES', false), FILTER_VALIDATE_BOOLEAN),
@@ -93,6 +100,13 @@ return [
         'admin_users' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_USERS', false), FILTER_VALIDATE_BOOLEAN),
         'admin_audit' => filter_var(env('ASSINAVELOX_FEATURE_ADMIN_AUDIT', false), FILTER_VALIDATE_BOOLEAN),
         'impersonation' => filter_var(env('ASSINAVELOX_FEATURE_IMPERSONATION', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.7 — P3-RISK (docs/fase-3/antifraude.md). PLATAFORMA (só esta chave).
+        // Desligada: nenhum sinal, nenhuma restrição de envio, painel e pedido de revisão 404.
+        'antifraud' => filter_var(env('ASSINAVELOX_FEATURE_ANTIFRAUD', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.10 — P3-AFF (docs/fase-3/afiliados.md). PLATAFORMA (só esta chave): o programa
+        // é da operadora, não de um plano. Desligada: link, portal e painel dão 404, o cadastro não
+        // lê o cookie e nenhuma comissão é calculada. Parâmetros na seção `affiliates` abaixo.
+        'affiliates' => filter_var(env('ASSINAVELOX_FEATURE_AFFILIATES', false), FILTER_VALIDATE_BOOLEAN),
     ],
 
     // Fase 2 §2.15 — API REST v1 (D-API, docs/fase-2/api-v1.md). Só vale com
@@ -544,6 +558,43 @@ return [
         // `icp_brasil`; só fora de produção, `channels.allow_simulated`).
         'icp_brasil' => [
             'driver' => env('ASSINAVELOX_TSA_ICP_BRASIL_DRIVER', 'disabled'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 3, onda E §3.6 — PAdES de longo prazo (P3-LTV)
+    |--------------------------------------------------------------------------
+    |
+    | docs/fase-3/longo-prazo.md. Só vale com `features.pades_ltv` (que exige `operator_tsa`).
+    | O carimbo vem da TSA da OPERADORA (não é ICP-Brasil, T3). O nível técnico alcançado fica em
+    | `verification_records.ltv_status`; o perfil exibido continua PAdES-B-B (T2).
+    |
+    | Revogação: CRL/OCSP entregues por ARQUIVO (`crl_paths`, `ocsp_paths`) ou, em produção,
+    | buscados na rede com `allow_fetching` (rede de saída até as ACs — viabilidade §4.3 item 19).
+    | `revocation_mode` só aceita `hard-fail` ou `require`: nunca `soft-fail` (R5).
+    |
+    */
+    'ltv' => [
+        // Nível técnico pedido ao pdftool: B-T | B-LT | B-LTA. A falha de uma etapa degrada de
+        // forma explícita e registrada (ltv_operations.degradations).
+        'level' => env('ASSINAVELOX_LTV_LEVEL', 'B-LTA'),
+        // Raízes para validar as cadeias antes de embutir (PEM/DER separados por ";"). Vazio:
+        // usa `pdftool.trust_roots` + `tsa.trust_roots`.
+        'trust_roots' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_LTV_TRUST_ROOTS', ''))))),
+        'crl_paths' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_LTV_CRL_PATHS', ''))))),
+        'ocsp_paths' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_LTV_OCSP_PATHS', ''))))),
+        'allow_fetching' => filter_var(env('ASSINAVELOX_LTV_ALLOW_FETCHING', false), FILTER_VALIDATE_BOOLEAN),
+        'revocation_mode' => env('ASSINAVELOX_LTV_REVOCATION_MODE', 'hard-fail'),
+        'timeout_seconds' => (int) env('ASSINAVELOX_LTV_TIMEOUT_SECONDS', 180),
+        'refresh' => [
+            // Re-carimbo agendado N dias antes do vencimento do certificado da TSA do último
+            // carimbo de arquivamento.
+            'margin_days' => (int) env('ASSINAVELOX_LTV_REFRESH_MARGIN_DAYS', 30),
+            'batch_size' => (int) env('ASSINAVELOX_LTV_REFRESH_BATCH', 100),
+            'queue' => env('ASSINAVELOX_LTV_REFRESH_QUEUE', 'default'),
+            // Espera pelo lock do envelope (o mesmo das assinaturas de participante).
+            'lock_wait_seconds' => (int) env('ASSINAVELOX_LTV_LOCK_WAIT_SECONDS', 120),
         ],
     ],
 
@@ -1178,5 +1229,235 @@ return [
             FILTER_VALIDATE_BOOLEAN,
         ),
         'reason' => env('ASSINAVELOX_PARTICIPANT_A1_REASON', 'Assinatura com o certificado do participante'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 3 §3.5 — PDF assinado no portal gov.br e DEVOLVIDO (P3-GOV)
+    |--------------------------------------------------------------------------
+    |
+    | docs/fase-3/gov-br.md. Flag `govbr_return`: vale só com `return_enabled`, com a trava
+    | `finalizer_integration` (ligue SÓ depois que o EnvelopeFinalizer consultar
+    | GovBrReturnStage — §8 do documento) e com `plans.features.govbr_return`. Nasce DESLIGADA.
+    |
+    | A API direta do gov.br é classe C (BLOQUEADA: o AssinaVelox não é elegível) — não há
+    | adaptador; `api.provider` fica `none` (App\Integrations\GovBr\GovBrSignatureProvider).
+    |
+    | Âncoras: SEM elas, a devolução aceita é rotulada "assinatura digital de terceiro, cadeia
+    | não verificada" — nunca "gov.br". Para o rótulo gov.br: arquivo(s) da raiz em
+    | `trust_roots` E o SHA-256 de CADA certificado em `trust_root_fingerprints` (origem e data
+    | de verificação anotadas junto do valor, na configuração versionada da implantação).
+    |
+    */
+    'govbr' => [
+        'return_enabled' => filter_var(env('ASSINAVELOX_FEATURE_GOVBR_RETURN', false), FILTER_VALIDATE_BOOLEAN),
+        'finalizer_integration' => filter_var(env('ASSINAVELOX_GOVBR_FINALIZER_INTEGRATION', false), FILTER_VALIDATE_BOOLEAN),
+        'portal_url' => env('ASSINAVELOX_GOVBR_PORTAL_URL', 'https://assinador.iti.br'),
+        'validator_url' => env('ASSINAVELOX_GOVBR_VALIDATOR_URL', 'https://validar.iti.gov.br'),
+        // Reserva da revisão entregue (baixar → assinar no portal → devolver).
+        'reservation_ttl_minutes' => (int) env('ASSINAVELOX_GOVBR_RESERVATION_TTL_MINUTES', 120),
+        // Prazo total depois que o documento fica pronto; vencido, o envelope segue sem a assinatura.
+        'application_window_minutes' => (int) env('ASSINAVELOX_GOVBR_WINDOW_MINUTES', 4320),
+        // O portal aceita arquivos de até 100 MB (docs/integracoes/gov-br-assinatura.md §6.1).
+        'max_upload_mb' => (int) env('ASSINAVELOX_GOVBR_MAX_UPLOAD_MB', 100),
+        'verify_timeout_seconds' => (int) env('ASSINAVELOX_GOVBR_VERIFY_TIMEOUT', 180),
+        'lock_wait_seconds' => (int) env('ASSINAVELOX_GOVBR_LOCK_WAIT_SECONDS', 20),
+        'trust_roots' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_GOVBR_TRUST_ROOTS', ''))))),
+        'trust_root_fingerprints' => array_values(array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_GOVBR_TRUST_ROOT_FINGERPRINTS', ''))))),
+        // Com CPF informado pelo participante, o certificado PRECISA trazer um CPF que confira.
+        'require_holder_cpf' => filter_var(env('ASSINAVELOX_GOVBR_REQUIRE_HOLDER_CPF', true), FILTER_VALIDATE_BOOLEAN),
+        'accept_test_certificates' => filter_var(
+            env('ASSINAVELOX_GOVBR_ACCEPT_TEST_CERTIFICATES', env('APP_ENV', 'production') !== 'production'),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        // Mudanças admitidas na revisão da assinatura. ANNOTATIONS só depois de medir o carimbo
+        // visual do portal numa fixture real (NÃO CONFIRMADO).
+        'permitted_modification_levels' => array_values(array_filter(array_map('trim', explode(',', (string) env('ASSINAVELOX_GOVBR_PERMITTED_LEVELS', 'NONE,FORM_FILLING'))))),
+        'api' => [
+            // Classe C: nenhum provedor. Não existe outro valor válido.
+            'provider' => 'none',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 3 §3.4 — assinatura externa por componente local A3 (P3-EXT)
+    |--------------------------------------------------------------------------
+    |
+    | docs/fase-3/assinatura-externa-a3.md. `enabled` é o interruptor GLOBAL da flag
+    | `a3_signing`; a organização também precisa de `plans.features.a3_signing`. Nasce
+    | DESLIGADA: com ela desligada, nada muda (rotas 404, finalização da Fase 1/2).
+    |
+    | O servidor NUNCA recebe a chave do token: prepara a revisão pendente, entrega só o
+    | digest e recebe de volta a assinatura bruta (+ certificado) ou um CMS pronto.
+    |
+    */
+    'external_signing' => [
+        'enabled' => filter_var(env('ASSINAVELOX_FEATURE_A3_SIGNING', false), FILTER_VALIDATE_BOOLEAN),
+        // Prazo curto da reserva de revisão (digest entregue → assinatura recebida).
+        'pending_ttl_minutes' => (int) env('ASSINAVELOX_A3_PENDING_TTL_MINUTES', 10),
+        // Espera pelo lock do envelope dentro de uma requisição HTTP (o mesmo lock do §2.12).
+        'lock_wait_seconds' => (int) env('ASSINAVELOX_A3_LOCK_WAIT_SECONDS', 10),
+        // Revisões pendentes e estado mínimo do pdftool (fora de public/; compartilhado entre
+        // servidores web em produção). Apagados ao consumir, expirar ou descartar.
+        'pending_path' => env('ASSINAVELOX_A3_PENDING_PATH') ?: storage_path('app/private/external-signing'),
+        // Espaço reservado para o CMS no PDF (bytes).
+        'bytes_reserved' => (int) env('ASSINAVELOX_A3_BYTES_RESERVED', 16384),
+        'max_certificate_kb' => (int) env('ASSINAVELOX_A3_MAX_CERTIFICATE_KB', 32),
+        'max_chain_certificates' => (int) env('ASSINAVELOX_A3_MAX_CHAIN', 6),
+        'max_cms_kb' => (int) env('ASSINAVELOX_A3_MAX_CMS_KB', 48),
+        // Âncoras de confiança FIXADAS por impressão digital: "caminho|sha256;caminho|sha256".
+        // Âncora cujo arquivo não bate com a impressão digital é IGNORADA (e registrada). Sem
+        // âncora válida, a cadeia é "não verificada" — nunca ICP-Brasil.
+        'trust_anchors' => array_values(array_filter(array_map(
+            static function (string $item): ?array {
+                $parts = array_map('trim', explode('|', $item));
+
+                return count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '' ? ['path' => $parts[0], 'sha256' => strtolower($parts[1])] : null;
+            },
+            array_filter(array_map('trim', explode(';', (string) env('ASSINAVELOX_A3_TRUST_ANCHORS', '')))),
+        ))),
+        // Exigir cadeia validada até uma âncora na preparação (desligado: a cadeia é rotulada).
+        'require_trusted_chain' => filter_var(env('ASSINAVELOX_A3_REQUIRE_TRUSTED_CHAIN', false), FILTER_VALIDATE_BOOLEAN),
+        // Certificados de TESTE: aceitos fora de produção; sempre rotulados como teste.
+        'accept_test_certificates' => filter_var(
+            env('ASSINAVELOX_A3_ACCEPT_TEST_CERTIFICATES', env('APP_ENV', 'production') !== 'production'),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        'reason' => env('ASSINAVELOX_A3_REASON', 'Assinatura do participante com certificado em componente externo'),
+        'components' => [
+            // FakeLocalSigner: PKCS#12 de TESTE no servidor. Só nos ambientes listados, nunca em
+            // produção; tudo o que produz é rotulado "simulado — nenhum token foi usado".
+            'simulated' => [
+                'enabled' => filter_var(env('ASSINAVELOX_A3_SIMULATOR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+                'allowed_environments' => ['local', 'testing'],
+                'pfx_path' => env('ASSINAVELOX_A3_SIMULATOR_PFX'),
+                // NOME da variável de ambiente com a senha do PKCS#12 de teste (nunca o valor).
+                'pass_env' => env('ASSINAVELOX_A3_SIMULATOR_PASS_ENV', 'ASSINAVELOX_A3_SIMULATOR_PFX_PASS'),
+            ],
+            // NexuLocalSigner: produção DESABILITADA (NexuLocalSigner::PRODUCTION_ENABLED = false).
+            // Os endereços são os da API local do fork 1.25, para a UI orientar o participante.
+            'nexu' => [
+                'http_base' => env('ASSINAVELOX_A3_NEXU_HTTP', 'http://127.0.0.1:9795'),
+                'https_base' => env('ASSINAVELOX_A3_NEXU_HTTPS', 'https://127.0.0.1:9895'),
+                'minimum_version' => env('ASSINAVELOX_A3_NEXU_MIN_VERSION', '1.25.0'),
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 3 §3.7 — antifraude com revisão humana (P3-RISK, docs/fase-3/antifraude.md)
+    |--------------------------------------------------------------------------
+    |
+    | Só vale com `features.antifraud` ligada. As REGRAS são um conjunto fechado em código
+    | (App\Services\Risk\RiskRule); aqui só se ajustam janela, limiar e pontuação. A ação
+    | automática máxima é `restricted` = envio de novos envelopes suspenso até revisão humana.
+    | Aceites, evidências, leitura, download e assinatura de envelopes já enviados nunca mudam.
+    |
+    */
+    'risk' => [
+        // false = modo de observação: grava sinais e abre casos, mas nunca suspende o envio sozinho.
+        'auto_restrict' => filter_var(env('ASSINAVELOX_RISK_AUTO_RESTRICT', true), FILTER_VALIDATE_BOOLEAN),
+        // Soma das pontuações dos sinais ainda não revisados (dentro de `lookback_days`). Para
+        // `restrict` só contam regras que podem suspender o envio (RiskRule::maxStatus()).
+        'thresholds' => [
+            'watch' => (int) env('ASSINAVELOX_RISK_WATCH_SCORE', 30),
+            'restrict' => (int) env('ASSINAVELOX_RISK_RESTRICT_SCORE', 70),
+        ],
+        'lookback_days' => (int) env('ASSINAVELOX_RISK_LOOKBACK_DAYS', 30),
+        // Chave do HMAC dos sujeitos (link, rede, dispositivo). Vazia: derivada da APP_KEY.
+        'subject_key' => env('ASSINAVELOX_RISK_SUBJECT_KEY'),
+        // Contagens de cadastro por rede/dispositivo (só o HMAC) são apagadas depois disto.
+        'observation_retention_days' => (int) env('ASSINAVELOX_RISK_OBSERVATION_RETENTION_DAYS', 30),
+        // Lista de confiança: ULIDs de organizações (separados por vírgula) cujos sinais são
+        // gravados, mas que nunca mudam de estado nem abrem caso automaticamente.
+        'trusted_organizations' => array_values(array_filter(array_map('trim', explode(',', (string) env('ASSINAVELOX_RISK_TRUSTED_ORGANIZATIONS', ''))))),
+        // Pedido de revisão (LGPD art. 20): tamanho do texto e prazo interno de resposta exibido.
+        'appeal' => [
+            'max_message' => (int) env('ASSINAVELOX_RISK_APPEAL_MAX_MESSAGE', 2000),
+            'response_days' => (int) env('ASSINAVELOX_RISK_APPEAL_RESPONSE_DAYS', 5),
+        ],
+        'rules' => [
+            'new_org_send_spike' => [
+                'score' => (int) env('ASSINAVELOX_RISK_SPIKE_SCORE', 40),
+                'window_minutes' => (int) env('ASSINAVELOX_RISK_SPIKE_WINDOW_MINUTES', 1440),
+                'threshold' => (int) env('ASSINAVELOX_RISK_SPIKE_THRESHOLD', 30),
+                'organization_max_age_days' => (int) env('ASSINAVELOX_RISK_SPIKE_MAX_AGE_DAYS', 7),
+            ],
+            'delivery_failure_rate' => [
+                'score' => (int) env('ASSINAVELOX_RISK_DELIVERY_SCORE', 30),
+                'window_minutes' => (int) env('ASSINAVELOX_RISK_DELIVERY_WINDOW_MINUTES', 1440),
+                'min_attempts' => (int) env('ASSINAVELOX_RISK_DELIVERY_MIN_ATTEMPTS', 20),
+                'rate' => (float) env('ASSINAVELOX_RISK_DELIVERY_RATE', 0.3),
+            ],
+            'code_brute_force' => [
+                'score' => (int) env('ASSINAVELOX_RISK_BRUTE_FORCE_SCORE', 20),
+                'window_minutes' => (int) env('ASSINAVELOX_RISK_BRUTE_FORCE_WINDOW_MINUTES', 60),
+                'per_link' => (int) env('ASSINAVELOX_RISK_BRUTE_FORCE_PER_LINK', 10),
+                'per_ip' => (int) env('ASSINAVELOX_RISK_BRUTE_FORCE_PER_IP', 25),
+            ],
+            'external_recipients_burst' => [
+                'score' => (int) env('ASSINAVELOX_RISK_BURST_SCORE', 50),
+                'window_minutes' => (int) env('ASSINAVELOX_RISK_BURST_WINDOW_MINUTES', 1440),
+                'threshold' => (int) env('ASSINAVELOX_RISK_BURST_THRESHOLD', 150),
+            ],
+            'payment_chargeback' => [
+                'score' => (int) env('ASSINAVELOX_RISK_CHARGEBACK_SCORE', 40),
+                'window_days' => (int) env('ASSINAVELOX_RISK_CHARGEBACK_WINDOW_DAYS', 90),
+                'threshold' => (int) env('ASSINAVELOX_RISK_CHARGEBACK_THRESHOLD', 1),
+            ],
+            'serial_signup' => [
+                'score' => (int) env('ASSINAVELOX_RISK_SIGNUP_SCORE', 30),
+                'window_minutes' => (int) env('ASSINAVELOX_RISK_SIGNUP_WINDOW_MINUTES', 1440),
+                'threshold' => (int) env('ASSINAVELOX_RISK_SIGNUP_THRESHOLD', 3),
+            ],
+            // Gravado pelo programa de afiliados (§3.10) via RiskSignals::record().
+            'affiliate_self_referral' => [
+                'score' => (int) env('ASSINAVELOX_RISK_SELF_REFERRAL_SCORE', 50),
+                'window_minutes' => (int) env('ASSINAVELOX_RISK_SELF_REFERRAL_WINDOW_MINUTES', 43200),
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 3 §3.10 — programa de afiliados (P3-AFF, docs/fase-3/afiliados.md)
+    |--------------------------------------------------------------------------
+    |
+    | Só vale com `features.affiliates` ligada. O sistema CALCULA comissões e monta lotes; o
+    | repasse é feito FORA da plataforma e registrado manualmente. Os valores abaixo são
+    | PROVISÓRIOS até a decisão do proprietário (taxas, janela, prazo de estorno, período de
+    | comissão, tratamento tributário e contratual — docs/fase-3/afiliados.md §8).
+    |
+    */
+    'affiliates' => [
+        // Cookie de atribuição (cifrado e autenticado pelo EncryptCookies; guarda código + hora do clique).
+        'cookie_name' => env('ASSINAVELOX_AFFILIATES_COOKIE', 'av_affiliate_ref'),
+        // Janela do clique até o cadastro (roadmap §3.10: "ex.: 60 dias").
+        'attribution_window_days' => (int) env('ASSINAVELOX_AFFILIATES_WINDOW_DAYS', 60),
+        // first_touch (padrão, recomendado — docs §3) ou last_touch.
+        'attribution_model' => env('ASSINAVELOX_AFFILIATES_ATTRIBUTION_MODEL', 'first_touch'),
+        // Meses, desde a atribuição, em que os pagamentos da organização geram comissão (0 = sem prazo).
+        'commission_months' => (int) env('ASSINAVELOX_AFFILIATES_COMMISSION_MONTHS', 12),
+        // Prazo de estorno: dias em que a comissão fica pendente depois do pagamento aprovado.
+        'approval_hold_days' => (int) env('ASSINAVELOX_AFFILIATES_HOLD_DAYS', 30),
+        // Taxas em pontos-base (1000 = 10%). A taxa é por afiliado; esta é a sugerida na aprovação.
+        'default_rate_bp' => (int) env('ASSINAVELOX_AFFILIATES_DEFAULT_RATE_BP', 1000),
+        'max_rate_bp' => (int) env('ASSINAVELOX_AFFILIATES_MAX_RATE_BP', 5000),
+        // Saldo mínimo por afiliado para entrar num lote (centavos).
+        'min_payout_cents' => (int) env('ASSINAVELOX_AFFILIATES_MIN_PAYOUT_CENTS', 5000),
+        // Pagamentos de sandbox não geram comissão em produção.
+        'include_sandbox_payments' => filter_var(env('ASSINAVELOX_AFFILIATES_INCLUDE_SANDBOX', false), FILTER_VALIDATE_BOOLEAN),
+        'currencies' => ['BRL'],
+        // Versão dos termos do programa aceitos na candidatura (texto pendente do jurídico).
+        'terms_version' => env('ASSINAVELOX_AFFILIATES_TERMS_VERSION', 'afiliados-rascunho-2026-09'),
+        // Para estes domínios a regra "mesmo domínio corporativo" não se aplica.
+        'public_email_domains' => [
+            'gmail.com', 'googlemail.com', 'outlook.com', 'outlook.com.br', 'hotmail.com', 'hotmail.com.br',
+            'live.com', 'msn.com', 'yahoo.com', 'yahoo.com.br', 'icloud.com', 'me.com', 'uol.com.br',
+            'bol.com.br', 'terra.com.br', 'ig.com.br', 'globo.com', 'globomail.com', 'r7.com',
+            'proton.me', 'protonmail.com', 'zoho.com', 'aol.com', 'gmx.com', 'yandex.com',
+        ],
     ],
 ];

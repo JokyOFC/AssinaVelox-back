@@ -179,6 +179,13 @@ export default defineConfig({
         }),
     ]),
     server: {
+        /*
+         * IPv4 explícito. Sem isto o Vite resolve "localhost" para [::1] no Windows e grava
+         * http://[::1]:5173 em public/hot; a CSP (SecurityHeaders) copia essa origem, mas a
+         * gramática de host-source da CSP não aceita IPv6 literal e o navegador a descarta —
+         * resultado: todo script, CSS e fonte do Vite bloqueado e a página sem estilo.
+         */
+        host: '127.0.0.1',
         watch: {
             ignored: [
                 '**/.agents/**',

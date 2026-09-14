@@ -13,6 +13,11 @@ enum PlatformAction: string
     case ImpersonationStarted = 'impersonation.started';
     case ImpersonationEnded = 'impersonation.ended';
     case ImpersonationDenied = 'impersonation.denied';
+    // Fase 3 §3.7 — antifraude (P3-RISK, docs/fase-3/antifraude.md). `risk.status_changed` sem
+    // ator = transição automática pelas regras; com ator = decisão humana.
+    case RiskStatusChanged = 'risk.status_changed';
+    case RiskReviewDecided = 'risk.review_decided';
+    case RiskReviewRequested = 'risk.review_requested';
 
     public function label(): string
     {
@@ -22,6 +27,9 @@ enum PlatformAction: string
             self::ImpersonationStarted => '"Acessar como" iniciado',
             self::ImpersonationEnded => '"Acessar como" encerrado',
             self::ImpersonationDenied => '"Acessar como" recusado',
+            self::RiskStatusChanged => 'Estado de risco da organização alterado',
+            self::RiskReviewDecided => 'Caso de antifraude decidido',
+            self::RiskReviewRequested => 'Revisão de antifraude pedida pela organização',
         };
     }
 
@@ -31,9 +39,9 @@ enum PlatformAction: string
     public function kind(): string
     {
         return match ($this) {
-            self::UserBlocked, self::ImpersonationStarted, self::ImpersonationDenied => 'warn',
+            self::UserBlocked, self::ImpersonationStarted, self::ImpersonationDenied, self::RiskStatusChanged => 'warn',
             self::UserUnblocked => 'ok',
-            self::ImpersonationEnded => 'info',
+            self::ImpersonationEnded, self::RiskReviewDecided, self::RiskReviewRequested => 'info',
         };
     }
 

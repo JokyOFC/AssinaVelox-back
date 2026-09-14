@@ -1117,7 +1117,8 @@ class EnvelopeFinalizer
         $latest = $this->participants->latestRevision($document);
         $participantSignatures = $this->participants->signatureCount($document);
         $expected = $participantSignatures + ($operator ? 1 : 0);
-        $status = $this->participants->statusFor($operator, $participantSignatures);
+        // Fase 3 §3.4 (P3-EXT): o meio de cada assinatura entra no status (idêntico ao de antes sem assinatura externa).
+        $status = $this->participants->statusForDocument($document, $operator, $participantSignatures);
         $profile = $expected > 0 ? PyHankoSigner::PROFILE : null;
 
         // Reaproveitar um `final` de execução anterior exige que ele seja a última revisão

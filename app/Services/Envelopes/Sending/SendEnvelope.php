@@ -16,6 +16,7 @@ use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
 use App\Services\Plans\Exceptions\SendingBlockedException;
 use App\Services\Plans\PlanLedger;
+use App\Services\Risk\SendingRestriction;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +125,11 @@ class SendEnvelope
                     ? SendingException::alreadySent()
                     : SendingException::invalidStatus();
             }
+
+            // Fase 3 §3.7 (P3-RISK): organização `restricted` pelo antifraude não envia NOVOS
+            // envelopes. Flag `antifraud` desligada: não consulta nada. Só o envio é barrado —
+            // envelopes já enviados, aceites e evidências não são tocados.
+            app(SendingRestriction::class)->assertCanSend((int) $locked->organization_id);
 
             // A completude é revalidada AGORA, sob lock: o wizard pode ter ficado aberto
             // enquanto alguém removia o documento ou um signatário em outra aba.

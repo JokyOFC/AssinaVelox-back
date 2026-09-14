@@ -239,6 +239,95 @@ def _add_participant_a1_commands(sub) -> None:
     p.set_defaults(func=_cmd_gen_test_participant_cert)
 
 
+def _cmd_verify_incremental(args):
+    from pdftool.incremental import verify_incremental
+
+    return verify_incremental(
+        args.base,
+        args.input,
+        trust_paths=args.trust,
+        permitted_levels=args.permitted_level or None,
+        expect_cpf_env=args.expect_cpf_env,
+    )
+
+
+def _add_govbr_commands(sub) -> None:
+    """P3-GOV: PDF signed outside the platform and returned (roadmap 3.5). Registered additively."""
+    p = sub.add_parser("verify-incremental", help="does the returned PDF extend the expected revision with exactly one new sound signature?")
+    p.add_argument("--base", type=_path, required=True, help="expected revision (the exact bytes handed to the participant)")
+    p.add_argument("--in", dest="input", type=_path, required=True, help="returned PDF")
+    p.add_argument("--trust", action="append", type=_path, default=[], help="pinned trust anchor (PEM or DER); repeatable")
+    p.add_argument("--permitted-level", dest="permitted_level", action="append", type=str.upper, default=[],
+                   choices=["NONE", "FORM_FILLING", "ANNOTATIONS"], help="modification level allowed since the base; repeatable")
+    p.add_argument("--expect-cpf-env", dest="expect_cpf_env", default=None, help="NAME of the env var holding the participant CPF (never argv)")
+    p.set_defaults(func=_cmd_verify_incremental)
+
+
+def _cmd_prepare_external(args):
+    from pdftool.external import prepare_external
+
+    return prepare_external(
+        args.input,
+        args.output,
+        args.state_out,
+        args.cert,
+        chain_paths=args.chain,
+        field_name=args.field_name,
+        reason=args.reason,
+        location=args.location,
+        trust_paths=args.trust,
+        bytes_reserved=args.bytes_reserved,
+        prefer_pss=args.rsa_pss,
+        expect_fingerprint=args.expect_fingerprint,
+    )
+
+
+def _cmd_embed_external(args):
+    from pdftool.external import embed_external
+
+    return embed_external(
+        args.pending,
+        args.state,
+        args.output,
+        signature_path=args.signature,
+        cert_path=args.cert,
+        chain_paths=args.chain,
+        cms_path=args.cms,
+        trust_paths=args.trust,
+        expect_fingerprint=args.expect_fingerprint,
+    )
+
+
+def _add_external_commands(sub) -> None:
+    """P3-EXT: signature made outside this process (A3 local component, roadmap 3.4). Registered additively."""
+    p = sub.add_parser("prepare-external", help="write the pending revision with a signature placeholder and return the digest to sign (no key involved)")
+    p.add_argument("--in", dest="input", type=_path, required=True, help="current revision (base + previous signatures)")
+    p.add_argument("--out", dest="output", type=_path, required=True, help="pending revision with the empty /Contents placeholder")
+    p.add_argument("--state-out", dest="state_out", type=_path, required=True, help="minimal state file (no secret) needed by embed-external")
+    p.add_argument("--cert", type=_path, required=True, help="signer certificate announced by the component (PEM or DER)")
+    p.add_argument("--chain", action="append", type=_path, default=[], help="chain certificate (PEM or DER); repeatable")
+    p.add_argument("--field-name", dest="field_name", required=True, help="unique signature field name for this participant")
+    p.add_argument("--reason", default=None)
+    p.add_argument("--location", default=None)
+    p.add_argument("--trust", action="append", type=_path, default=[], help="pinned trust anchor used to evaluate the chain (offline); repeatable")
+    p.add_argument("--bytes-reserved", dest="bytes_reserved", type=int, default=16384, help="bytes reserved for the CMS (default 16384)")
+    p.add_argument("--rsa-pss", dest="rsa_pss", action="store_true", help="RSA keys: announce RSASSA-PSS instead of PKCS#1 v1.5")
+    p.add_argument("--expect-fingerprint", dest="expect_fingerprint", default=None, help="SHA-256 fingerprint the signer certificate must have")
+    p.set_defaults(func=_cmd_prepare_external)
+
+    p = sub.add_parser("embed-external", help="embed a raw signature (+ certificate) or a ready CMS into the pending revision and validate ALL signatures")
+    p.add_argument("--pending", type=_path, required=True, help="pending revision written by prepare-external")
+    p.add_argument("--state", type=_path, required=True, help="state file written by prepare-external")
+    p.add_argument("--out", dest="output", type=_path, required=True, help="signed revision")
+    p.add_argument("--signature", type=_path, default=None, help="raw mode: signature value (binary or Base64) over the prepared digest")
+    p.add_argument("--cert", type=_path, default=None, help="raw mode: signer certificate (must be the announced one)")
+    p.add_argument("--chain", action="append", type=_path, default=[], help="raw mode: chain certificate; repeatable")
+    p.add_argument("--cms", type=_path, default=None, help="cms mode: detached CMS/PKCS#7 SignedData (DER, PEM or Base64)")
+    p.add_argument("--trust", action="append", type=_path, default=[], help="pinned trust anchor (PEM or DER); repeatable")
+    p.add_argument("--expect-fingerprint", dest="expect_fingerprint", default=None, help="SHA-256 fingerprint announced at prepare time")
+    p.set_defaults(func=_cmd_embed_external)
+
+
 def _cmd_validate(args):
     from pdftool.validate import validate_pdf
 
@@ -337,6 +426,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_tsa_commands(sub)
     _add_participant_a1_commands(sub)
+    _add_govbr_commands(sub)
+    _add_external_commands(sub)
+    # P3-LTV (roadmap 3.6): ltv-sign / ltv-refresh / ltv-validate / ltv-gen-test-pki. Additive.
+    from pdftool.ltv import add_ltv_commands
+
+    add_ltv_commands(sub, _path)
     return parser
 
 

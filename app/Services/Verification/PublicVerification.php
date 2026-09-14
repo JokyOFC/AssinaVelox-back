@@ -11,6 +11,7 @@ use App\Models\Recipient;
 use App\Models\VerificationRecord;
 use App\Models\VerificationRecordDocument;
 use App\Services\Documents\EnvelopeDocuments;
+use App\Services\Ltv\VerificationHashHistory;
 use App\Services\Signing\Certificates\ParticipantSignatureViews;
 use App\Services\Timestamp\TimestampEvidence;
 
@@ -363,7 +364,7 @@ final class PublicVerification
      * Compara com os resumos **publicados** nesta mesma página — logo, não revela nada novo.
      * `original` significa "corresponde à versão enviada aos signatários, não ao arquivo final".
      *
-     * @return array{matches: 'signed'|'original'|'none', checked_sha256: string}
+     * @return array{matches: 'signed'|'original'|'signed_previous'|'none', checked_sha256: string, document?: array{position: int, name: string}|null, position?: int, valid_from?: string|null, superseded_at?: string|null}
      */
     public function checkHash(Envelope $envelope, string $sha256): array
     {
@@ -384,6 +385,10 @@ final class PublicVerification
         $documents = $this->documents($envelope, $envelope->verificationRecord);
 
         if (count($documents) <= 1) {
+            if ($matches === 'none' && ($previous = $this->previousFinal($envelope, $checked)) !== null) {
+                return $previous;
+            }
+
             return ['matches' => $matches, 'checked_sha256' => $checked];
         }
 
@@ -403,6 +408,33 @@ final class PublicVerification
             }
         }
 
+        $previous = $this->previousFinal($envelope, $checked);
+
+        if ($previous !== null) {
+            $document = collect($documents)->firstWhere('position', $previous['position']);
+
+            return $previous + ['document' => is_array($document) ? ['position' => $document['position'], 'name' => $document['name']] : null];
+        }
+
         return ['matches' => 'none', 'checked_sha256' => $checked, 'document' => null];
+    }
+
+    /**
+     * Arquivo final ANTERIOR a um re-carimbo de arquivamento (P3-LTV). O arquivo entregue na
+     * conclusão (e-mail, download, dossiê) continua conferindo depois que o re-carimbo publica
+     * um final novo — com um resultado próprio, `signed_previous`, que diz que ele foi substituído
+     * (revisão adversarial I-3A; viabilidade §4.5 item 29).
+     *
+     * @return array{matches: 'signed_previous', checked_sha256: string, position: int, valid_from: string|null, superseded_at: string|null}|null
+     */
+    private function previousFinal(Envelope $envelope, string $checked): ?array
+    {
+        $record = $envelope->verificationRecord;
+
+        if ($record === null) {
+            return null;
+        }
+
+        return app(VerificationHashHistory::class)->match($record, $checked);
     }
 }

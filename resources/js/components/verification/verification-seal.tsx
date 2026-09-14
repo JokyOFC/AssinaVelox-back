@@ -29,14 +29,28 @@ export function VerificationSealCard({
     status,
     signatureStatus,
     policy,
+    simulated = false,
+    portal = false,
+    operator = false,
     className,
 }: {
     status: EnvelopeStatus;
     signatureStatus?: SignatureStatus | null;
     policy?: string | null;
+    /** Fase 3 §3.4: alguma assinatura por componente veio do simulador. */
+    simulated?: boolean;
+    /** Fase 3 §3.5: algum participante devolveu o arquivo assinado no portal. */
+    portal?: boolean;
+    /** Fase 3 §3.4: a operadora assinou por último. */
+    operator?: boolean;
     className?: string;
 }) {
-    const seal = verificationSeal(status, signatureStatus, { policy });
+    const seal = verificationSeal(status, signatureStatus, {
+        policy,
+        simulated,
+        portal,
+        operator,
+    });
     const Icon = ICONS[seal.icon] ?? Shield;
 
     return (

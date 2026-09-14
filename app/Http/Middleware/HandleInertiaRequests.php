@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\AdminLog\ToolFlags;
+use App\Services\Affiliates\AffiliatesFeature;
 use App\Services\Api\ApiFeature;
 use App\Services\Billing\BillingSettings;
 use App\Services\Branding\BrandingFeature;
@@ -20,10 +21,13 @@ use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Fiscal\FiscalFeature;
 use App\Services\Identity\IdentityFeatures;
 use App\Services\InPerson\PresenceFeatures;
+use App\Services\Ltv\LtvFeatures;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Services\PublicForms\PublicFormsFeature;
 use App\Services\RestHooks\RestHooksFeature;
 use App\Services\Retention\RetentionFeature;
+use App\Services\Risk\RiskFeature;
+use App\Services\Risk\RiskStatus;
 use App\Services\Signing\Channels\ChannelFeatures;
 use App\Services\Templates\TemplatesFeature;
 use App\Services\Timestamp\TimestampFeatures;
@@ -80,6 +84,32 @@ class HandleInertiaRequests extends Middleware
                 CurrentOrganization::instance()->get() ?? $this->shellMembership($request)?->organization,
             ),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            // Fase 3 §3.7 (revisão adversarial I-3A): a organização em observação ou com envio
+            // suspenso encontra no app o motivo e o caminho da revisão humana (LGPD art. 20).
+            // Só o estado — nunca pontuação, limiar ou regra.
+            'risk' => fn (): ?array => self::riskNotice(CurrentOrganization::instance()->get()),
+        ];
+    }
+
+    /**
+     * @return array{status: string, status_label: string, appeal_url: string}|null
+     */
+    public static function riskNotice(?Organization $organization): ?array
+    {
+        if ($organization === null || ! RiskFeature::enabled()) {
+            return null;
+        }
+
+        $status = RiskStatus::fromStored($organization->getAttribute('risk_status'));
+
+        if ($status === RiskStatus::Normal) {
+            return null;
+        }
+
+        return [
+            'status' => $status->value,
+            'status_label' => $status->label(),
+            'appeal_url' => route('risk.appeal.show', [], false),
         ];
     }
 
@@ -141,6 +171,14 @@ class HandleInertiaRequests extends Middleware
             'rest_hooks' => RestHooksFeature::enabled($organization),
             'extended_payments' => app(BillingSettings::class)->extendedPayments(),
             'fiscal_invoices' => FiscalFeature::enabled(),
+            // Fase 3, parte 1 (integração I-3A): só as chaves da PLATAFORMA, todas desligadas por
+            // padrão (T8). `a3_signing` e `govbr_return` não entram: a página pública descobre os
+            // recursos por `GET sign.external.show` / `sign.govbr.show` (404 = desligado), como o A1.
+            // `pades_ltv*` nunca mudam o perfil anunciado (continua PAdES-B-B, T2).
+            'antifraud' => RiskFeature::enabled(),
+            'affiliates' => AffiliatesFeature::enabled(),
+            'pades_ltv' => LtvFeatures::enabled(),
+            'pades_ltv_advertise' => LtvFeatures::advertise(),
         ];
     }
 

@@ -9,6 +9,7 @@ use App\Models\ParticipantSignatureRequest;
 use App\Models\VerificationRecord;
 use App\Services\Signing\External\ExternalSignatureService;
 use App\Services\Signing\External\ExternalSignatureViews;
+use App\Services\Signing\GovBr\GovBrSignatureViews;
 use App\Services\Verification\NameMask;
 use Illuminate\Support\Collection;
 
@@ -172,7 +173,8 @@ final class ParticipantSignatureViews
     {
         // Fase 3 §3.4 (P3-EXT): as assinaturas por componente local entram na MESMA lista, com
         // `kind` e rótulos próprios (participant_a3 / participant_external, "simulado").
-        $list = [...self::forEvidence($envelope), ...ExternalSignatureViews::forEvidence($envelope)];
+        // Fase 3 §3.5 (I-3A): devoluções gov.br aceitas, com rótulo próprio (T1).
+        $list = [...self::forEvidence($envelope), ...ExternalSignatureViews::forEvidence($envelope), ...GovBrSignatureViews::forEvidence($envelope)];
 
         return $list === [] ? [] : ['participant_signatures' => $list];
     }
@@ -184,7 +186,7 @@ final class ParticipantSignatureViews
      */
     public static function publicProps(Envelope $envelope): array
     {
-        $list = [...self::forPublic($envelope), ...ExternalSignatureViews::forPublic($envelope)];
+        $list = [...self::forPublic($envelope), ...ExternalSignatureViews::forPublic($envelope), ...GovBrSignatureViews::forPublic($envelope)];
 
         return $list === [] ? [] : ['participant_signatures' => $list];
     }

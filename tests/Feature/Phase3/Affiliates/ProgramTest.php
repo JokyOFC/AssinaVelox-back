@@ -18,7 +18,6 @@ require_once __DIR__.'/Support/AffiliateHelpers.php';
 beforeEach(function (): void {
     $this->withoutVite();
     enableAffiliates();
-    fakeAffiliateRisk();
     $this->admin = User::factory()->platformAdmin()->create();
 });
 

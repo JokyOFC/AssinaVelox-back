@@ -583,6 +583,40 @@ def _cms_signer(info: asn1_cms.ContentInfo):
     return signer_info, x509.load_der_x509_certificate(found.dump())
 
 
+def _check_pades_baseline_attrs(values: Dict[str, Any], cert: x509.Certificate) -> None:
+    """PAdES baseline (ETSI EN 319 142-1 §6.3) for a ready-made CMS (review I-3A).
+
+    - ESS signing-certificate-v2 (or v1, SHA-1) is mandatory and must hash the announced
+      signer certificate: it is what binds the certificate to the signature;
+    - ``signing-time`` is forbidden: in PAdES the claimed time goes in the dictionary ``/M``.
+    Anything else would be embedded and announced as PAdES-B-B without being it (T2).
+    """
+    if values.get("signing_time"):
+        raise InputRejected("cms_invalid", "o CMS traz o atributo signing-time, proibido no PAdES (a hora declarada vai no /M)")
+    der = cert.public_bytes(serialization.Encoding.DER)
+    ess_v2 = values.get("signing_certificate_v2")
+    ess_v1 = values.get("signing_certificate")
+    candidates = []
+    if ess_v2:
+        for cert_id in ess_v2[0]["certs"]:
+            algorithm = cert_id["hash_algorithm"]["algorithm"].native
+            candidates.append((algorithm, cert_id["cert_hash"].native))
+    elif ess_v1:
+        for cert_id in ess_v1[0]["certs"]:
+            candidates.append(("sha1", cert_id["cert_hash"].native))
+    else:
+        raise InputRejected("cms_invalid", "o CMS nao traz o atributo ESS signing-certificate-v2, obrigatorio no PAdES")
+    if not candidates:
+        raise InputRejected("cms_invalid", "o atributo ESS signing-certificate do CMS esta vazio")
+    algorithm, cert_hash = candidates[0]
+    try:
+        expected = hashlib.new(algorithm, der).digest()
+    except (ValueError, TypeError) as exc:
+        raise InputRejected("cms_invalid", f"algoritmo do ESS signing-certificate nao suportado: {algorithm}") from exc
+    if cert_hash != expected:
+        raise InputRejected("certificate_mismatch", "o ESS signing-certificate do CMS aponta outro certificado")
+
+
 def _check_cms(info: asn1_cms.ContentInfo, state: Dict[str, Any]) -> x509.Certificate:
     signer_info, cert = _cms_signer(info)
     if _fingerprint(cert) != state["signer_cert_fingerprint_sha256"]:
@@ -600,6 +634,7 @@ def _check_cms(info: asn1_cms.ContentInfo, state: Dict[str, Any]) -> x509.Certif
         raise InputRejected("digest_mismatch", "o CMS assina outro conteudo (outra revisao do documento)")
     if not content_type or content_type[0].native != "data":
         raise InputRejected("cms_invalid", "o CMS precisa declarar content-type data")
+    _check_pades_baseline_attrs(values, cert)
     algo = signer_info["signature_algorithm"]
     try:
         algo_name = algo.signature_algo

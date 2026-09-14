@@ -4,6 +4,7 @@ namespace App\Services\Affiliates;
 
 use App\Models\Affiliate;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -62,6 +63,8 @@ final class AffiliateProgram
 
     public function approve(Affiliate $affiliate, User $actor, ?int $rateBp = null): void
     {
+        self::assertNotSelf($affiliate, $actor);
+
         DB::transaction(function () use ($affiliate, $actor, $rateBp): void {
             $locked = Affiliate::query()->whereKey($affiliate->getKey())->lockForUpdate()->firstOrFail();
 
@@ -98,6 +101,8 @@ final class AffiliateProgram
 
     public function suspend(Affiliate $affiliate, User $actor, string $reason): void
     {
+        self::assertNotSelf($affiliate, $actor);
+
         $this->transition($affiliate, $actor, [Affiliate::STATUS_APPROVED], Affiliate::STATUS_SUSPENDED, AffiliateTrail::SUSPENDED, $reason, [
             'suspended_at' => Carbon::now(),
         ]);
@@ -105,6 +110,8 @@ final class AffiliateProgram
 
     public function reactivate(Affiliate $affiliate, User $actor, string $reason): void
     {
+        self::assertNotSelf($affiliate, $actor);
+
         $this->transition($affiliate, $actor, [Affiliate::STATUS_SUSPENDED], Affiliate::STATUS_APPROVED, AffiliateTrail::REACTIVATED, $reason, [
             'suspended_at' => null,
         ]);
@@ -116,6 +123,8 @@ final class AffiliateProgram
      */
     public function changeRate(Affiliate $affiliate, User $actor, int $rateBp, string $reason): void
     {
+        self::assertNotSelf($affiliate, $actor);
+
         if ($rateBp < 0 || $rateBp > $this->settings->maxRateBp()) {
             throw ValidationException::withMessages(['commission_rate_bp' => 'A taxa deve ficar entre 0 e '.$this->settings->maxRateBp().' pontos-base.']);
         }
@@ -171,6 +180,19 @@ final class AffiliateProgram
         }
 
         $affiliate->forceFill(['last_ip_hash' => $hash, 'last_ip_at' => Carbon::now()])->save();
+    }
+
+    /**
+     * Separação de interesse (revisão adversarial I-3A): a operadora não decide sobre a própria
+     * participação no programa (aprovar, taxa, suspender, reativar). 403 com mensagem.
+     *
+     * @throws AuthorizationException
+     */
+    public static function assertNotSelf(Affiliate $affiliate, User $actor): void
+    {
+        if ((int) $affiliate->user_id === (int) $actor->getKey()) {
+            throw new AuthorizationException('Você não pode decidir sobre a sua própria participação no programa de afiliados. Outra pessoa da equipe precisa fazer isso.');
+        }
     }
 
     public function uniqueCode(): string

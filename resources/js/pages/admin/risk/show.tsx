@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { show as adminOrganizationShow } from '@/routes/admin/organizations';
 import {
@@ -78,6 +78,10 @@ export interface AdminRiskShowProps {
     history: HistoryEvent[];
     decisions: DecisionOption[];
     can_decide: boolean;
+    /** Quem vê é membro da organização do caso: não pode decidir (separação de interesse). */
+    conflict_of_interest?: boolean;
+    /** ULID do sinal mais recente exibido; a decisão só cobre até ele. */
+    seen_through?: string | null;
     min_reason: number;
 }
 
@@ -114,6 +118,8 @@ export default function AdminRiskShow({
     history,
     decisions,
     can_decide,
+    conflict_of_interest = false,
+    seen_through = null,
     min_reason,
 }: AdminRiskShowProps) {
     const [decision, setDecision] = useState<string | null>(null);
@@ -132,7 +138,7 @@ export default function AdminRiskShow({
 
         router.post(
             adminRiskDecide.url(review.id),
-            { decision, reason },
+            { decision, reason, seen_through: seen_through ?? '' },
             {
                 preserveScroll: true,
                 onStart: () => setProcessing(true),
@@ -181,7 +187,7 @@ export default function AdminRiskShow({
                             <span className="text-muted-foreground">
                                 · caso aberto em{' '}
                                 {formatDateTime(review.opened_at)} ·{' '}
-                                {review.score} ponto(s)
+                                {plural(review.score, 'ponto')}
                             </span>
                         </div>
                     </Section>
@@ -365,6 +371,14 @@ export default function AdminRiskShow({
                                     Registrar decisão
                                 </Button>
                             </form>
+                        </Section>
+                    ) : conflict_of_interest ? (
+                        <Section title="Decisão">
+                            <p className="text-text-secondary text-[13px] leading-[1.5]">
+                                Você é membro desta organização e não pode
+                                decidir o caso dela. Outra pessoa da equipe
+                                precisa revisar.
+                            </p>
                         </Section>
                     ) : (
                         <Section title="Decisão">

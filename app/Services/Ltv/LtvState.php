@@ -16,6 +16,9 @@ use Throwable;
  */
 final class LtvState
 {
+    public const ARCHIVE_LAYER_ONLY_LABEL = 'Carimbo de arquivamento da operadora sobre o arquivo; há assinaturas sem carimbo '
+        .'nem informações de revogação próprios, então o nível do arquivo continua PAdES-B-B';
+
     public function __construct(private readonly LtvConfig $config) {}
 
     /**
@@ -25,16 +28,40 @@ final class LtvState
     {
         $now = Carbon::instance($now ?? Carbon::now());
         $level = $report['effective_level'] ?? null;
-        $status = LtvStatus::fromLevel(is_string($level) ? $level : null);
+
+        // Dois fatos SEPARADOS (revisão adversarial I-3A):
+        //
+        // 1. o NÍVEL TÉCNICO do arquivo é o `effective_level` do pdftool — no re-carimbo, o MENOR
+        //    nível entre as assinaturas. Um arquivo com assinaturas de participantes sem carimbo
+        //    nem revogação próprios (A1, componente local, devolução do portal) é B-B, e é isso
+        //    que fica em `ltv_status` (a única entrada de LtvProfilePolicy::displayProfile — T2);
+        // 2. a CAMADA DE ARQUIVAMENTO da operadora (cadeia de carimbos de documento válida) existe
+        //    e PRECISA continuar sendo renovada: o agendamento (`ltv_archive_expires_at` e
+        //    `ltv_next_refresh_at`) vem dela, não do nível do arquivo.
+        //
+        // No `ltv-sign`, `effective_level` é o nível que a assinatura NOVA alcançou; o do arquivo
+        // inteiro é `validated_level` (análise final) — é esse que vale como estado técnico.
+        $built = LtvStatus::fromLevel(is_string($level) ? $level : null);
+        $fileLevel = is_string($report['validated_level'] ?? null) ? $report['validated_level'] : $level;
+        $status = LtvStatus::fromLevel(is_string($fileLevel) ? $fileLevel : null);
+
+        $archiveLayer = $built->isArchival()
+            || (array_key_exists('document_timestamps_after', $report)
+                && ($report['timestamp_chain_valid'] ?? false) === true
+                && is_array($report['archive_timestamp'] ?? null));
 
         $archive = is_array($report['archive_timestamp'] ?? null) ? $report['archive_timestamp'] : [];
-        $expires = $status->isArchival() ? self::parse($archive['tsa_cert_not_after'] ?? null) : null;
+        $expires = $archiveLayer ? self::parse($archive['tsa_cert_not_after'] ?? null) : null;
+
+        // "Revogação embutida" só quando o NÍVEL DO ARQUIVO a garante para todas as assinaturas
+        // (B-LT ou acima): um DSS presente pode cobrir só a assinatura da operadora.
+        $fileCoversRevocation = in_array($status, [LtvStatus::BLt, LtvStatus::BLta], true);
 
         if (array_key_exists('revocation_embedded', $report)) {
-            $embedded = $report['revocation_embedded'] === true;
+            $embedded = $report['revocation_embedded'] === true && $fileCoversRevocation;
         } else {
             $dss = is_array($report['dss'] ?? null) ? $report['dss'] : [];
-            $embedded = ($dss['present'] ?? false) === true && in_array($status, [LtvStatus::BLt, LtvStatus::BLta], true);
+            $embedded = ($dss['present'] ?? false) === true && $fileCoversRevocation;
         }
 
         $next = null;
@@ -59,6 +86,15 @@ final class LtvState
         return $status;
     }
 
+    /**
+     * O arquivo tem uma camada de arquivamento da operadora a renovar? (independente do nível
+     * efetivo do arquivo — ver {@see self::apply()}).
+     */
+    public static function archiveLayer(VerificationRecord $record): bool
+    {
+        return $record->getAttribute('ltv_archive_expires_at') !== null;
+    }
+
     public static function status(VerificationRecord $record): LtvStatus
     {
         $raw = $record->getAttribute('ltv_status');
@@ -69,17 +105,19 @@ final class LtvState
     /**
      * Visão INTERNA (página autenticada de evidências / operação). Não é para a página pública.
      *
-     * @return array{status: string, label: string, level: string|null, last_timestamp_at: string|null, revocation_embedded: bool, archive_expires_at: string|null, next_refresh_at: string|null, checked_at: string|null, tsa_kind: string, announced: bool, announced_profile: string|null, notice: string}
+     * @return array{status: string, label: string, level: string|null, archive_layer: bool, last_timestamp_at: string|null, revocation_embedded: bool, archive_expires_at: string|null, next_refresh_at: string|null, checked_at: string|null, tsa_kind: string, announced: bool, announced_profile: string|null, notice: string}
      */
     public static function view(VerificationRecord $record): array
     {
         $status = self::status($record);
         $announced = LtvProfilePolicy::displayProfile($record->signature_profile, $status);
+        $archiveLayer = self::archiveLayer($record);
 
         return [
             'status' => $status->value,
-            'label' => $status->label(),
+            'label' => $status === LtvStatus::NotApplicable && $archiveLayer ? self::ARCHIVE_LAYER_ONLY_LABEL : $status->label(),
             'level' => $status->level(),
+            'archive_layer' => $archiveLayer,
             'last_timestamp_at' => self::parse($record->getAttribute('ltv_last_timestamp_at'))?->toIso8601String(),
             'revocation_embedded' => (bool) $record->getAttribute('ltv_revocation_embedded'),
             'archive_expires_at' => self::parse($record->getAttribute('ltv_archive_expires_at'))?->toIso8601String(),

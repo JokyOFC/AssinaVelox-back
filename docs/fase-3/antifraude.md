@@ -35,15 +35,15 @@ Todas disparam quando a contagem **atinge** o limiar (`>=`) e não disparam abai
 da mesma regra, organização e sujeito dentro da mesma janela é **idempotente** (o envelope é só
 contexto, não entra na chave). Valores padrão em `config/assinavelox.php` → `risk.rules`.
 
-| `rule_code` | Fonte (evento já existente) | O que conta | Padrão | Pontos | Pode suspender envio? | Evidência gravada |
-| --- | --- | --- | --- | --- | --- | --- |
-| `new_org_send_spike` | `audit_events` `envelope.sent` | envios da organização na janela, só se a conta tem até N dias | ≥ 30 em 24 h, conta ≤ 7 dias | 40 | sim | `sent_in_window`, `organization_age_days`, `window_minutes`, `threshold` |
-| `delivery_failure_rate` | `delivery_attempts` gravado como `failed`/`bounced` | falhas ÷ tentativas de convite, reenvio e lembrete (OTP não conta) | ≥ 30% com ≥ 20 tentativas em 24 h | 30 | sim | `attempts_in_window`, `failed_in_window`, `failure_rate`, `window_minutes`, `threshold` |
-| `code_brute_force` | `audit_events` `challenge.failed` / `challenge.pin_failed` | falhas por **link** (participante) e por **IP** (entre organizações) | ≥ 10 por link ou ≥ 25 por IP em 60 min | 20 | **não** (a organização costuma ser a vítima) | `scope` (`link`/`ip`), `failures_in_window`, `recipient` (ULID) ou `ip_prefix` (/24 ou /48) |
-| `external_recipients_burst` | `audit_events` `envelope.sent` + `recipients` | e-mails distintos (sem diferenciar maiúsculas) fora dos domínios dos membros ativos, em envelopes enviados na janela | ≥ 150 em 24 h | 50 | sim | `distinct_external_recipients`, `envelopes_in_window`, `window_minutes`, `threshold` |
-| `payment_chargeback` | criação de `payment_chargebacks` | contestações da organização na janela | ≥ 1 em 90 dias | 40 | sim | `chargebacks_in_window`, `window_days`, `payment` (ULID) |
-| `serial_signup` | evento `Registered` do cadastro (Fortify) | cadastros da mesma rede (IP /24 ou /48) ou do mesmo **dispositivo declarado** | ≥ 3 em 24 h | 30 | sim | `scope` (`ip`/`device`), `signups_in_window`, `ip_prefix` |
-| `affiliate_self_referral` | chamada do programa de afiliados (§3.10) ao contrato | — (quem chama decide) | — | 50 | **não** | `affiliate`, `referral` (ULIDs), `match`, `same_user`, `same_ip`, `same_device`, `same_payment_method`, `same_email_domain` |
+| `rule_code`                 | Fonte (evento já existente)                                | O que conta                                                                                                                                    | Padrão                                 | Pontos | Pode suspender envio?                        | Evidência gravada                                                                                                           |
+| --------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------ | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `new_org_send_spike`        | `audit_events` `envelope.sent`                             | envios da organização na janela, só se a conta tem até N dias                                                                                  | ≥ 30 em 24 h, conta ≤ 7 dias           | 40     | sim                                          | `sent_in_window`, `organization_age_days`, `window_minutes`, `threshold`                                                    |
+| `delivery_failure_rate`     | `delivery_attempts` gravado como `failed`/`bounced`        | falhas ÷ tentativas de convite, reenvio e lembrete (OTP não conta)                                                                             | ≥ 30% com ≥ 20 tentativas em 24 h      | 30     | sim                                          | `attempts_in_window`, `failed_in_window`, `failure_rate`, `window_minutes`, `threshold`                                     |
+| `code_brute_force`          | `audit_events` `challenge.failed` / `challenge.pin_failed` | falhas por **link** (participante) e por **IP** dentro da **mesma organização** (revisão I-3A: falhas de outras organizações não pontuam esta) | ≥ 10 por link ou ≥ 25 por IP em 60 min | 20     | **não** (a organização costuma ser a vítima) | `scope` (`link`/`ip`), `failures_in_window`, `recipient` (ULID) ou `ip_prefix` (/24 ou /48)                                 |
+| `external_recipients_burst` | `audit_events` `envelope.sent` + `recipients`              | e-mails distintos (sem diferenciar maiúsculas) fora dos domínios dos membros ativos, em envelopes enviados na janela                           | ≥ 150 em 24 h                          | 50     | sim                                          | `distinct_external_recipients`, `envelopes_in_window`, `window_minutes`, `threshold`                                        |
+| `payment_chargeback`        | criação de `payment_chargebacks`                           | contestações da organização na janela                                                                                                          | ≥ 1 em 90 dias                         | 40     | sim                                          | `chargebacks_in_window`, `window_days`, `payment` (ULID)                                                                    |
+| `serial_signup`             | evento `Registered` do cadastro (Fortify)                  | cadastros da mesma rede (IP /24 ou /48) ou do mesmo **dispositivo declarado**                                                                  | ≥ 3 em 24 h                            | 30     | sim                                          | `scope` (`ip`/`device`), `signups_in_window`, `ip_prefix`                                                                   |
+| `affiliate_self_referral`   | chamada do programa de afiliados (§3.10) ao contrato       | — (quem chama decide)                                                                                                                          | —                                      | 50     | **não**                                      | `affiliate`, `referral` (ULIDs), `match`, `same_user`, `same_ip`, `same_device`, `same_payment_method`, `same_email_domain` |
 
 "Dispositivo declarado" é o identificador que o **cliente** envia no cadastro (cabeçalho
 `X-Device-Id` ou campo `device_id`). A página de cadastro (fora da área P3-RISK) **ainda não
@@ -78,36 +78,36 @@ middleware. Motivo: o envio também sai do envio agendado (fila), do formulário
 um middleware só cobriria as rotas web. O erro é `SendingBlockedException` com
 `errorCode = risk_restricted`, que todos esses caminhos já tratam:
 
-| Caminho | Resultado |
-| --- | --- |
-| Botão "Enviar" | flash de erro com a mensagem abaixo; envelope continua `ready`; plano não é debitado |
-| API `POST /api/v1/envelopes/{id}/send` | 409 `sending-blocked` com `code = risk_restricted` |
-| Envio agendado | agendamento cancelado e remetente avisado com a mesma mensagem |
-| Formulário público | tratado como os demais bloqueios de envio |
+| Caminho                                | Resultado                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| Botão "Enviar"                         | flash de erro com a mensagem abaixo; envelope continua `ready`; plano não é debitado |
+| API `POST /api/v1/envelopes/{id}/send` | 409 `sending-blocked` com `code = risk_restricted`                                   |
+| Envio agendado                         | agendamento cancelado e remetente avisado com a mesma mensagem                       |
+| Formulário público                     | tratado como os demais bloqueios de envio                                            |
 
-Mensagem: *"O envio de novos documentos desta conta está suspenso até uma revisão de segurança da
+Mensagem: _"O envio de novos documentos desta conta está suspenso até uma revisão de segurança da
 equipe AssinaVelox. Documentos já enviados continuam disponíveis para leitura, assinatura e
 download. Para saber o motivo e pedir a revisão, acesse /revisao-de-seguranca ou escreva para
-{suporte}."*
+{suporte}."_
 
 ## 5. Fila de revisão humana (painel interno)
 
 Rotas no grupo `platform-admin` (flag desligada: 404; não admin: 403):
 
-| Rota | Tela |
-| --- | --- |
-| `GET /admin/antifraude` (`admin.risk.index`) | fila: organização, estado, regras, pontos, situação, pedido de revisão; filtros por situação e "só com pedido" |
-| `GET /admin/antifraude/casos/{ulid}` (`admin.risk.show`) | caso: sinais com regra, explicação e evidência; histórico explicável (`platform_audit_events`); pedido da organização; formulário de decisão |
-| `POST /admin/antifraude/casos/{ulid}/decisao` (`admin.risk.decide`) | decisão |
-| `GET /admin/antifraude/precisao` (`admin.risk.precision`) | relatório de precisão por regra, por mês |
+| Rota                                                                | Tela                                                                                                                                         |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /admin/antifraude` (`admin.risk.index`)                        | fila: organização, estado, regras, pontos, situação, pedido de revisão; filtros por situação e "só com pedido"                               |
+| `GET /admin/antifraude/casos/{ulid}` (`admin.risk.show`)            | caso: sinais com regra, explicação e evidência; histórico explicável (`platform_audit_events`); pedido da organização; formulário de decisão |
+| `POST /admin/antifraude/casos/{ulid}/decisao` (`admin.risk.decide`) | decisão                                                                                                                                      |
+| `GET /admin/antifraude/precisao` (`admin.risk.precision`)           | relatório de precisão por regra, por mês                                                                                                     |
 
 Decisões (`risk_reviews.decision`), sempre com **motivo obrigatório** (≥ 10 caracteres) e autor:
 
-| Decisão | Caso fica | Organização fica |
-| --- | --- | --- |
-| Liberar (`clear`) | `cleared` | `normal` |
-| Manter em observação (`watch`) | `watching` | `watch` |
-| Confirmar restrição (`confirm`) | `confirmed` | `restricted` |
+| Decisão                         | Caso fica   | Organização fica |
+| ------------------------------- | ----------- | ---------------- |
+| Liberar (`clear`)               | `cleared`   | `normal`         |
+| Manter em observação (`watch`)  | `watching`  | `watch`          |
+| Confirmar restrição (`confirm`) | `confirmed` | `restricted`     |
 
 O roadmap previa `status ∈ open|cleared|confirmed`; `watching` foi acrescentado porque "manter em
 observação" não é liberação nem confirmação e o relatório de precisão precisa distinguir os três.
@@ -116,6 +116,16 @@ A decisão grava `risk.review_decided` (ator = revisor; payload: caso, decisão,
 regras, se houve pedido) e, se o estado mudar, `risk.status_changed` com `origin=review`. Ela
 **fixa o intervalo** de sinais do caso (`through_signal_id`): sinais já decididos não voltam a
 contar; um sinal novo abre um caso novo. Um caso decidido não pode ser decidido de novo.
+
+Salvaguardas da decisão (revisão adversarial I-3A):
+
+- **Só o que o revisor viu.** A página do caso envia `seen_through` (ULID do sinal mais recente
+  exibido, obrigatório no POST). Se chegou sinal depois disso, a decisão é recusada ("o caso mudou,
+  recarregue") — uma liberação nunca cobre evidência que ninguém revisou.
+- **Separação de interesse.** Quem tem vínculo ativo com a organização do caso (dono,
+  administrador ou operador) não decide o caso dela: a página mostra o aviso no lugar do formulário
+  e o POST responde 403. O mesmo vale no programa de afiliados (a operadora não aprova, não muda a
+  taxa, não suspende nem reativa a própria participação, nem libera indicação do próprio link).
 
 ## 6. Pedido de revisão pela organização (LGPD art. 20)
 
@@ -126,7 +136,18 @@ formulário (20 a 2000 caracteres). Canal registrado: o pedido fica no caso
 (`appeal_requested_at`, autor, texto) e na trilha (`risk.review_requested`, ator = quem pediu).
 Sem estado `watch`/`restricted` não há o que pedir; um segundo pedido com o caso aberto é
 recusado; depois de uma restrição confirmada, o pedido abre um caso novo (`trigger = appeal`).
+Esse caso **herda o intervalo de sinais** do último caso que manteve o estado atual (restrição
+confirmada ou observação mantida): o revisor julga o pedido com os mesmos sinais e evidências, e a
+página da organização continua listando os critérios que explicam o estado (art. 20 §1º; revisão
+adversarial I-3A — antes, o caso nascia vazio).
 O e-mail de suporte continua como canal alternativo.
+
+**No app** (roadmap §3.7, "mensagem clara"): com a conta em observação ou restrita, o
+`HandleInertiaRequests` compartilha `risk` (só `status`, rótulo e o caminho da página — nunca
+pontuação ou regra); com o envio suspenso, uma faixa persistente no topo do app ("Envio de novos
+documentos suspenso… Ver motivo e pedir revisão") leva à página. O aviso de envio bloqueado
+nomeia a página "Revisão de segurança da conta" em vez de um caminho de URL cru no toast. A página
+informa o mínimo de 20 caracteres do pedido, ligado ao campo por `aria-describedby`.
 
 A decisão de cada caso é comunicada por e-mail e sino aos proprietários e administradores.
 
@@ -139,12 +160,12 @@ para ajustar limiares e pontuações; mudar um valor é mudar `config`/`.env`, n
 
 ## 8. Dados, minimização e LGPD
 
-| Tabela | Conteúdo | Observação |
-| --- | --- | --- |
-| `risk_signals` | organização, envelope (opcional), `rule_code`, `score`, `subject_key` (HMAC-SHA256), `fingerprint`, `evidence` (JSON mínimo), `occurred_at` | append-only (model recusa update/delete) |
-| `risk_reviews` | caso: situação, origem, intervalo de sinais, pedido da organização, decisão, motivo, revisor | |
-| `risk_observations` | `kind`, HMAC do sujeito, organização, data | só para contar cadastros; podada após `observation_retention_days` (30) a cada gravação |
-| `organizations.risk_status`, `risk_status_changed_at` | estado | aditivo; padrão `normal` |
+| Tabela                                                | Conteúdo                                                                                                                                    | Observação                                                                              |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `risk_signals`                                        | organização, envelope (opcional), `rule_code`, `score`, `subject_key` (HMAC-SHA256), `fingerprint`, `evidence` (JSON mínimo), `occurred_at` | append-only (model recusa update/delete)                                                |
+| `risk_reviews`                                        | caso: situação, origem, intervalo de sinais, pedido da organização, decisão, motivo, revisor                                                |                                                                                         |
+| `risk_observations`                                   | `kind`, HMAC do sujeito, organização, data                                                                                                  | só para contar cadastros; podada após `observation_retention_days` (30) a cada gravação |
+| `organizations.risk_status`, `risk_status_changed_at` | estado                                                                                                                                      | aditivo; padrão `normal`                                                                |
 
 Minimização (`RiskEvidence::minimize`): lista fechada de chaves por regra; chaves com nome de dado
 proibido (CPF, e-mail, telefone, documento, conteúdo, token, senha, PIN, código, nome, endereço)
@@ -180,16 +201,16 @@ App\Services\Risk\RiskSignals::record(
 
 ## 10. Configuração
 
-| Variável | Padrão | Efeito |
-| --- | --- | --- |
-| `ASSINAVELOX_FEATURE_ANTIFRAUD` | `false` | liga tudo (plataforma, sem plano) |
-| `ASSINAVELOX_RISK_AUTO_RESTRICT` | `true` | `false` = modo observação |
-| `ASSINAVELOX_RISK_WATCH_SCORE` / `_RESTRICT_SCORE` | 30 / 70 | limiares de estado |
-| `ASSINAVELOX_RISK_LOOKBACK_DAYS` | 30 | janela da pontuação pendente |
-| `ASSINAVELOX_RISK_SUBJECT_KEY` | (derivada da APP_KEY) | chave do HMAC dos sujeitos |
-| `ASSINAVELOX_RISK_OBSERVATION_RETENTION_DAYS` | 30 | poda de `risk_observations` |
-| `ASSINAVELOX_RISK_TRUSTED_ORGANIZATIONS` | vazio | ULIDs separados por vírgula |
-| `ASSINAVELOX_RISK_APPEAL_MAX_MESSAGE` / `_RESPONSE_DAYS` | 2000 / 5 | pedido de revisão |
+| Variável                                                                                | Padrão                       | Efeito                                |
+| --------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------- |
+| `ASSINAVELOX_FEATURE_ANTIFRAUD`                                                         | `false`                      | liga tudo (plataforma, sem plano)     |
+| `ASSINAVELOX_RISK_AUTO_RESTRICT`                                                        | `true`                       | `false` = modo observação             |
+| `ASSINAVELOX_RISK_WATCH_SCORE` / `_RESTRICT_SCORE`                                      | 30 / 70                      | limiares de estado                    |
+| `ASSINAVELOX_RISK_LOOKBACK_DAYS`                                                        | 30                           | janela da pontuação pendente          |
+| `ASSINAVELOX_RISK_SUBJECT_KEY`                                                          | (derivada da APP_KEY)        | chave do HMAC dos sujeitos            |
+| `ASSINAVELOX_RISK_OBSERVATION_RETENTION_DAYS`                                           | 30                           | poda de `risk_observations`           |
+| `ASSINAVELOX_RISK_TRUSTED_ORGANIZATIONS`                                                | vazio                        | ULIDs separados por vírgula           |
+| `ASSINAVELOX_RISK_APPEAL_MAX_MESSAGE` / `_RESPONSE_DAYS`                                | 2000 / 5                     | pedido de revisão                     |
 | `ASSINAVELOX_RISK_{SPIKE,DELIVERY,BRUTE_FORCE,BURST,CHARGEBACK,SIGNUP,SELF_REFERRAL}_*` | ver `config/assinavelox.php` | janela, limiar e pontos de cada regra |
 
 ## 11. Com a flag desligada
@@ -217,6 +238,14 @@ teste anterior mudou.
    de precisão, antes de permitir a suspensão automática; definir a lista de confiança dos
    clientes de alto volume.
 6. **Tráfego real**: os limiares padrão são estimativas; ajustá-los com o relatório.
+
+> **Integração I-3A (2026-09-14).** Feito: a chave `antifraud` entrou em `HandleInertiaRequests::features()` (desligada)
+> e o painel interno ganhou o item "Antifraude", visível só com a flag. O ponta a ponta
+> `tests/Feature/EndToEnd/Phase3PartOneTest.php` leva uma organização a `restricted` por sinais reais, confirma que um
+> envelope NOVO não é enviado (`risk_restricted`) e que o envelope já enviado conclui. O `DemoOrganizationSeeder` grava um
+> sinal de taxa de falha de entrega (só contagens do catálogo) que deixa a Horizonte em `watch` com um caso aberto.
+> Continua pendente: `affiliate_self_referral` lista `same_email_domain` no catálogo, mas o minimizador descarta toda
+> chave com "email" no nome — decidir se a chave sai do catálogo ou muda de nome.
 
 ## 13. Testes
 

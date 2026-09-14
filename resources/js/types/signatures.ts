@@ -195,13 +195,34 @@ export interface EvidenceParticipantSignatureDocument {
     trusted: boolean;
     coverage: string | null;
     modification_level: string | null;
+    /** Fase 3 §3.4: `raw` (assinatura bruta) ou `cms` (pacote pronto), por componente. */
+    mode?: 'raw' | 'cms' | null;
 }
+
+/**
+ * `kind` da lista de assinaturas de participantes: A1 por arquivo (Fase 2 §2.12) ou feita FORA
+ * da plataforma por componente local (Fase 3 §3.4, `ExternalSignatureViews`).
+ */
+export type ParticipantSignatureListKind =
+    | 'participant_a1'
+    | 'participant_a3'
+    | 'participant_external'
+    /** Fase 3 §3.5 (`GovBrSignatureViews`): devolução do portal, cadeia gov.br validada. */
+    | 'participant_govbr'
+    /** Fase 3 §3.5: devolução do portal, cadeia NÃO verificada — nunca dita gov.br. */
+    | 'participant_external_unverified';
 
 /** Prop `participant_signatures` da página de evidências (só quando há pedidos). */
 export interface EvidenceParticipantSignature {
     id: string;
-    kind: 'participant_a1';
+    kind: ParticipantSignatureListKind;
     kind_label: string;
+    /** Fase 3 §3.4: `local_component` nas assinaturas feitas por componente. */
+    method?: string | null;
+    /** Fase 3 §3.4: `simulated` | `nexu`. */
+    component?: string | null;
+    /** Fase 3 §3.4: produzida pelo simulador — "simulado — nenhum token foi usado". */
+    simulated?: boolean;
     recipient: { id: string | null; name: string | null };
     status: string;
     status_label: string;
@@ -219,6 +240,8 @@ export interface EvidenceParticipantSignature {
         is_test: boolean;
         kind_label: string;
         declares_icp_brasil_policy: boolean;
+        /** Fase 3 §3.4: tipo DECLARADO pela política do certificado (ex.: `A3`). */
+        declared_certificate_type?: string | null;
         icp_brasil_validated: false;
     } | null;
     consent: {
@@ -237,8 +260,10 @@ export interface EvidenceParticipantSignature {
  * nome MASCARADO e sem CPF, série, impressão digital ou e-mail.
  */
 export interface PublicParticipantSignature {
-    kind: 'participant_a1';
+    kind: ParticipantSignatureListKind;
     kind_label: string;
+    /** Fase 3 §3.4: produzida pelo simulador (nunca A3, sem valor para uso real). */
+    simulated?: boolean;
     label: string;
     holder_name_masked: string;
     issuer_cn: string | null;

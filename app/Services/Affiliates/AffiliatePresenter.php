@@ -87,7 +87,7 @@ final class AffiliatePresenter
      * @param  iterable<Commission>  $commissions
      * @return list<array<string, mixed>>
      */
-    public static function commissionRows(iterable $commissions): array
+    public static function commissionRows(iterable $commissions, bool $forOperator = false): array
     {
         $list = [];
         $organizationIds = [];
@@ -116,7 +116,9 @@ final class AffiliatePresenter
             'currency' => $c->currency,
             'status' => $c->status,
             'status_label' => Commission::statusLabel($c->status),
-            'reason_label' => Commission::reasonLabel($c->reversal_reason),
+            // Ao afiliado, estorno e contestação (chargeback) do CLIENTE indicado são dado
+            // financeiro dele (LGPD; afiliados.md §7): motivo neutro. O detalhe fica no painel.
+            'reason_label' => $forOperator ? Commission::reasonLabel($c->reversal_reason) : Commission::affiliateReasonLabel($c->reversal_reason),
             'created_at' => $c->created_at?->toIso8601String(),
             'available_at' => $c->available_at?->toIso8601String(),
             'approved_at' => $c->approved_at?->toIso8601String(),

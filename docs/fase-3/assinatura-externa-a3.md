@@ -11,17 +11,17 @@ O participante que tem certificado em token ou cartão (A3, chave NÃO exportáv
 instalado na máquina dele. O servidor **nunca recebe a chave**: prepara a revisão pendente e um digest, o componente
 assina, o servidor incorpora a assinatura e valida o arquivo inteiro.
 
-| Entrega                                                     | Onde                                                                                     | Classe |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------ |
-| `pdftool prepare-external` / `embed-external`               | `tools/pdftool/pdftool/external.py` (+ registro aditivo em `cli.py`)                     | A      |
-| Reserva de revisão com TTL, consumo único, lock do envelope | `pending_external_signatures`, `app/Services/Signing/External/ExternalSignatureService`  | A      |
-| Encaixe na finalização (status por meio)                    | `ParticipantSignatureStage::statusForDocument()` + 1 linha em `EnvelopeFinalizer`        | A      |
-| Validação de cadeia com âncoras fixadas                     | `ExternalTrustAnchors` + `--trust` no pdftool                                            | A      |
-| Contrato `LocalSignerBridge` + DTOs                         | `app/Integrations/LocalSigner/**`                                                         | B      |
-| `FakeLocalSigner` (simulador, só teste/local)               | `app/Integrations/LocalSigner/FakeLocalSigner.php`                                        | B      |
-| `NexuLocalSigner` (documentado, produção DESABILITADA)      | `app/Integrations/LocalSigner/NexuLocalSigner.php`                                        | B      |
-| Rotas JSON do participante                                  | `app/Http/Controllers/Sign/External{Signature,Simulator}Controller.php`                  | —      |
-| Varredura de reservas                                       | `app/Jobs/Envelopes/PurgeExternalSignatureReservations.php`                               | —      |
+| Entrega                                                     | Onde                                                                                    | Classe |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------ |
+| `pdftool prepare-external` / `embed-external`               | `tools/pdftool/pdftool/external.py` (+ registro aditivo em `cli.py`)                    | A      |
+| Reserva de revisão com TTL, consumo único, lock do envelope | `pending_external_signatures`, `app/Services/Signing/External/ExternalSignatureService` | A      |
+| Encaixe na finalização (status por meio)                    | `ParticipantSignatureStage::statusForDocument()` + 1 linha em `EnvelopeFinalizer`       | A      |
+| Validação de cadeia com âncoras fixadas                     | `ExternalTrustAnchors` + `--trust` no pdftool                                           | A      |
+| Contrato `LocalSignerBridge` + DTOs                         | `app/Integrations/LocalSigner/**`                                                       | B      |
+| `FakeLocalSigner` (simulador, só teste/local)               | `app/Integrations/LocalSigner/FakeLocalSigner.php`                                      | B      |
+| `NexuLocalSigner` (documentado, produção DESABILITADA)      | `app/Integrations/LocalSigner/NexuLocalSigner.php`                                      | B      |
+| Rotas JSON do participante                                  | `app/Http/Controllers/Sign/External{Signature,Simulator}Controller.php`                 | —      |
+| Varredura de reservas                                       | `app/Jobs/Envelopes/PurgeExternalSignatureReservations.php`                             | —      |
 
 **Com a flag desligada nada muda**: as rotas novas respondem 404, nenhum pedido ou reserva pode ser criado, e a finalização
 só calcula um status diferente quando existe assinatura com `participant_signatures.signature_status` preenchido — o que
@@ -34,11 +34,11 @@ A flag vale quando as **duas** fontes dizem sim: `assinavelox.external_signing.e
 
 Cada meio tem valor e rótulo próprios. Por assinatura (`participant_signatures.signature_status`, coluna nova):
 
-| valor                  | quando                                                                                                                                  | rótulo                                                                                               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| _nulo_                 | A1 por arquivo (Fase 2 §2.12) — linhas existentes                                                                                       | o da Fase 2                                                                                          |
-| `participant_a3`       | componente **real** habilitado (`producesTokenSignatures()`, não simulado) **e** o certificado declara política ICP-Brasil do tipo A3 | "Assinatura com certificado A3 (token ou cartão) por componente local"                               |
-| `participant_external` | qualquer outro caso: origem em token não comprovada — **inclusive tudo o que o simulador produz**                                      | "Assinatura com certificado do participante feita fora da plataforma, por componente externo"        |
+| valor                  | quando                                                                                                                                | rótulo                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| _nulo_                 | A1 por arquivo (Fase 2 §2.12) — linhas existentes                                                                                     | o da Fase 2                                                                                   |
+| `participant_a3`       | componente **real** habilitado (`producesTokenSignatures()`, não simulado) **e** o certificado declara política ICP-Brasil do tipo A3 | "Assinatura com certificado A3 (token ou cartão) por componente local"                        |
+| `participant_external` | qualquer outro caso: origem em token não comprovada — **inclusive tudo o que o simulador produz**                                     | "Assinatura com certificado do participante feita fora da plataforma, por componente externo" |
 
 No envelope (`verification_records.signature_status`, enum `SignatureStatus`, valores novos): `participant_a3` (todas as
 assinaturas externas são A3) ou `participant_external` (ao menos uma não é). O arquivo pode conter também assinaturas A1
@@ -128,7 +128,17 @@ Aceita os dois modos (correção §6 item 1 da viabilidade):
 - **(b) CMS/PKCS#7 pronto** (DER, PEM ou Base64): SignedData destacado com um signatário; o certificado do signatário
   (dentro do CMS) precisa ser o anunciado; `message-digest` precisa ser o resumo desta revisão (`digest_mismatch` = outra
   revisão); `content-type` = data; a assinatura sobre os atributos é verificada (`signature_invalid`); precisa caber no
-  espaço reservado (`cms_too_large`).
+  espaço reservado (`cms_too_large`). Atributos do PAdES baseline (ETSI EN 319 142-1 §6.3; revisão adversarial I-3A):
+  o ESS **signing-certificate-v2** (ou v1, SHA-1) é obrigatório e precisa apontar o certificado anunciado
+  (`cms_invalid` sem ele; `certificate_mismatch` se aponta outro), e **signing-time** é recusado (`cms_invalid`: no PAdES a
+  hora declarada vai no `/M`). Sem isso o CMS seria gravado e anunciado como PAdES-B-B sem sê-lo (T2). No PHP,
+  `ExternalSignatureService` grava o perfil devolvido pelo pdftool e recusa a assinatura se ele não vier — não há mais
+  perfil padrão assumido.
+
+Componentes indisponíveis (revisão adversarial I-3A): sem nenhum componente capaz de assinar (simulador desligado, NexU
+com a produção desabilitada), `can_request` e `can_prepare` são falsos e `POST intent` responde 409
+`component_unavailable` — antes, a intenção era registrada e segurava a finalização até a janela vencer (3 dias) por uma
+assinatura impossível.
 
 Antes: o PDF pendente precisa ser o descrito pelo estado (tamanho, sha256 e `/ByteRange`; senão `pending_mismatch`) e o
 estado precisa ser consistente (`state_invalid`). Depois: a base continua prefixo exato; **todas** as assinaturas são
@@ -188,15 +198,15 @@ Grupo público `assinar/{token}` (`throttle:signer` + `signer`), JSON, **404** c
 download deste navegador (quem já aceitou). Sem ela: `403 {code: "not_authenticated"}`. Rodar
 `php artisan wayfinder:generate --with-form` na integração.
 
-| Rota                                  | Método e caminho                              | Corpo                                                                                                                           | Resposta                |
-| ------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `sign.external.show`                  | `GET assinar/{token}/externa`                 | —                                                                                                                               | `200` estado            |
-| `sign.external.intent`                | `POST …/externa/intencao`                     | `component?`                                                                                                                    | `201` estado            |
-| `sign.external.withdraw`              | `POST …/externa/desistir`                     | —                                                                                                                               | `200` estado            |
-| `sign.external.prepare`               | `POST …/externa/preparar`                     | `document_id` (ULID), `component` (`simulated`\|`nexu`), `mode` (`raw`\|`cms`), `certificate` (Base64 DER ou PEM), `chain[]` | `201 {pending, state}`  |
-| `sign.external.submit`                | `POST …/externa/assinatura`                   | `pending_id`, `mode`; `raw`: `signature` (Base64), `certificate`, `chain[]`, `signature_algorithm?`; `cms`: `cms`              | `200` estado            |
-| `sign.external.simulator.certificate` | `GET …/externa/simulador/certificado`         | — (só teste/local)                                                                                                             | `200` certificado       |
-| `sign.external.simulator.sign`        | `POST …/externa/simulador/assinar`            | `pending_id` (só teste/local; o digest nunca vem do cliente)                                                                   | `200` estado            |
+| Rota                                  | Método e caminho                      | Corpo                                                                                                                        | Resposta               |
+| ------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `sign.external.show`                  | `GET assinar/{token}/externa`         | —                                                                                                                            | `200` estado           |
+| `sign.external.intent`                | `POST …/externa/intencao`             | `component?`                                                                                                                 | `201` estado           |
+| `sign.external.withdraw`              | `POST …/externa/desistir`             | —                                                                                                                            | `200` estado           |
+| `sign.external.prepare`               | `POST …/externa/preparar`             | `document_id` (ULID), `component` (`simulated`\|`nexu`), `mode` (`raw`\|`cms`), `certificate` (Base64 DER ou PEM), `chain[]` | `201 {pending, state}` |
+| `sign.external.submit`                | `POST …/externa/assinatura`           | `pending_id`, `mode`; `raw`: `signature` (Base64), `certificate`, `chain[]`, `signature_algorithm?`; `cms`: `cms`            | `200` estado           |
+| `sign.external.simulator.certificate` | `GET …/externa/simulador/certificado` | — (só teste/local)                                                                                                           | `200` certificado      |
+| `sign.external.simulator.sign`        | `POST …/externa/simulador/assinar`    | `pending_id` (só teste/local; o digest nunca vem do cliente)                                                                 | `200` estado           |
 
 Limites (por IP): `show` 60/min; `intencao`/`desistir` 20/10 min; `preparar`/`assinatura` 30/10 min; simulador 30/10 min.
 
@@ -207,47 +217,126 @@ type ExternalSigningState = {
     available: true;
     method: 'local_component';
     authenticated: boolean;
-    stage: 'choose' | 'awaiting_others' | 'ready_to_sign' | 'applied' | 'expired' | 'withdrawn' | 'closed' | 'other_method';
+    stage:
+        | 'choose'
+        | 'awaiting_others'
+        | 'ready_to_sign'
+        | 'applied'
+        | 'expired'
+        | 'withdrawn'
+        | 'closed'
+        | 'other_method';
     ready: boolean;
     message: string | null;
-    can_request: boolean; can_withdraw: boolean; can_prepare: boolean;
+    can_request: boolean;
+    can_withdraw: boolean;
+    can_prepare: boolean;
     request: null | {
-        id: string; status: string; status_label: string; method: 'local_component';
+        id: string;
+        status: string;
+        status_label: string;
+        method: 'local_component';
         component: 'simulated' | 'nexu' | null;
         signature_status: 'participant_a3' | 'participant_external' | null;
-        kind_label: string | null; label: string | null;       // com "simulado — nenhum token foi usado" quando for o caso
-        documents_signed: number; applied_at: string | null; window_expires_at: string | null;
+        kind_label: string | null;
+        label: string | null; // com "simulado — nenhum token foi usado" quando for o caso
+        documents_signed: number;
+        applied_at: string | null;
+        window_expires_at: string | null;
         failure: null | { code: string; message: string };
     };
     documents: Array<{
-        id: string; name: string; position: number;
+        id: string;
+        name: string;
+        position: number;
         status: 'to_sign' | 'reserved' | 'busy' | 'waiting_base' | 'signed';
-        signed_at: string | null; retry_after: string | null;
-        pending: null | PendingProps;                         // a reserva ATIVA deste participante (digest: null aqui)
+        signed_at: string | null;
+        retry_after: string | null;
+        pending: null | PendingProps; // a reserva ATIVA deste participante (digest: null aqui)
     }>;
-    components: Array<{ component: string; label: string; available: boolean; simulated: boolean;
-                        production_enabled: boolean; version: string | null; reason: string | null }>;
-    local_component: {                                         // protocolo do NexU (produção desabilitada)
-        component: 'nexu'; production_enabled: false; http_base: string; https_base: string; minimum_version: string;
-        endpoints: { status; signing_certificate; sign: { method: 'POST'; path: '/v1/sign'; hash_function: 'SHA256'; mode: 'raw' } };
-        browser_notes: string[]; missing_for_production: string[];
+    components: Array<{
+        component: string;
+        label: string;
+        available: boolean;
+        simulated: boolean;
+        production_enabled: boolean;
+        version: string | null;
+        reason: string | null;
+    }>;
+    local_component: {
+        // protocolo do NexU (produção desabilitada)
+        component: 'nexu';
+        production_enabled: false;
+        http_base: string;
+        https_base: string;
+        minimum_version: string;
+        endpoints: {
+            status;
+            signing_certificate;
+            sign: {
+                method: 'POST';
+                path: '/v1/sign';
+                hash_function: 'SHA256';
+                mode: 'raw';
+            };
+        };
+        browser_notes: string[];
+        missing_for_production: string[];
     };
-    chain: { anchors_pinned: number; label: string; revocation: 'not_checked'; revocation_label: string };
-    limits: { pending_ttl_minutes: number; hash_function: 'SHA256'; modes: ['raw', 'cms']; max_signature_bytes: number;
-              max_certificate_kb: number; max_chain_certificates: number; max_cms_kb: number };
+    chain: {
+        anchors_pinned: number;
+        label: string;
+        revocation: 'not_checked';
+        revocation_label: string;
+    };
+    limits: {
+        pending_ttl_minutes: number;
+        hash_function: 'SHA256';
+        modes: ['raw', 'cms'];
+        max_signature_bytes: number;
+        max_certificate_kb: number;
+        max_chain_certificates: number;
+        max_cms_kb: number;
+    };
     notices: string[];
-    endpoints: { show; intent; withdraw; prepare; submit: string; simulator_certificate: string | null; simulator_sign: string | null };
+    endpoints: {
+        show;
+        intent;
+        withdraw;
+        prepare;
+        submit: string;
+        simulator_certificate: string | null;
+        simulator_sign: string | null;
+    };
 };
 
 type PendingProps = {
-    id: string; document_id: string; mode: 'raw' | 'cms'; component: string; simulated: boolean;
+    id: string;
+    document_id: string;
+    mode: 'raw' | 'cms';
+    component: string;
+    simulated: boolean;
     hash_function: 'SHA256';
-    digest: string | null;            // Base64 do digest — SÓ na resposta de `prepare`
+    digest: string | null; // Base64 do digest — SÓ na resposta de `prepare`
     digest_kind: 'signed_attributes' | 'document';
     expires_at: string;
-    certificate: { holder_name; holder_cpf_masked; issuer_cn; serial; fingerprint_sha256; valid_from; valid_to;
-                   is_test: boolean; kind_label: string };
-    chain: { trusted: boolean; label: string; revocation: 'not_checked'; revocation_label: string };
+    certificate: {
+        holder_name;
+        holder_cpf_masked;
+        issuer_cn;
+        serial;
+        fingerprint_sha256;
+        valid_from;
+        valid_to;
+        is_test: boolean;
+        kind_label: string;
+    };
+    chain: {
+        trusted: boolean;
+        label: string;
+        revocation: 'not_checked';
+        revocation_label: string;
+    };
     endpoints: { submit: string | null; simulate: string | null };
 };
 ```
@@ -331,23 +420,23 @@ digital" — nunca "ICP-Brasil", mesmo que a âncora seja uma raiz do ITI, porqu
 
 ## 11. Configuração (`config/assinavelox.php` → `external_signing`)
 
-| chave                                  | env                                         | padrão                                              |
-| -------------------------------------- | ------------------------------------------- | --------------------------------------------------- |
-| `enabled`                              | `ASSINAVELOX_FEATURE_A3_SIGNING`            | `false`                                             |
-| `pending_ttl_minutes`                  | `ASSINAVELOX_A3_PENDING_TTL_MINUTES`        | 10 (1–60)                                           |
-| `lock_wait_seconds`                    | `ASSINAVELOX_A3_LOCK_WAIT_SECONDS`          | 10                                                  |
-| `pending_path`                         | `ASSINAVELOX_A3_PENDING_PATH`               | `storage/app/private/external-signing`              |
-| `bytes_reserved`                       | `ASSINAVELOX_A3_BYTES_RESERVED`             | 16384                                               |
-| `max_certificate_kb` / `max_cms_kb`    | `ASSINAVELOX_A3_MAX_CERTIFICATE_KB` / `…_MAX_CMS_KB` | 32 / 48                                    |
-| `max_chain_certificates`               | `ASSINAVELOX_A3_MAX_CHAIN`                  | 6                                                   |
-| `trust_anchors`                        | `ASSINAVELOX_A3_TRUST_ANCHORS`              | vazio (cadeia "não verificada")                     |
-| `require_trusted_chain`                | `ASSINAVELOX_A3_REQUIRE_TRUSTED_CHAIN`      | `false`                                             |
-| `accept_test_certificates`             | `ASSINAVELOX_A3_ACCEPT_TEST_CERTIFICATES`   | `true` fora de produção                             |
-| `reason`                               | `ASSINAVELOX_A3_REASON`                     | "Assinatura do participante com certificado em componente externo" |
-| `components.simulated.enabled`         | `ASSINAVELOX_A3_SIMULATOR_ENABLED`          | `false`                                             |
-| `components.simulated.pfx_path`        | `ASSINAVELOX_A3_SIMULATOR_PFX`              | —                                                   |
-| `components.simulated.pass_env`        | `ASSINAVELOX_A3_SIMULATOR_PASS_ENV`         | `ASSINAVELOX_A3_SIMULATOR_PFX_PASS` (nome, não valor) |
-| `components.nexu.*`                    | `ASSINAVELOX_A3_NEXU_HTTP` / `_HTTPS` / `_MIN_VERSION` | `127.0.0.1:9795` / `:9895` / `1.25.0`    |
+| chave                               | env                                                    | padrão                                                             |
+| ----------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `enabled`                           | `ASSINAVELOX_FEATURE_A3_SIGNING`                       | `false`                                                            |
+| `pending_ttl_minutes`               | `ASSINAVELOX_A3_PENDING_TTL_MINUTES`                   | 10 (1–60)                                                          |
+| `lock_wait_seconds`                 | `ASSINAVELOX_A3_LOCK_WAIT_SECONDS`                     | 10                                                                 |
+| `pending_path`                      | `ASSINAVELOX_A3_PENDING_PATH`                          | `storage/app/private/external-signing`                             |
+| `bytes_reserved`                    | `ASSINAVELOX_A3_BYTES_RESERVED`                        | 16384                                                              |
+| `max_certificate_kb` / `max_cms_kb` | `ASSINAVELOX_A3_MAX_CERTIFICATE_KB` / `…_MAX_CMS_KB`   | 32 / 48                                                            |
+| `max_chain_certificates`            | `ASSINAVELOX_A3_MAX_CHAIN`                             | 6                                                                  |
+| `trust_anchors`                     | `ASSINAVELOX_A3_TRUST_ANCHORS`                         | vazio (cadeia "não verificada")                                    |
+| `require_trusted_chain`             | `ASSINAVELOX_A3_REQUIRE_TRUSTED_CHAIN`                 | `false`                                                            |
+| `accept_test_certificates`          | `ASSINAVELOX_A3_ACCEPT_TEST_CERTIFICATES`              | `true` fora de produção                                            |
+| `reason`                            | `ASSINAVELOX_A3_REASON`                                | "Assinatura do participante com certificado em componente externo" |
+| `components.simulated.enabled`      | `ASSINAVELOX_A3_SIMULATOR_ENABLED`                     | `false`                                                            |
+| `components.simulated.pfx_path`     | `ASSINAVELOX_A3_SIMULATOR_PFX`                         | —                                                                  |
+| `components.simulated.pass_env`     | `ASSINAVELOX_A3_SIMULATOR_PASS_ENV`                    | `ASSINAVELOX_A3_SIMULATOR_PFX_PASS` (nome, não valor)              |
+| `components.nexu.*`                 | `ASSINAVELOX_A3_NEXU_HTTP` / `_HTTPS` / `_MIN_VERSION` | `127.0.0.1:9795` / `:9895` / `1.25.0`                              |
 
 Plano: `plans.features.a3_signing = true`. Em produção, `pending_path` precisa ser compartilhado entre os servidores web
 (a preparação e o envio podem cair em máquinas diferentes) e não versionado.
@@ -369,18 +458,18 @@ Plano: `plans.features.a3_signing = true`. Em produção, `pending_path` precisa
 
 - **pytest** (`tools/pdftool/tests/test_external.py`, 12) — §4.
 - **Pest** (`tests/Feature/Phase3/External`, 16):
-  - `ExternalSigningFlowTest` (4): fluxo completo com o **simulador** gera assinatura válida, em revisão incremental
-    (base ⊂ revisão ⊂ final), confiável com a raiz de teste, **rotulada como simulada** em estado, evidências e verificação
-    pública, operadora por último; componente habilitado (dublê) + certificado que declara A3 → `participant_a3` com
-    assinatura bruta; modo CMS → `participant_external` (nunca A3 sem declaração); sem operadora.
-  - `ExternalSigningRejectionTest` (5): digest **expirado** (e nova preparação), **reutilizado** (consumo único), de **outra
-    revisão** (o A1 de outro participante gravou durante a janela → `stale_revision`, depois cadeia A1 + externa + operadora
-    sã), assinatura **adulterada**, **outro certificado**, CMS de outro conteúdo; reserva do simulador fora do simulador.
-  - `ExternalSigningConcurrencyTest` (3): **corrida de duas preparações no mesmo envelope** não gera revisões irmãs (uma
-    espera a outra; a segunda parte da revisão da primeira); lock ocupado não grava nada nem consome a reserva; o banco
-    recusa duas reservas ativas no mesmo documento.
-  - `ExternalSigningSecurityTest` (4): **nenhum estado pendente contém segredo**; **flag desligada = nada muda**; simulador
-    só em teste/local e NexU desabilitado; âncoras fixadas por impressão digital.
+    - `ExternalSigningFlowTest` (4): fluxo completo com o **simulador** gera assinatura válida, em revisão incremental
+      (base ⊂ revisão ⊂ final), confiável com a raiz de teste, **rotulada como simulada** em estado, evidências e verificação
+      pública, operadora por último; componente habilitado (dublê) + certificado que declara A3 → `participant_a3` com
+      assinatura bruta; modo CMS → `participant_external` (nunca A3 sem declaração); sem operadora.
+    - `ExternalSigningRejectionTest` (5): digest **expirado** (e nova preparação), **reutilizado** (consumo único), de **outra
+      revisão** (o A1 de outro participante gravou durante a janela → `stale_revision`, depois cadeia A1 + externa + operadora
+      sã), assinatura **adulterada**, **outro certificado**, CMS de outro conteúdo; reserva do simulador fora do simulador.
+    - `ExternalSigningConcurrencyTest` (3): **corrida de duas preparações no mesmo envelope** não gera revisões irmãs (uma
+      espera a outra; a segunda parte da revisão da primeira); lock ocupado não grava nada nem consome a reserva; o banco
+      recusa duas reservas ativas no mesmo documento.
+    - `ExternalSigningSecurityTest` (4): **nenhum estado pendente contém segredo**; **flag desligada = nada muda**; simulador
+      só em teste/local e NexU desabilitado; âncoras fixadas por impressão digital.
 - O "token" dos testes é `tests/Feature/Phase3/External/Support/external_signer.py` (ferramenta de teste: chave no
   diretório do teste, certificado de TESTE, opcionalmente com política A3) — o servidor só vê certificado, digest e assinatura.
 
@@ -402,4 +491,7 @@ Plano: `plans.features.a3_signing = true`. Em produção, `pending_path` precisa
    `statusLabel`, que sem eles lançaria `UnhandledMatchError` com os valores novos do enum) e
    `app/Services/Signing/Certificates/ParticipantSignatureViews.php` (pedidos por componente saem da lista "A1" e entram
    com rótulos próprios). Sem essas duas, uma assinatura por componente apareceria como "certificado A1".
+   Também `tests/Feature/Smoke/AllGetRoutesTest.php` (registro das duas rotas GET novas, `sign.external.show` e
+   `sign.external.simulator.certificate`, na lista de 404 e nos parâmetros, com o mesmo token sintético de
+   `sign.certificate.show` — como fizeram P3-AFF e P3-RISK): sem isso o smoke lança `UrlGenerationException`.
 8. `tools/pdftool/README.md` (compartilhado) não foi alterado: os dois comandos estão documentados aqui (§4).

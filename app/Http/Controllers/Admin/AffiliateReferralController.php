@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Referral;
 use App\Models\User;
+use App\Services\Affiliates\AffiliateProgram;
 use App\Services\Affiliates\AffiliatesFeature;
 use App\Services\Affiliates\AffiliateTrail;
 use App\Services\Affiliates\CommissionLedger;
@@ -37,6 +38,10 @@ class AffiliateReferralController extends Controller
 
         /** @var User $actor */
         $actor = $request->user();
+
+        // Separação de interesse: a operadora não libera a indicação do próprio link.
+        AffiliateProgram::assertNotSelf($referral->affiliate, $actor);
+
         $to = $validated['decision'] === 'release' ? Referral::STATUS_ACTIVE : Referral::STATUS_REJECTED;
         $note = trim((string) $validated['note']);
 

@@ -10,6 +10,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SignerBrand } from '@/components/branding/types';
 import { ParticipantCertificateCard } from '@/components/certificates/participant-certificate-card';
+import { ExternalSigningCard } from '@/components/external-signing/external-signing-card';
+import { GovBrReturnCard } from '@/components/external-signing/govbr-return-card';
 import {
     CaptureStepCard,
     CaptureStepPreview,
@@ -985,6 +987,33 @@ export default function SignShow(props: SignShowProps) {
                                     onApplied={reloadReceipt}
                                 />
                             )}
+                        {/*
+                         * Fase 3 §3.4 e §3.5: token (A3) por componente local e devolução pelo
+                         * portal gov.br — cada um só aparece se o servidor oferecer (404 = oculto).
+                         */}
+                        {action?.type !== 'approve' &&
+                            action?.type !== 'view' && (
+                                <>
+                                    {/*
+                                     * `key={screen}`: finalizando → concluído remonta os cartões,
+                                     * que reconsultam o estado (senão ficariam com o de antes).
+                                     */}
+                                    <ExternalSigningCard
+                                        key={`external-${screen}`}
+                                        token={token}
+                                        className="mt-4"
+                                        onApplied={reloadReceipt}
+                                        reauthAvailable={otp !== null}
+                                    />
+                                    <GovBrReturnCard
+                                        key={`govbr-${screen}`}
+                                        token={token}
+                                        className="mt-4"
+                                        onCompleted={reloadReceipt}
+                                        reauthAvailable={otp !== null}
+                                    />
+                                </>
+                            )}
                         <ParticipantsCard
                             others={others}
                             className="mt-4"
@@ -1527,6 +1556,9 @@ export default function SignShow(props: SignShowProps) {
                      * o servidor decide se é oferecida (404 = o cartão não aparece).
                      */}
                     {!approving && <ParticipantCertificateCard token={token} />}
+                    {/* Fase 3 §3.4 e §3.5: 404 = o cartão não existe (flag desligada). */}
+                    {!approving && <ExternalSigningCard token={token} />}
+                    {!approving && <GovBrReturnCard token={token} />}
 
                     <ParticipantsCard
                         others={others}

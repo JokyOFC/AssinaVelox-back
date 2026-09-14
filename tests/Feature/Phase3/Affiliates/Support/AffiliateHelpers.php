@@ -15,7 +15,6 @@ use App\Models\Plan;
 use App\Models\Referral;
 use App\Models\User;
 use App\Services\Affiliates\AffiliateProgram;
-use App\Services\Affiliates\AffiliateRiskSignals;
 use App\Services\Affiliates\AffiliatesServiceProvider;
 use Carbon\CarbonInterface;
 use Illuminate\Testing\TestResponse;
@@ -90,29 +89,6 @@ if (! function_exists('makeAffiliate')) {
             'terms_accepted_at' => now()->subDays(120),
             'approved_at' => now()->subDays(119),
         ], $attributes));
-    }
-}
-
-if (! function_exists('fakeAffiliateRisk')) {
-    /**
-     * Dublê do contrato do antifraude (RiskSignals::record via AffiliateRiskSignals).
-     */
-    function fakeAffiliateRisk(): AffiliateRiskSignals
-    {
-        $spy = new class extends AffiliateRiskSignals
-        {
-            /** @var list<array{organization: Organization, affiliate: Affiliate, referral: Referral, reasons: list<string>}> */
-            public array $calls = [];
-
-            public function report(Organization $organization, Affiliate $affiliate, Referral $referral, array $reasons): void
-            {
-                $this->calls[] = compact('organization', 'affiliate', 'referral', 'reasons');
-            }
-        };
-
-        app()->instance(AffiliateRiskSignals::class, $spy);
-
-        return $spy;
     }
 }
 

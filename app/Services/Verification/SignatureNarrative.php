@@ -144,7 +144,10 @@ final class SignatureNarrative
             SignatureStatus::Mixed => 'Concluído · assinado com certificados dos participantes e da operadora',
             // Fase 3 §3.4 (P3-EXT): rótulo por meio, com "simulado" quando for o caso.
             SignatureStatus::ParticipantA3,
-            SignatureStatus::ParticipantExternal => ExternalSignatureNarrative::statusLabel($envelope, $record),
+            SignatureStatus::ParticipantExternal,
+            // Fase 3 §3.5 (I-3A): documento devolvido pelo portal gov.br (com ou sem cadeia verificada).
+            SignatureStatus::ParticipantGovBr,
+            SignatureStatus::ParticipantExternalUnverified => ExternalSignatureNarrative::statusLabel($envelope, $record),
             SignatureStatus::None => 'Concluído · aceite eletrônico com evidências',
         };
     }

@@ -2,6 +2,8 @@
 
 namespace App\Services\Signing\GovBr;
 
+use Illuminate\Support\Str;
+
 /**
  * A decisão sobre uma devolução, a partir do resultado do `pdftool verify-incremental`
  * (P3-GOV, docs/fase-3/gov-br.md §4). Pura: sem banco, sem disco — testável à parte.
@@ -16,7 +18,8 @@ namespace App\Services\Signing\GovBr;
  * (c) com âncoras gov.br configuradas, a cadeia confere com elas (senão, recusa); sem
  *     âncoras, aceita com o rótulo "assinatura digital de terceiro, cadeia não verificada";
  * (d) quando o participante informou CPF neste envelope, o CPF do certificado confere (e,
- *     com `require_holder_cpf`, o certificado PRECISA trazer um CPF legível);
+ *     com `require_holder_cpf`, o certificado PRECISA trazer um CPF legível); sem CPF
+ *     informado, o NOME do titular precisa corresponder ao do participante;
  *
  * mais: certificado de teste só onde `accept_test_certificates` permite.
  */
@@ -41,6 +44,7 @@ final class GovBrReturnDecision
         bool $participantInformedCpf,
         bool $requireHolderCpf,
         bool $acceptTestCertificates,
+        ?string $participantName = null,
     ): self {
         $problems = array_values(array_filter((array) ($result['problems'] ?? []), 'is_string'));
 
@@ -71,8 +75,9 @@ final class GovBrReturnDecision
             return new self(false, 'test_certificate_not_accepted', null, $result);
         }
 
+        $holder = is_array($signature['holder'] ?? null) ? $signature['holder'] : [];
+
         if ($participantInformedCpf) {
-            $holder = is_array($signature['holder'] ?? null) ? $signature['holder'] : [];
             $match = (string) ($holder['cpf_match'] ?? 'unknown');
 
             if ($match === 'mismatch') {
@@ -82,9 +87,57 @@ final class GovBrReturnDecision
             if ($match !== 'match' && $requireHolderCpf) {
                 return new self(false, 'holder_cpf_not_found', null, $result);
             }
+        } elseif ($participantName !== null) {
+            // Sem CPF informado, o NOME do titular precisa corresponder ao do participante
+            // (docs/integracoes/gov-br-assinatura.md §6, item 3; revisão adversarial I-3A).
+            // Sem isso, qualquer conta gov.br assinaria "pelo" participante.
+            $holderName = is_string($holder['name'] ?? null) ? $holder['name'] : null;
+
+            if ($holderName === null || trim($holderName) === '') {
+                return new self(false, 'holder_name_not_found', null, $result);
+            }
+
+            if (! self::namesCorrespond($participantName, $holderName)) {
+                return new self(false, 'holder_name_mismatch', null, $result);
+            }
         }
 
         return new self(true, null, GovBrSignatureKind::for($anchorsConfigured, $trusted), $result);
+    }
+
+    /**
+     * O nome do certificado corresponde ao do participante? Comparação sem acento e sem caixa,
+     * palavra a palavra: o primeiro nome precisa ser igual e TODAS as demais palavras do nome
+     * cadastrado (fora partículas "de", "da", "dos"…) precisam estar no nome do certificado — o
+     * cadastro costuma abreviar ("Maria Souza"), o certificado traz o nome completo. O marcador
+     * `TESTE` dos certificados de teste é ignorado.
+     */
+    public static function namesCorrespond(string $participantName, string $holderName): bool
+    {
+        $participant = self::nameTokens($participantName);
+        $holder = self::nameTokens($holderName);
+
+        if ($participant === [] || $holder === [] || $participant[0] !== $holder[0]) {
+            return false;
+        }
+
+        return array_diff($participant, $holder) === [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function nameTokens(string $name): array
+    {
+        $ascii = strtoupper(Str::ascii($name));
+        // "NOME:CPF" (formato comum no CN de certificados brasileiros) — só o nome importa.
+        $ascii = (string) preg_replace('/:\s*[\d.\-*]+\s*$/', '', $ascii);
+        $words = preg_split('/[^A-Z]+/', $ascii, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return array_values(array_filter(
+            $words,
+            static fn (string $word): bool => strlen($word) > 1 && ! in_array($word, ['DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'TESTE'], true),
+        ));
     }
 
     /**

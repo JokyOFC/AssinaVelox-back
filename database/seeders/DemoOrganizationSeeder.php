@@ -17,6 +17,7 @@ use App\Enums\Permission;
 use App\Enums\RecipientStatus;
 use App\Enums\SigningOrder;
 use App\Enums\SigningSessionStatus;
+use App\Models\Affiliate;
 use App\Models\ApiToken;
 use App\Models\AuditEvent;
 use App\Models\AuthChallenge;
@@ -36,6 +37,7 @@ use App\Models\Plan;
 use App\Models\PlanConsumption;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
+use App\Models\Referral;
 use App\Models\RetentionPolicy;
 use App\Models\Role;
 use App\Models\SignatureAcceptance;
@@ -48,11 +50,13 @@ use App\Models\Template;
 use App\Models\User;
 use App\Models\VerificationRecord;
 use App\Models\WebhookEndpoint;
+use App\Services\Affiliates\CommissionLedger;
 use App\Services\Branding\BrandingManager;
 use App\Services\PublicForms\PublicFormManager;
 use App\Services\PublicForms\PublicFormSchema;
 use App\Services\Retention\LegalHolds;
 use App\Services\Retention\LegalHoldScope;
+use App\Services\Risk\RiskSignals;
 use App\Services\Signing\Certificates\ParticipantCertificateTool;
 use App\Services\Signing\Channels\SenderPins;
 use App\Services\Tags\TagColor;
@@ -110,6 +114,22 @@ class DemoOrganizationSeeder extends Seeder
     ];
 
     /**
+     * Fase 3, parte 1 (docs/fase-3/parte-1-relatorio.md §5): itens de PLANO — ligados na
+     * Horizonte, desligados na Vega. Antifraude, afiliados e PAdES de longo prazo são da
+     * plataforma (só o .env). A interface só aparece com os interruptores globais ligados.
+     */
+    private const PHASE3_PART1_PLAN_FEATURES = ['a3_signing', 'govbr_return'];
+
+    /** Diretório (em storage/app/private) do PKCS#12 de TESTE do simulador de componente local. */
+    public const DEMO_PHASE3_DIR = 'demo/fase-3';
+
+    /**
+     * Senha do PKCS#12 de TESTE do SIMULADOR de componente local (Fase 3 §3.4). Certificado de
+     * TESTE, nunca A3 nem ICP-Brasil; dado de demonstração, só para o ambiente local.
+     */
+    public const DEMO_A3_SIMULATOR_PASSWORD = 'demo-simulador-A3-TESTE';
+
+    /**
      * Senha do certificado A1 de TESTE do participante gerado para a demonstração (onda C).
      * Certificado de TESTE (AC descartável, CN com "TESTE"), nunca ICP-Brasil: a senha é um
      * dado de demonstração como {@see self::PASSWORD}, só para o ambiente local.
@@ -144,8 +164,8 @@ class DemoOrganizationSeeder extends Seeder
         // os itens da onda A; o da Vega (Grátis) não. O recurso só aparece quando o
         // interruptor GLOBAL também está ligado (`ASSINAVELOX_FEATURE_*` no .env) — desligado,
         // que é o padrão e o que os testes usam, a demonstração é exatamente a da Fase 1.
-        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true))])->save();
-        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false))])->save();
+        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true))])->save();
+        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false))])->save();
 
         DB::transaction(function () use ($free, $professional): void {
             $hasPlatformCertificate = CertificateReference::query()
@@ -164,6 +184,37 @@ class DemoOrganizationSeeder extends Seeder
         // Onda C: arquivos de TESTE gerados pelo pdftool — fora da transação (regra da onda:
         // nenhuma transação aberta durante chamada ao pdftool).
         $this->seedWaveCTestFiles();
+        $this->seedPhase3TestFiles();
+    }
+
+    /**
+     * Fase 3, parte 1: PKCS#12 de TESTE do simulador de componente local (A3 simulado — nunca A3),
+     * fora da transação (chama o pdftool). As variáveis do .env para usá-lo são impressas aqui;
+     * a senha é a constante {@see self::DEMO_A3_SIMULATOR_PASSWORD}, só local.
+     */
+    private function seedPhase3TestFiles(): void
+    {
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
+        $directory = storage_path('app/private/'.self::DEMO_PHASE3_DIR);
+        File::ensureDirectoryExists($directory, 0700);
+
+        try {
+            app(ParticipantCertificateTool::class)->generateTestCertificate(
+                $directory.DIRECTORY_SEPARATOR.'simulador-a3-teste.pfx',
+                self::DEMO_A3_SIMULATOR_PASSWORD,
+                'Maria Alves Souza',
+                days: 365,
+                outCaPem: $directory.DIRECTORY_SEPARATOR.'simulador-a3-teste-ac.pem',
+            );
+
+            $this->command->info('Fase 3: PKCS#12 de TESTE do simulador de componente local em storage/app/private/'.self::DEMO_PHASE3_DIR
+                .' (ASSINAVELOX_A3_SIMULATOR_PFX / ASSINAVELOX_A3_SIMULATOR_PASS_ENV; senha: DemoOrganizationSeeder::DEMO_A3_SIMULATOR_PASSWORD).');
+        } catch (Throwable $exception) {
+            $this->command->warn('Fase 3: PKCS#12 do simulador não gerado ('.class_basename($exception).'). O pdftool precisa do venv em tools/pdftool/.venv.');
+        }
     }
 
     /**
@@ -334,6 +385,7 @@ class DemoOrganizationSeeder extends Seeder
         $this->seedHorizonteWaveB($org, $owner);
         $this->seedHorizonteWaveC($org, $owner);
         $this->seedHorizonteWaveD($org, $owner, $subscription, $approvedPayment);
+        $this->seedHorizontePhase3PartOne($org, $approvedPayment);
     }
 
     /**
@@ -347,6 +399,72 @@ class DemoOrganizationSeeder extends Seeder
      * As flags de plano ficam ligadas na Horizonte e desligadas na Vega; a interface só aparece
      * com os interruptores globais `ASSINAVELOX_FEATURE_*` (e `extended_payments` só pelo .env).
      */
+    /**
+     * Fase 3, parte 1 (docs/fase-3/parte-1-relatorio.md §5) na Horizonte, pelos serviços REAIS:
+     *  - antifraude: um sinal de taxa de falha de entrega (só contagens) que leva a organização a
+     *    `watch` com um caso aberto na fila — `watch` NÃO suspende envio;
+     *  - afiliados: uma parceira aprovada (dados de repasse de TESTE), a indicação da Horizonte e
+     *    as comissões calculadas sobre os pagamentos da demonstração. O sistema calcula, não paga.
+     * As flags da plataforma são ligadas só durante a semeadura e voltam ao valor do .env.
+     */
+    private function seedHorizontePhase3PartOne(Organization $org, Payment $approvedPayment): void
+    {
+        $antifraud = config('assinavelox.features.antifraud');
+        $affiliates = config('assinavelox.features.affiliates');
+        $sandbox = config('assinavelox.affiliates.include_sandbox_payments');
+
+        try {
+            config()->set('assinavelox.features.antifraud', true);
+            RiskSignals::record('delivery_failure_rate', $org, [
+                // Só as chaves do catálogo da regra (RiskRule::evidenceKeys): contagens, nunca endereços.
+                'attempts_in_window' => 24,
+                'failed_in_window' => 9,
+                'failure_rate' => 0.375,
+                'window_minutes' => 1440,
+                'threshold' => 0.3,
+            ]);
+
+            config()->set('assinavelox.features.affiliates', true);
+            config()->set('assinavelox.affiliates.include_sandbox_payments', true);
+
+            $partner = $this->user('Paula Parceira Demo', 'parceira@afiliados.demo');
+            $affiliate = Affiliate::query()->create([
+                'user_id' => $partner->id,
+                'code' => 'PARCDEMO',
+                'commission_rate_bp' => 1000,
+                'status' => Affiliate::STATUS_APPROVED,
+                // CPF de TESTE (dígitos válidos, público em documentação de exemplo) — nenhum dado real.
+                'payout_details' => [
+                    'method' => 'pix',
+                    'pix_key_type' => 'email',
+                    'pix_key' => 'parceira@afiliados.demo',
+                    'holder_name' => 'Paula Parceira Demo',
+                    'holder_tax_id' => '52998224725',
+                ],
+                'terms_version' => 'afiliados-demo',
+                'terms_accepted_at' => now()->subDays(120),
+                'approved_at' => now()->subDays(119),
+            ]);
+
+            Referral::query()->create([
+                'affiliate_id' => $affiliate->id,
+                'organization_id' => $org->id,
+                'user_id' => $org->created_by_user_id,
+                'source' => Referral::SOURCE_LINK,
+                'status' => Referral::STATUS_ACTIVE,
+                'clicked_at' => now()->subDays(100),
+                'attributed_at' => now()->subDays(100),
+                'expires_at' => now()->addMonths(9),
+            ]);
+
+            app(CommissionLedger::class)->syncOrganization((int) $org->id);
+        } finally {
+            config()->set('assinavelox.features.antifraud', $antifraud);
+            config()->set('assinavelox.features.affiliates', $affiliates);
+            config()->set('assinavelox.affiliates.include_sandbox_payments', $sandbox);
+        }
+    }
+
     private function seedHorizonteWaveD(Organization $org, User $owner, Subscription $subscription, Payment $approvedPayment): void
     {
         $secret = (string) config('sanctum.token_prefix', '').Str::random(40);

@@ -95,7 +95,11 @@ final class RiskDetector
 
         if (is_string($ip) && $ip !== '') {
             $perIp = max(1, (int) $rule->config('per_ip', 25));
+            // Só as falhas NESTA organização (revisão adversarial I-3A): o sinal é gravado nela e
+            // a explicação pública diz "links desta conta" — falhas em outras organizações não
+            // podem pontuar quem teve uma única tentativa errada (art. 20 §1º).
             $failures = AuditEvent::withoutOrganizationScope()
+                ->where('organization_id', $organization->getKey())
                 ->where('ip_address', $ip)
                 ->whereIn('event_type', $types)
                 ->where('occurred_at', '>=', $since)

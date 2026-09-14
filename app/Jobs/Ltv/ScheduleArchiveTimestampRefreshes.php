@@ -33,7 +33,9 @@ class ScheduleArchiveTimestampRefreshes implements ShouldQueue
 
         $records = VerificationRecord::query()
             ->with('documents')
-            ->where('ltv_status', LtvStatus::BLta->value)
+            // A camada de arquivamento é o que se renova — inclusive num arquivo cujo nível
+            // efetivo é B-B por causa de assinaturas de participantes (LtvState::apply).
+            ->where(fn ($query) => $query->where('ltv_status', LtvStatus::BLta->value)->orWhereNotNull('ltv_archive_expires_at'))
             ->whereNotNull('ltv_next_refresh_at')
             ->where('ltv_next_refresh_at', '<=', Carbon::now()->format('Y-m-d H:i:s'))
             ->whereNull('revoked_at')

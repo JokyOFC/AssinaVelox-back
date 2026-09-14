@@ -2,6 +2,8 @@
 
 namespace App\Services\Risk;
 
+use App\Enums\MembershipStatus;
+use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\RiskReview;
 use App\Models\RiskSignal;
@@ -27,7 +29,11 @@ final class RiskReviewDecisions
 
     public function __construct(private readonly RiskTransitions $transitions) {}
 
-    public function decide(RiskReview $review, RiskDecision $decision, string $reason, User $reviewer): RiskReview
+    /**
+     * @param  int|null  $seenThroughSignalId  último sinal que o revisor tinha na tela (0 = nenhum);
+     *                                         null só em chamadas internas, sem tela
+     */
+    public function decide(RiskReview $review, RiskDecision $decision, string $reason, User $reviewer, ?int $seenThroughSignalId = null): RiskReview
     {
         $reason = trim($reason);
 
@@ -35,7 +41,11 @@ final class RiskReviewDecisions
             throw RiskException::reasonRequired();
         }
 
-        [$decided, $organization, $changed] = DB::transaction(function () use ($review, $decision, $reason, $reviewer): array {
+        if (self::hasConflict($reviewer, (int) $review->organization_id)) {
+            throw RiskException::conflictOfInterest();
+        }
+
+        [$decided, $organization, $changed] = DB::transaction(function () use ($review, $decision, $reason, $reviewer, $seenThroughSignalId): array {
             /** @var Organization $organization */
             $organization = Organization::withTrashed()->whereKey($review->organization_id)->lockForUpdate()->firstOrFail();
 
@@ -44,6 +54,12 @@ final class RiskReviewDecisions
 
             if (! $locked->isOpen()) {
                 throw RiskException::alreadyDecided();
+            }
+
+            // A decisão só cobre o que o revisor viu: sinal novo desde a tela ⇒ recarregar
+            // (revisão adversarial I-3A; "toda decisão tem regra + evidência + revisor").
+            if ($seenThroughSignalId !== null && $locked->signalsQuery()->where('id', '>', $seenThroughSignalId)->exists()) {
+                throw RiskException::caseChanged();
             }
 
             $from = RiskStatus::fromStored($organization->getAttribute('risk_status'));
@@ -90,5 +106,18 @@ final class RiskReviewDecisions
         }
 
         return $decided;
+    }
+
+    /**
+     * Separação de interesse (revisão adversarial I-3A): quem tem vínculo ativo com a
+     * organização do caso — dono, administrador ou operador — não é o revisor humano dela.
+     */
+    public static function hasConflict(User $reviewer, int $organizationId): bool
+    {
+        return Membership::query()
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $reviewer->getKey())
+            ->where('status', MembershipStatus::Active->value)
+            ->exists();
     }
 }

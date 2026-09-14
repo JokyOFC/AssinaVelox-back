@@ -96,9 +96,13 @@ class RiskReviewController extends Controller
         ]);
     }
 
-    public function show(RiskReview $review): Response
+    public function show(Request $request, RiskReview $review): Response
     {
         abort_unless(RiskFeature::enabled(), 404);
+
+        /** @var User $viewer */
+        $viewer = $request->user();
+        $conflict = RiskReviewDecisions::hasConflict($viewer, (int) $review->organization_id);
 
         $review->loadMissing(['organization', 'reviewer:id,name', 'appealRequester:id,name']);
         $organization = $review->organization;
@@ -163,7 +167,10 @@ class RiskReviewController extends Controller
                 'ip' => OrganizationAuditLog::maskIp($event->ip_address),
             ])->values()->all(),
             'decisions' => RiskDecision::options(),
-            'can_decide' => $review->isOpen(),
+            'can_decide' => $review->isOpen() && ! $conflict,
+            'conflict_of_interest' => $review->isOpen() && $conflict,
+            // A decisão só cobre os sinais até este (o mais recente exibido).
+            'seen_through' => $signals->first()?->ulid,
             'min_reason' => RiskReviewDecisions::MIN_REASON,
         ]);
     }
@@ -175,13 +182,34 @@ class RiskReviewController extends Controller
         $validated = $request->validate([
             'decision' => ['required', Rule::enum(RiskDecision::class)],
             'reason' => ['required', 'string', 'min:'.RiskReviewDecisions::MIN_REASON, 'max:2000'],
-        ], [], ['decision' => 'decisão', 'reason' => 'motivo']);
+            // Último sinal que estava na tela (ULID; vazio quando o caso não tinha sinais).
+            'seen_through' => ['present', 'nullable', 'string', 'max:26'],
+        ], [
+            'seen_through.present' => 'Recarregue a página do caso antes de decidir.',
+        ], ['decision' => 'decisão', 'reason' => 'motivo']);
 
         /** @var User $reviewer */
         $reviewer = $request->user();
 
+        if (RiskReviewDecisions::hasConflict($reviewer, (int) $review->organization_id)) {
+            abort(403, RiskException::conflictOfInterest()->getMessage());
+        }
+
+        $seen = 0;
+
+        if (is_string($validated['seen_through'] ?? null) && $validated['seen_through'] !== '') {
+            $seen = RiskSignal::query()
+                ->where('organization_id', $review->organization_id)
+                ->where('ulid', $validated['seen_through'])
+                ->value('id');
+
+            if ($seen === null) {
+                throw ValidationException::withMessages(['seen_through' => 'Recarregue a página do caso antes de decidir.']);
+            }
+        }
+
         try {
-            $decided = $decisions->decide($review, RiskDecision::from((string) $validated['decision']), (string) $validated['reason'], $reviewer);
+            $decided = $decisions->decide($review, RiskDecision::from((string) $validated['decision']), (string) $validated['reason'], $reviewer, (int) $seen);
         } catch (RiskException $exception) {
             if ($exception->errorCode === 'reason_required') {
                 throw ValidationException::withMessages(['reason' => $exception->getMessage()]);

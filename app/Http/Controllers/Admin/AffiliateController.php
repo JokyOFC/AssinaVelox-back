@@ -132,6 +132,7 @@ class AffiliateController extends Controller
             ),
             'commissions' => AffiliatePresenter::commissionRows(
                 Commission::query()->where('affiliate_id', $affiliate->getKey())->orderByDesc('id')->limit(100)->get(),
+                true,
             ),
             'trail' => AffiliateTrail::forAffiliate($affiliate),
             'program' => AffiliatePresenter::program($this->settings),

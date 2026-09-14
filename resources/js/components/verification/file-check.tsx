@@ -12,7 +12,7 @@ import { CopyButton } from '@/components/copy-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { formatBytes } from '@/lib/format';
+import { formatBytes, formatDateTime } from '@/lib/format';
 import {
     HASH_SUPPORT_MESSAGES,
     hashesMatch,
@@ -47,10 +47,17 @@ export interface FileCheckManual {
     /** URL de `verify.check_file`. */
     action: string;
     result: {
-        matches: 'signed' | 'original' | 'none';
+        /**
+         * `signed_previous` (Fase 3 §3.6, depois da integração do histórico de resumos): o
+         * resumo é de uma versão ANTERIOR do arquivo final, substituída por um novo carimbo de
+         * arquivamento — o conteúdo do documento não mudou.
+         */
+        matches: 'signed' | 'original' | 'signed_previous' | 'none';
         checked_sha256: string;
         /** Fase 2 §2.3: com vários arquivos, qual deles conferiu. */
         document?: { position: number; name: string } | null;
+        valid_from?: string | null;
+        superseded_at?: string | null;
     } | null;
 }
 
@@ -440,7 +447,7 @@ function ManualHashCheck({
         ? ` — arquivo ${result.document.position}. ${result.document.name}`
         : '';
     const matched =
-        result && result.matches !== 'none'
+        result && (result.matches === 'signed' || result.matches === 'original')
             ? (targets.find((target) =>
                   result.matches === 'signed'
                       ? target.canonical
@@ -497,11 +504,26 @@ function ManualHashCheck({
                         'mt-2 rounded-[10px] border p-3 text-[12.5px] leading-[1.5]',
                         result.matches === 'signed'
                             ? 'border-success-border bg-success-bg text-success'
-                            : result.matches === 'original'
+                            : result.matches === 'original' ||
+                                result.matches === 'signed_previous'
                               ? 'border-warning-border bg-warning-bg text-warning'
                               : 'border-danger-border bg-danger-bg text-danger',
                     )}
                 >
+                    {result.matches === 'signed_previous' && (
+                        <>
+                            <b>
+                                Confere com uma versão anterior do arquivo final
+                                {matchedFile}.
+                            </b>{' '}
+                            Ela foi substituída
+                            {result.superseded_at
+                                ? ` em ${formatDateTime(result.superseded_at)}`
+                                : ''}{' '}
+                            por um novo carimbo do tempo de arquivamento; o
+                            conteúdo do documento não mudou.
+                        </>
+                    )}
                     {result.matches === 'signed' && (
                         <>
                             <b>Confere.</b> O resumo informado é o do arquivo

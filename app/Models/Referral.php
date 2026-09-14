@@ -61,6 +61,9 @@ class Referral extends Model
     /** Regra que SEGURA a comissão até revisão (possível conta duplicada). */
     public const REASON_DUPLICATE_IP = 'duplicate_ip';
 
+    /** Regra que SEGURA a comissão: o afiliado é dono ou administrador da organização indicada. */
+    public const REASON_SAME_MEMBER = 'same_member';
+
     public const SELF_REFERRAL_REASONS = [self::REASON_SAME_USER, self::REASON_SAME_EMAIL, self::REASON_SAME_DOMAIN, self::REASON_SAME_IP];
 
     /** @var list<string> */
@@ -135,6 +138,7 @@ class Referral extends Model
             self::REASON_SAME_DOMAIN => 'Mesmo domínio corporativo do afiliado',
             self::REASON_SAME_IP => 'Mesmo IP usado pelo afiliado dentro da janela',
             self::REASON_DUPLICATE_IP => 'Mesmo IP de outra indicação do afiliado dentro da janela',
+            self::REASON_SAME_MEMBER => 'O afiliado é dono ou administrador da organização indicada',
             default => $reason,
         };
     }

@@ -23,7 +23,6 @@ require_once __DIR__.'/../../Billing/Support/BillingHelpers.php';
 
 beforeEach(function (): void {
     enableAffiliates();
-    fakeAffiliateRisk();
     $this->affiliate = makeAffiliate();
     ['organization' => $this->organization, 'referral' => $this->referral] = referOrganization($this->affiliate);
     $this->ledger = app(CommissionLedger::class);

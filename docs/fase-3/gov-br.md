@@ -6,15 +6,15 @@
 
 ## 1. Resumo
 
-| Entrega                                            | Onde                                                                         |
-| -------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Contrato da API direta (classe C, sem implementação) | `app/Integrations/GovBr/GovBrSignatureProvider.php`                        |
-| Fluxo de devolução (reserva, download, conferência) | `app/Services/Signing/GovBr/**`                                             |
-| Rotas do participante (JSON + download)            | `app/Http/Controllers/Sign/GovBrReturnController.php`, `routes/web.php`      |
-| `pdftool verify-incremental`                       | `tools/pdftool/pdftool/incremental.py` (registrado em `cli.py`)              |
-| Tabelas                                            | `external_signature_requests` (150101), `external_signature_returns` (150102) |
-| Configuração                                       | `config/assinavelox.php` → `govbr`                                           |
-| Testes                                             | `tests/Feature/Phase3/GovBr/**`, `tools/pdftool/tests/test_incremental.py`   |
+| Entrega                                              | Onde                                                                          |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Contrato da API direta (classe C, sem implementação) | `app/Integrations/GovBr/GovBrSignatureProvider.php`                           |
+| Fluxo de devolução (reserva, download, conferência)  | `app/Services/Signing/GovBr/**`                                               |
+| Rotas do participante (JSON + download)              | `app/Http/Controllers/Sign/GovBrReturnController.php`, `routes/web.php`       |
+| `pdftool verify-incremental`                         | `tools/pdftool/pdftool/incremental.py` (registrado em `cli.py`)               |
+| Tabelas                                              | `external_signature_requests` (150101), `external_signature_returns` (150102) |
+| Configuração                                         | `config/assinavelox.php` → `govbr`                                            |
+| Testes                                               | `tests/Feature/Phase3/GovBr/**`, `tools/pdftool/tests/test_incremental.py`    |
 
 O participante escolhe "assinar no gov.br"; quando o documento está pronto, o sistema **reserva** a revisão mais recente
 (hash registrado), o participante **baixa** exatamente esses bytes, assina no `assinador.iti.br` e **devolve** o arquivo. O
@@ -26,11 +26,11 @@ servidor aceita **somente** o arquivo que estende a revisão reservada com exata
 
 ## 2. Classificação e o que está bloqueado
 
-| Frente                                                | Classe | Situação nesta entrega                                                                                                                                                                                                               |
-| ----------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| API direta (OAuth no CAS do ITI + `assinarPKCS7`)     | **C**  | **Bloqueada.** O AssinaVelox não é elegível: a credencial é só para órgão público, com serviço público, Login Único e `redirect_uri` em domínio de governo (Portaria SGD/MGI 7.076/2024). Só a interface documentada, sem adaptador, sem fake, sem binding (teste garante). |
-| Fluxo de devolução (`assinador.iti.br` → upload)      | **B**  | Implementado com a regra de aceitação completa e testado com PDFs de um **simulador de teste**. Produção desabilitada até as pendências de §9.                                                                                          |
-| Validação automática pelo VALIDAR (`validar.iti.gov.br`) | **C** | Não existe API. Uso só manual, como checklist de release e para produzir a fixture real.                                                                                                                                             |
+| Frente                                                   | Classe | Situação nesta entrega                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API direta (OAuth no CAS do ITI + `assinarPKCS7`)        | **C**  | **Bloqueada.** O AssinaVelox não é elegível: a credencial é só para órgão público, com serviço público, Login Único e `redirect_uri` em domínio de governo (Portaria SGD/MGI 7.076/2024). Só a interface documentada, sem adaptador, sem fake, sem binding (teste garante). |
+| Fluxo de devolução (`assinador.iti.br` → upload)         | **B**  | Implementado com a regra de aceitação completa e testado com PDFs de um **simulador de teste**. Produção desabilitada até as pendências de §9.                                                                                                                              |
+| Validação automática pelo VALIDAR (`validar.iti.gov.br`) | **C**  | Não existe API. Uso só manual, como checklist de release e para produzir a fixture real.                                                                                                                                                                                    |
 
 **O que desbloquearia a API direta** (todos): (1) um órgão público cliente que peça a credencial para um serviço público
 dele; (2) implantação sob o domínio oficial desse órgão, com Login Único; (3) aceite por escrito da SGD
@@ -42,10 +42,10 @@ um projeto por cliente, não uma funcionalidade do SaaS.
 `GovBrSignatureKind` (valor gravado em `external_signature_requests.signature_kind`; candidato a
 `verification_records.signature_status` na integração, §8):
 
-| valor                             | quando                                                                                                        | rótulo                                                   |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `participant_govbr`               | vínculo com a revisão reservada conferido **e** cadeia validada até uma âncora gov.br fixada por impressão digital | "Assinatura gov.br (avançada)"                           |
-| `participant_external_unverified` | qualquer outro caso aceito (sem âncora configurada)                                                           | "Assinatura digital de terceiro, cadeia não verificada" |
+| valor                             | quando                                                                                                             | rótulo                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `participant_govbr`               | vínculo com a revisão reservada conferido **e** cadeia validada até uma âncora gov.br fixada por impressão digital | "Assinatura gov.br (avançada)"                          |
+| `participant_external_unverified` | qualquer outro caso aceito (sem âncora configurada)                                                                | "Assinatura digital de terceiro, cadeia não verificada" |
 
 - **Sem âncora, nunca "gov.br"**, mesmo que a assinatura seja íntegra (teste explícito, inclusive quando o pdftool diria
   "trusted"). Com âncora configurada, cadeia que não confere é **recusada** (não rebaixada).
@@ -61,19 +61,21 @@ um projeto por cliente, não uma funcionalidade do SaaS.
 Tudo é conferido no servidor, offline, sem confiar em nada do arquivo recebido. A decisão é
 `GovBrReturnDecision::decide()` sobre a saída do `pdftool verify-incremental`.
 
-| #   | Exigência                                                                                                                    | Código de recusa                                                                                                  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| a1  | os bytes da revisão reservada são **prefixo exato** do arquivo devolvido (conferido em PHP antes do Python e de novo no pdftool) | `base_not_prefix` (inclui o caso do portal **regravar** o arquivo)                                               |
-| a2  | exatamente **uma** revisão acrescentada                                                                                      | `no_new_revision`, `unexpected_revision_count`                                                                    |
-| b1  | exatamente **uma** assinatura nova; nenhum carimbo de documento novo                                                         | `no_new_signature`, `multiple_new_signatures`, `unexpected_document_timestamp`                                    |
-| b2  | a assinatura nova é íntegra, válida e cobre o **arquivo inteiro**                                                            | `signature_not_intact`, `signature_invalid`, `signature_not_covering_file`                                        |
-| b3  | a revisão da assinatura **não muda nada além do que uma assinatura traz** (análise objeto a objeto, abaixo)                   | `unpermitted_changes`                                                                                             |
-| b4  | assinaturas anteriores (A1 de participantes) continuam íntegras, com mudanças posteriores permitidas; sem violação de DocMDP | `previous_signature_broken`, `docmdp_violation`                                                                   |
-| b5  | certificação que proíbe mudanças (`DocMDP P=1`) é recusada — os demais e a operadora ainda assinam depois; `P=2` é aceita    | `docmdp_locks_document`                                                                                           |
-| c   | com âncoras configuradas, a cadeia confere com elas                                                                          | `chain_not_trusted`; âncora mal configurada → `trust_anchor_misconfigured` (503)                                  |
-| d   | com CPF informado pelo participante (campo `cpf`), o CPF do certificado confere; com `require_holder_cpf`, ele precisa existir | `holder_mismatch`, `holder_cpf_not_found`                                                                         |
-| —   | certificado de teste só onde `accept_test_certificates`                                                                      | `test_certificate_not_accepted`                                                                                   |
-| —   | reserva vigente e revisão reservada ainda a mais recente (compare-and-set sob o lock do envelope)                           | `reservation_expired` (409), `base_changed` (409)                                                                 |
+| #   | Exigência                                                                                                                                                   | Código de recusa                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| a1  | os bytes da revisão reservada são **prefixo exato** do arquivo devolvido (conferido em PHP antes do Python e de novo no pdftool)                            | `base_not_prefix` (inclui o caso do portal **regravar** o arquivo)               |
+| a2  | exatamente **uma** revisão acrescentada                                                                                                                     | `no_new_revision`, `unexpected_revision_count`                                   |
+| b1  | exatamente **uma** assinatura nova; nenhum carimbo de documento novo                                                                                        | `no_new_signature`, `multiple_new_signatures`, `unexpected_document_timestamp`   |
+| b2  | a assinatura nova é íntegra, válida e cobre o **arquivo inteiro**                                                                                           | `signature_not_intact`, `signature_invalid`, `signature_not_covering_file`       |
+| b3  | a revisão da assinatura **não muda nada além do que uma assinatura traz** (análise objeto a objeto, abaixo)                                                 | `unpermitted_changes`                                                            |
+| b4  | assinaturas anteriores (A1 de participantes) continuam íntegras, com mudanças posteriores permitidas; sem violação de DocMDP                                | `previous_signature_broken`, `docmdp_violation`                                  |
+| b5  | certificação que proíbe mudanças (`DocMDP P=1`) é recusada — os demais e a operadora ainda assinam depois; `P=2` é aceita                                   | `docmdp_locks_document`                                                          |
+| c   | com âncoras configuradas, a cadeia confere com elas                                                                                                         | `chain_not_trusted`; âncora mal configurada → `trust_anchor_misconfigured` (503) |
+| d   | com CPF informado pelo participante (campo `cpf`), o CPF do certificado confere; com `require_holder_cpf`, ele precisa existir                              | `holder_mismatch`, `holder_cpf_not_found`                                        |
+| d2  | sem CPF informado, o nome do titular do certificado corresponde ao do participante                                                                          | `holder_name_mismatch`, `holder_name_not_found`                                  |
+| —   | sob o lock do envelope, o pedido ainda é a MESMA reserva (pending, mesma revisão); duas devoluções simultâneas: a perdedora não mexe no pedido já concluído | `already_completed` (409), `not_reserved` (409)                                  |
+| —   | certificado de teste só onde `accept_test_certificates`                                                                                                     | `test_certificate_not_accepted`                                                  |
+| —   | reserva vigente e revisão reservada ainda a mais recente (compare-and-set sob o lock do envelope)                                                           | `reservation_expired` (409), `base_changed` (409)                                |
 
 **Análise da revisão da assinatura (b3).** A análise de diferenças do pyHanko revisa mudanças feitas **depois** de uma
 revisão assinada; aqui a base normalmente **não tem assinatura nem AcroForm** (o pyHanko falha com
@@ -90,7 +92,18 @@ PDF: a aparência do widget pode se sobrepor ao conteúdo da página.
 **mascarado**; nomes de certificado com `NOME:CPF` saem mascarados. Onde o CPF fica num certificado gov.br é **NÃO
 CONFIRMADO**; o código lê o `otherName 2.16.76.1.3.1` (layout ICP-Brasil) e o sufixo `:CPF` do CN — a leitura correta
 precisa ser confirmada com a fixture real (§9). Com `require_holder_cpf` (padrão), certificado sem CPF legível é recusado
-quando o participante informou CPF; sem CPF informado, nada é comparado (o nome só é exibido).
+quando o participante informou CPF.
+
+**Nome, sem CPF informado (revisão adversarial I-3A).** A decisão anterior ("sem CPF informado, nada é comparado; o
+nome só é exibido") contradizia o brief (docs/integracoes/gov-br-assinatura.md §6, item 3: o certificado "precisa
+corresponder ao participante: nome e CPF") e o rótulo T1: qualquer conta gov.br com cadeia até a âncora assinaria "pelo"
+participante e viraria `participant_govbr`. Agora, sem CPF informado, o **nome do titular** do certificado precisa
+corresponder ao do participante (`GovBrReturnDecision::namesCorrespond`): sem acento e sem caixa, palavra a palavra, o
+primeiro nome igual e todas as demais palavras do nome cadastrado (fora "de", "da", "dos"…) presentes no nome do
+certificado — o cadastro costuma abreviar, o certificado traz o nome completo; o sufixo `:CPF` do CN e o marcador `TESTE`
+são ignorados. Nome diferente → `holder_name_mismatch` (422); certificado sem nome legível → `holder_name_not_found`.
+Nome não é identificador único (homônimos): o CPF continua sendo a conferência forte, e a recomendação para produção é
+exigir o campo CPF nos envelopes que oferecem a devolução gov.br (pendência do §9).
 
 ## 5. Fluxo, estados e concorrência
 
@@ -124,14 +137,14 @@ visualizador) ou convite recusado/expirado/cancelado. Autenticação no serviço
 deste navegador; sem ela, `403 {code: "not_authenticated"}`. Rodar `php artisan wayfinder:generate --with-form` na
 integração.
 
-| Rota                  | Método e caminho                              | Corpo                        | Resposta                                       | Limite     |
-| --------------------- | --------------------------------------------- | ---------------------------- | ---------------------------------------------- | ---------- |
-| `sign.govbr.show`     | `GET assinar/{token}/gov-br`                  | —                            | `200` estado                                   | 60/min     |
-| `sign.govbr.intent`   | `POST …/gov-br/intencao`                      | —                            | `201` estado                                   | 20/10 min  |
-| `sign.govbr.withdraw` | `POST …/gov-br/desistir`                      | —                            | `200` estado                                   | 20/10 min  |
-| `sign.govbr.reserve`  | `POST …/gov-br/reservar`                      | —                            | `200` estado (com `expected_revision`)         | 20/10 min  |
-| `sign.govbr.download` | `GET …/gov-br/{pedido}/revisao`               | —                            | `200` PDF (`attachment`), os bytes reservados  | 30/10 min  |
-| `sign.govbr.upload`   | `POST …/gov-br/{pedido}/devolver` (multipart) | `file` (PDF, até `max_upload_mb`) | `201` estado                              | 10/10 min  |
+| Rota                  | Método e caminho                              | Corpo                             | Resposta                                      | Limite    |
+| --------------------- | --------------------------------------------- | --------------------------------- | --------------------------------------------- | --------- |
+| `sign.govbr.show`     | `GET assinar/{token}/gov-br`                  | —                                 | `200` estado                                  | 60/min    |
+| `sign.govbr.intent`   | `POST …/gov-br/intencao`                      | —                                 | `201` estado                                  | 20/10 min |
+| `sign.govbr.withdraw` | `POST …/gov-br/desistir`                      | —                                 | `200` estado                                  | 20/10 min |
+| `sign.govbr.reserve`  | `POST …/gov-br/reservar`                      | —                                 | `200` estado (com `expected_revision`)        | 20/10 min |
+| `sign.govbr.download` | `GET …/gov-br/{pedido}/revisao`               | —                                 | `200` PDF (`attachment`), os bytes reservados | 30/10 min |
+| `sign.govbr.upload`   | `POST …/gov-br/{pedido}/devolver` (multipart) | `file` (PDF, até `max_upload_mb`) | `201` estado                                  | 10/10 min |
 
 `{pedido}` = `documents[].request.id` (ULID).
 
@@ -141,7 +154,14 @@ integração.
 type GovBrReturnState = {
     available: true;
     authenticated: boolean;
-    stage: 'choose' | 'awaiting_others' | 'ready_to_reserve' | 'reserved' | 'completed' | 'expired' | 'closed';
+    stage:
+        | 'choose'
+        | 'awaiting_others'
+        | 'ready_to_reserve'
+        | 'reserved'
+        | 'completed'
+        | 'expired'
+        | 'closed';
     ready: boolean; // documento pronto para reservar
     message: string | null; // por que ainda não (PT-BR)
     can_request: boolean;
@@ -158,9 +178,19 @@ type GovBrReturnState = {
         document: { id: string; name: string; position: number };
         request: null | {
             id: string;
-            status: 'requested' | 'pending' | 'completed' | 'expired' | 'withdrawn' | 'closed';
+            status:
+                | 'requested'
+                | 'pending'
+                | 'completed'
+                | 'expired'
+                | 'withdrawn'
+                | 'closed';
             status_label: string;
-            expected_revision: null | { sha256: string; size_bytes: number; download_url: string | null };
+            expected_revision: null | {
+                sha256: string;
+                size_bytes: number;
+                download_url: string | null;
+            };
             upload_url: string | null; // só com reserva vigente e sessão
             reserved_at: string | null;
             expires_at: string | null; // só com reserva vigente
@@ -168,20 +198,43 @@ type GovBrReturnState = {
             completed_at: string | null;
             attempts: number;
             failure: null | { code: string; message: string }; // motivo da última recusa/liberação
-            last_return: null | { outcome: 'accepted' | 'rejected'; rejection_code: string | null; received_sha256: string; received_at: string };
+            last_return: null | {
+                outcome: 'accepted' | 'rejected';
+                rejection_code: string | null;
+                received_sha256: string;
+                received_at: string;
+            };
             signature: null | {
-                kind: string; label: string; description: string;
-                holder_name: string | null; holder_cpf_masked: string | null; issuer: string | null;
-                fingerprint_sha256: string | null; valid_from: string | null; valid_to: string | null;
-                trusted: boolean; is_test: boolean; signed_at: string | null;
+                kind: string;
+                label: string;
+                description: string;
+                holder_name: string | null;
+                holder_cpf_masked: string | null;
+                issuer: string | null;
+                fingerprint_sha256: string | null;
+                valid_from: string | null;
+                valid_to: string | null;
+                trusted: boolean;
+                is_test: boolean;
+                signed_at: string | null;
             };
         };
     }>;
     instructions: string[]; // passos PT-BR (reservar, assinar no portal com conta prata/ouro, devolver sem regravar)
-    limits: { max_upload_mb: number; accepted_extensions: ['pdf']; reservation_ttl_minutes: number; application_window_minutes: number };
+    limits: {
+        max_upload_mb: number;
+        accepted_extensions: ['pdf'];
+        reservation_ttl_minutes: number;
+        application_window_minutes: number;
+    };
     notices: string[]; // inclui, sem âncora, o aviso de que o aceite será "cadeia não verificada"
     portal_url: string;
-    endpoints: { show: string; intent: string; withdraw: string; reserve: string };
+    endpoints: {
+        show: string;
+        intent: string;
+        withdraw: string;
+        reserve: string;
+    };
 };
 ```
 
@@ -212,7 +265,18 @@ descarta revisões nunca publicadas quando refaz a base; o estágio reabre o ped
 Os modelos ficam em `App\Services\Signing\GovBr\Models` (escopo desta parte); podem ir para `app/Models` na integração
 sem mudar as tabelas.
 
-## 8. Integração com a finalização — PENDENTE (fora da área do P3-GOV)
+## 8. Integração com a finalização — FEITA na integração I-3A (itens 1–5); 6–9 seguem pendentes
+
+> **Atualização I-3A (2026-09-14).** Os itens 1 a 5 abaixo foram integrados em `ParticipantSignatureStage`
+> (que recebe `GovBrReturnStage`): pedido gov.br conta como pedido ativo, segura a finalização enquanto espera, soma na
+> quantidade esperada de assinaturas da cadeia, é reaberto quando a base é refeita, e o `signature_status` ganhou
+> `participant_govbr` / `participant_external_unverified` (com mais de um meio externo no mesmo arquivo, o registro fica
+> `participant_external` e a lista por assinatura traz o meio de cada uma). As páginas de evidências e de verificação
+> pública listam a devolução (`GovBrSignatureViews`). A trava `finalizer_integration` continua existindo (padrão
+> `false`), mas agora pode ser ligada junto com `return_enabled` — o ponta a ponta `tests/Feature/EndToEnd/Phase3PartOneTest.php`
+> roda com as duas ligadas. Continuam pendentes: 6 (espera do A1 enquanto houver reserva gov.br — hoje o participante
+> gov.br perde a reserva com `base_changed`), 7 (eventos próprios em `audit_events`), 8 e 9. Relatório:
+> `docs/fase-3/parte-1-relatorio.md`.
 
 O `EnvelopeFinalizer`, o `ParticipantSignatureStage`, `App\Enums\SignatureStatus` e `App\Enums\AuditEventType` não são
 desta área e **não foram alterados**. Por isso a flag tem a **trava** `assinavelox.govbr.finalizer_integration`
@@ -266,22 +330,22 @@ Depois disso, ligar `finalizer_integration` e rodar o teste ponta a ponta (base 
 
 ## 10. Configuração (`config/assinavelox.php` → `govbr`)
 
-| chave                           | env                                          | padrão                         |
-| ------------------------------- | -------------------------------------------- | ------------------------------ |
-| `return_enabled`                | `ASSINAVELOX_FEATURE_GOVBR_RETURN`           | `false`                        |
-| `finalizer_integration`         | `ASSINAVELOX_GOVBR_FINALIZER_INTEGRATION`    | `false` (trava, §8)            |
+| chave                           | env                                                | padrão                                    |
+| ------------------------------- | -------------------------------------------------- | ----------------------------------------- |
+| `return_enabled`                | `ASSINAVELOX_FEATURE_GOVBR_RETURN`                 | `false`                                   |
+| `finalizer_integration`         | `ASSINAVELOX_GOVBR_FINALIZER_INTEGRATION`          | `false` (trava, §8)                       |
 | `portal_url` / `validator_url`  | `ASSINAVELOX_GOVBR_PORTAL_URL` / `…_VALIDATOR_URL` | `assinador.iti.br` / `validar.iti.gov.br` |
-| `reservation_ttl_minutes`       | `ASSINAVELOX_GOVBR_RESERVATION_TTL_MINUTES`  | 120                            |
-| `application_window_minutes`    | `ASSINAVELOX_GOVBR_WINDOW_MINUTES`           | 4320                           |
-| `max_upload_mb`                 | `ASSINAVELOX_GOVBR_MAX_UPLOAD_MB`            | 100 (limite do portal)         |
-| `verify_timeout_seconds`        | `ASSINAVELOX_GOVBR_VERIFY_TIMEOUT`           | 180                            |
-| `lock_wait_seconds`             | `ASSINAVELOX_GOVBR_LOCK_WAIT_SECONDS`        | 20                             |
-| `trust_roots`                   | `ASSINAVELOX_GOVBR_TRUST_ROOTS` (`;`)        | vazio → "cadeia não verificada" |
-| `trust_root_fingerprints`       | `ASSINAVELOX_GOVBR_TRUST_ROOT_FINGERPRINTS` (`;`) | vazio                     |
-| `require_holder_cpf`            | `ASSINAVELOX_GOVBR_REQUIRE_HOLDER_CPF`       | `true`                         |
-| `accept_test_certificates`      | `ASSINAVELOX_GOVBR_ACCEPT_TEST_CERTIFICATES` | `true` fora de produção        |
-| `permitted_modification_levels` | `ASSINAVELOX_GOVBR_PERMITTED_LEVELS` (`,`)   | `NONE,FORM_FILLING`            |
-| `api.provider`                  | —                                            | `none` (classe C, fixo)        |
+| `reservation_ttl_minutes`       | `ASSINAVELOX_GOVBR_RESERVATION_TTL_MINUTES`        | 120                                       |
+| `application_window_minutes`    | `ASSINAVELOX_GOVBR_WINDOW_MINUTES`                 | 4320                                      |
+| `max_upload_mb`                 | `ASSINAVELOX_GOVBR_MAX_UPLOAD_MB`                  | 100 (limite do portal)                    |
+| `verify_timeout_seconds`        | `ASSINAVELOX_GOVBR_VERIFY_TIMEOUT`                 | 180                                       |
+| `lock_wait_seconds`             | `ASSINAVELOX_GOVBR_LOCK_WAIT_SECONDS`              | 20                                        |
+| `trust_roots`                   | `ASSINAVELOX_GOVBR_TRUST_ROOTS` (`;`)              | vazio → "cadeia não verificada"           |
+| `trust_root_fingerprints`       | `ASSINAVELOX_GOVBR_TRUST_ROOT_FINGERPRINTS` (`;`)  | vazio                                     |
+| `require_holder_cpf`            | `ASSINAVELOX_GOVBR_REQUIRE_HOLDER_CPF`             | `true`                                    |
+| `accept_test_certificates`      | `ASSINAVELOX_GOVBR_ACCEPT_TEST_CERTIFICATES`       | `true` fora de produção                   |
+| `permitted_modification_levels` | `ASSINAVELOX_GOVBR_PERMITTED_LEVELS` (`,`)         | `NONE,FORM_FILLING`                       |
+| `api.provider`                  | —                                                  | `none` (classe C, fixo)                   |
 
 Plano: `plans.features.govbr_return = true` (o `PlanSeeder` não foi alterado). O limite de upload também depende de
 `upload_max_filesize`/`post_max_size` do PHP.

@@ -6,41 +6,43 @@
 
 ## 1. O que existe
 
-| Parte | Onde | Resumo |
-| --- | --- | --- |
-| Afiliados | `affiliates`, `App\Models\Affiliate`, `App\Services\Affiliates\AffiliateProgram` | Candidatura pelo portal → aprovação pela operadora (código único de 8 caracteres, sem 0/O/1/I) → suspensão/reativação. Taxa em **pontos-base** por afiliado. Dados de repasse (chave PIX + titular) **cifrados em repouso** (`encrypted:array`) e **nunca exibidos por inteiro**. |
-| Atribuição | `referrals`, `Attribution`, `ReferralLinkController`, `AttributeReferralOnRegistration` | Link `/indicacao/{código}` → cookie de atribuição → cadastro. `referrals.organization_id` **UNIQUE**: uma organização é atribuída uma única vez. |
-| Autoindicação e contas duplicadas | `Attribution::selfReferralReasons/duplicateReasons`, `AffiliateRiskSignals` | Autoindicação → indicação `rejected`, **sem comissão**, sinal de risco. Possível conta duplicada → `held` (comissão segurada até revisão humana), sinal de risco. |
-| Comissões | `commissions`, `CommissionLedger`, `SyncCommissionsOnPaymentStatus` | Só sobre pagamentos **aprovados**; centavos com moeda; pendentes até o prazo de estorno; revertidas em estorno/contestação (antes **e** depois da aprovação); idempotentes por pagamento. |
-| Repasses | `payout_batches`, `PayoutBatches` | Lotes montados e marcados como pagos **manualmente** (quem, quando, referência externa); CSV protegido contra fórmula e com repasse mascarado. |
-| Trilha | `affiliate_events`, `AffiliateTrail` | Append-only (só `INSERT`): candidatura, aprovação, recusa, suspensão, **alteração de taxa (antes → depois, motivo, quem)**, dados de repasse atualizados (sem o valor), atribuição, pedido e resultado de revisão humana, lotes (montado, pago, cancelado, exportado). |
-| Telas | `resources/js/pages/affiliates/index.tsx`, `resources/js/pages/admin/affiliates/{index,show}.tsx`, `resources/js/pages/admin/affiliates/payouts/{index,show}.tsx`, `resources/js/components/affiliates/*` | Portal do afiliado e painel interno, PT-BR, shadcn/ui. |
-| Tarefa diária | `affiliates:settle` (`App\Services\Affiliates\Console\SettleCommissionsCommand`), agendada às 05:20 | Varredura idempotente dos pagamentos das organizações indicadas + aprovação das pendentes vencidas. |
+| Parte                             | Onde                                                                                                                                                                                                      | Resumo                                                                                                                                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Afiliados                         | `affiliates`, `App\Models\Affiliate`, `App\Services\Affiliates\AffiliateProgram`                                                                                                                          | Candidatura pelo portal → aprovação pela operadora (código único de 8 caracteres, sem 0/O/1/I) → suspensão/reativação. Taxa em **pontos-base** por afiliado. Dados de repasse (chave PIX + titular) **cifrados em repouso** (`encrypted:array`) e **nunca exibidos por inteiro**. |
+| Atribuição                        | `referrals`, `Attribution`, `ReferralLinkController`, `AttributeReferralOnRegistration`                                                                                                                   | Link `/indicacao/{código}` → cookie de atribuição → cadastro. `referrals.organization_id` **UNIQUE**: uma organização é atribuída uma única vez.                                                                                                                                  |
+| Autoindicação e contas duplicadas | `Attribution::selfReferralReasons/duplicateReasons`, `AffiliateRiskSignals`                                                                                                                               | Autoindicação → indicação `rejected`, **sem comissão**, sinal de risco. Possível conta duplicada → `held` (comissão segurada até revisão humana), sinal de risco.                                                                                                                 |
+| Comissões                         | `commissions`, `CommissionLedger`, `SyncCommissionsOnPaymentStatus`                                                                                                                                       | Só sobre pagamentos **aprovados**; centavos com moeda; pendentes até o prazo de estorno; revertidas em estorno/contestação (antes **e** depois da aprovação); idempotentes por pagamento.                                                                                         |
+| Repasses                          | `payout_batches`, `PayoutBatches`                                                                                                                                                                         | Lotes montados e marcados como pagos **manualmente** (quem, quando, referência externa); CSV protegido contra fórmula e com repasse mascarado.                                                                                                                                    |
+| Trilha                            | `affiliate_events`, `AffiliateTrail`                                                                                                                                                                      | Append-only (só `INSERT`): candidatura, aprovação, recusa, suspensão, **alteração de taxa (antes → depois, motivo, quem)**, dados de repasse atualizados (sem o valor), atribuição, pedido e resultado de revisão humana, lotes (montado, pago, cancelado, exportado).            |
+| Telas                             | `resources/js/pages/affiliates/index.tsx`, `resources/js/pages/admin/affiliates/{index,show}.tsx`, `resources/js/pages/admin/affiliates/payouts/{index,show}.tsx`, `resources/js/components/affiliates/*` | Portal do afiliado e painel interno, PT-BR, shadcn/ui.                                                                                                                                                                                                                            |
+| Tarefa diária                     | `affiliates:settle` (`App\Services\Affiliates\Console\SettleCommissionsCommand`), agendada às 05:20                                                                                                       | Varredura idempotente dos pagamentos das organizações indicadas + aprovação das pendentes vencidas.                                                                                                                                                                               |
 
 Migrations (aditivas, MySQL-compatíveis): `2026_09_11_150401` (`affiliates`), `150402` (`referrals`), `150403` (`payout_batches`), `150404` (`commissions`), `150405` (`affiliate_events`). Todas as chaves estrangeiras para `users`, `organizations` e `payments` são `nullOnDelete`: a exclusão de conta e o expurgo de organização continuam funcionando e o razão financeiro não some.
 
 ## 2. Rotas
 
-| Método | URI | Nome | Proteção |
-| --- | --- | --- | --- |
-| GET | `/indicacao/{código}` | `affiliates.link` | pública, `throttle:public` |
-| GET | `/afiliados` | `affiliates.index` | `auth` + `verified` (sem organização) |
-| POST | `/afiliados` | `affiliates.apply` | idem + `throttle:10,1` |
-| PUT | `/afiliados/repasse` | `affiliates.payout.update` | idem + `password.confirm` |
-| POST | `/afiliados/indicacoes/{indicação}/revisao` | `affiliates.referrals.review` | idem; só a própria indicação (senão 404) |
-| GET | `/afiliados/comissoes/exportar` | `affiliates.commissions.export` | idem (CSV) |
-| GET | `/admin/afiliados` | `admin.affiliates.index` | `platform-admin` |
-| GET | `/admin/afiliados/{afiliado}` | `admin.affiliates.show` | `platform-admin` |
-| POST | `/admin/afiliados/{afiliado}/aprovar` · `/suspender` · `/reativar` | `admin.affiliates.approve` · `suspend` · `reactivate` | `platform-admin` + `password.confirm` |
-| POST | `/admin/afiliados/{afiliado}/recusar` | `admin.affiliates.reject` | `platform-admin` |
-| PUT | `/admin/afiliados/{afiliado}/taxa` | `admin.affiliates.rate.update` | `platform-admin` + `password.confirm` + motivo |
-| POST | `/admin/afiliados/indicacoes/{indicação}/revisar` | `admin.affiliates.referrals.review` | `platform-admin` + justificativa |
-| GET/POST | `/admin/afiliados/lotes` | `admin.affiliates.payouts.index` / `store` | `platform-admin` |
-| GET | `/admin/afiliados/lotes/{lote}` · `/exportar` | `admin.affiliates.payouts.show` / `export` | `platform-admin` |
-| POST | `/admin/afiliados/lotes/{lote}/pago` | `admin.affiliates.payouts.paid` | `platform-admin` + `password.confirm` |
-| POST | `/admin/afiliados/lotes/{lote}/cancelar` | `admin.affiliates.payouts.cancel` | `platform-admin` + motivo |
+| Método   | URI                                                                | Nome                                                  | Proteção                                       |
+| -------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------- |
+| GET      | `/indicacao/{código}`                                              | `affiliates.link`                                     | pública, `throttle:public`                     |
+| GET      | `/afiliados`                                                       | `affiliates.index`                                    | `auth` + `verified` (sem organização)          |
+| POST     | `/afiliados`                                                       | `affiliates.apply`                                    | idem + `throttle:10,1`                         |
+| PUT      | `/afiliados/repasse`                                               | `affiliates.payout.update`                            | idem + `password.confirm`                      |
+| POST     | `/afiliados/indicacoes/{indicação}/revisao`                        | `affiliates.referrals.review`                         | idem; só a própria indicação (senão 404)       |
+| GET      | `/afiliados/comissoes/exportar`                                    | `affiliates.commissions.export`                       | idem (CSV)                                     |
+| GET      | `/admin/afiliados`                                                 | `admin.affiliates.index`                              | `platform-admin`                               |
+| GET      | `/admin/afiliados/{afiliado}`                                      | `admin.affiliates.show`                               | `platform-admin`                               |
+| POST     | `/admin/afiliados/{afiliado}/aprovar` · `/suspender` · `/reativar` | `admin.affiliates.approve` · `suspend` · `reactivate` | `platform-admin` + `password.confirm`          |
+| POST     | `/admin/afiliados/{afiliado}/recusar`                              | `admin.affiliates.reject`                             | `platform-admin`                               |
+| PUT      | `/admin/afiliados/{afiliado}/taxa`                                 | `admin.affiliates.rate.update`                        | `platform-admin` + `password.confirm` + motivo |
+| POST     | `/admin/afiliados/indicacoes/{indicação}/revisar`                  | `admin.affiliates.referrals.review`                   | `platform-admin` + justificativa               |
+| GET/POST | `/admin/afiliados/lotes`                                           | `admin.affiliates.payouts.index` / `store`            | `platform-admin`                               |
+| GET      | `/admin/afiliados/lotes/{lote}` · `/exportar`                      | `admin.affiliates.payouts.show` / `export`            | `platform-admin`                               |
+| POST     | `/admin/afiliados/lotes/{lote}/pago`                               | `admin.affiliates.payouts.paid`                       | `platform-admin` + `password.confirm`          |
+| POST     | `/admin/afiliados/lotes/{lote}/cancelar`                           | `admin.affiliates.payouts.cancel`                     | `platform-admin` + motivo                      |
 
 Com a flag desligada **todas** respondem 404.
+
+Limites de requisição com **prefixo próprio** (3º parâmetro do `throttle`): `affiliates-apply`, `affiliates-payout`, `affiliates-review` e `affiliates-export` (10/min) no portal; `admin-affiliates-batch` (10/min, montar/pagar/cancelar lote), `admin-affiliates-export` (20/min) e `admin-affiliates-review` (30/min) no painel. Sem o prefixo, o `throttle:N,M` genérico divide o contador por usuário com as demais rotas — inclusive o link de verificação de e-mail do Fortify (6/min) —, e as rotas do programa, mesmo respondendo 404 com a flag desligada, consumiam esse contador (visto no teste de fumaça como 429 em `verification.verify`).
 
 ## 3. Atribuição
 
@@ -64,16 +66,19 @@ Vencida a janela, um novo clique grava um novo cookie. `last_touch` existe como 
 
 Regras avaliadas no cadastro (cada código fica em `referrals.block_reasons`):
 
-| Código | Regra | Efeito |
-| --- | --- | --- |
-| `same_user` | o usuário é o próprio afiliado | autoindicação → `rejected` |
-| `same_email` | e-mail igual ao do afiliado (normalizado: minúsculas, sem `+tag`, sem pontos no Gmail) | autoindicação → `rejected` |
-| `same_domain` | mesmo domínio **corporativo** (domínios públicos de `public_email_domains` não contam) | autoindicação → `rejected` |
-| `same_ip` | IP do cadastro igual ao IP da candidatura do afiliado ou ao último IP de uso do portal, **visto dentro da janela** | autoindicação → `rejected` |
-| `duplicate_ip` | IP do cadastro igual ao de outra indicação do mesmo afiliado dentro da janela | possível conta duplicada → `held` |
+| Código         | Regra                                                                                                                           | Efeito                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `same_user`    | o usuário é o próprio afiliado                                                                                                  | autoindicação → `rejected`                                  |
+| `same_email`   | e-mail igual ao do afiliado (normalizado: minúsculas, sem `+tag`, sem pontos no Gmail)                                          | autoindicação → `rejected`                                  |
+| `same_domain`  | mesmo domínio **corporativo** (domínios públicos de `public_email_domains` não contam)                                          | autoindicação → `rejected`                                  |
+| `same_ip`      | IP do cadastro igual ao IP da candidatura do afiliado ou ao último IP de uso do portal, **visto dentro da janela**              | autoindicação → `rejected`                                  |
+| `duplicate_ip` | IP do cadastro igual ao de outra indicação do mesmo afiliado dentro da janela                                                   | possível conta duplicada → `held`                           |
+| `same_member`  | o usuário do afiliado é **dono ou administrador ativo** da organização indicada (conferido ao gerar e ao aprovar cada comissão) | autoindicação por administração → `held` até revisão humana |
 
 - **Nenhum IP é guardado em claro**: só HMAC-SHA256 com a `APP_KEY` (`IpFingerprint`). E-mails de indicados não são copiados para as tabelas do programa.
-- **Sinal de risco**: `App\Services\Risk\RiskSignals::record('affiliate_self_referral', $organizaçãoIndicada, $evidência, null, 'affiliate:{ulid}')` via `AffiliateRiskSignals`. A evidência só leva as chaves que o antifraude aceita para essa regra (`affiliate`, `referral`, `match`, `same_user`, `same_ip`, `same_email_domain`) — ULIDs e booleanos. Conta duplicada entra na mesma regra com `match=duplicate_ip` (o catálogo fechado do antifraude não tem regra própria para isso). A ponte nunca lança.
+- **IPv6 pela rede /64** (revisão adversarial I-3A): o endereço temporário do IPv6 (RFC 8981) muda sozinho várias vezes por dia dentro do /64 do assinante; comparar o endereço completo deixava a autoindicação passar trocando de endereço. `IpFingerprint` agora faz o HMAC do **/64** para IPv6 (IPv4 continua inteiro — um /24 pegaria CGNAT e redes compartilhadas). Hashes IPv6 gravados antes desta mudança deixam de coincidir com os novos; como a flag nasce desligada, não há dado de produção afetado.
+- **`same_member`** (revisão adversarial I-3A): as regras do cadastro não pegam quem cadastra a organização com outro e-mail e outro IP e **depois** entra nela como administrador. `CommissionLedger` confere o vínculo ao criar e ao aprovar cada comissão; havendo vínculo, a indicação vai para `held` com `same_member`, nenhuma comissão nasce ou é aprovada, e o antifraude recebe o sinal. Uma liberação humana que já viu esse motivo prevalece.
+- **Sinal de risco**: `App\Services\Risk\RiskSignals::record('affiliate_self_referral', $organizaçãoIndicada, $evidência, null, 'affiliate:{ulid}')` via `AffiliateRiskSignals`. A evidência só leva chaves que o antifraude aceita para essa regra (`affiliate`, `referral`, `match`, `same_user`, `same_ip`) — ULIDs, códigos de regra e booleanos; o sujeito (`affiliate:{ulid}`) é gravado só como HMAC. `same_email_domain` consta do catálogo da regra, mas **não é enviada**: o minimizador do antifraude (`RiskEvidence::FORBIDDEN_KEY`, padrão `e-?mail`) descarta toda chave com "email" no nome, então ela só geraria um `_dropped`; a coincidência de e-mail/domínio chega pelo `match` (`same_email`, `same_domain`). Inconsistência do catálogo do antifraude registrada para o dono do §3.7 (não corrigida aqui, fora da área). Com a flag `antifraud` desligada o serviço não grava nada e a indicação é decidida do mesmo jeito. Conta duplicada entra na mesma regra com `match=duplicate_ip` (o catálogo fechado do antifraude não tem regra própria para isso), mas **com pontuação 0** (revisão adversarial I-3A): o único dado é o IP de OUTRA organização do mesmo afiliado (ex.: clientes cadastrados no escritório do contador), então ele não pode pôr a organização indicada em observação; o efeito é segurar a comissão. As regras de autoindicação pontuam normalmente. A ponte nunca lança.
 - **O que o programa faz sozinho**: só barra (`rejected`) ou segura (`held`) a **comissão**. Nunca invalida aceite, evidência ou envelope; qualquer ação sobre a organização é decisão do antifraude (no máximo restringir **envio** até revisão humana).
 - **Revisão humana (LGPD art. 20)**: o portal mostra ao afiliado a regra que barrou/segurou a indicação e oferece "Pedir revisão humana". No painel, a fila "Indicações para revisão" permite **liberar** (→ `active`; comissões de pagamentos já aprovados são calculadas na hora e seguem o prazo normal) ou **manter como não elegível** (→ `rejected`; pendentes revertidas e aprovadas/pagas estornadas no próximo lote). Toda revisão exige justificativa e fica na trilha com a regra, a decisão e o revisor.
 
@@ -81,12 +86,12 @@ Regras avaliadas no cadastro (cada código fica em `referrals.block_reasons`):
 
 Gancho `eloquent.saved` de `Payment` → `SyncCommissionsOnPaymentStatus` → `CommissionLedger::syncPayment()` **depois do commit** da transação da cobrança, sem nunca lançar. A varredura diária `affiliates:settle` reaplica tudo (idempotente) e cobre qualquer transição que não tenha passado pelo gancho.
 
-| Estado do pagamento | Sem comissão | Comissão pendente | Comissão aprovada / paga |
-| --- | --- | --- | --- |
-| `approved` | cria `pending` (se elegível) | recalcula sobre o líquido (estorno parcial) | estorno parcial → `adjustment` com a diferença |
-| `refunded` | — | → `reversed` | cria `reversal` **negativa**, `approved`, sem lote (entra no próximo) |
-| `charged_back` | — | → `reversed` | cria `reversal` **negativa**, `approved`, sem lote |
-| `in_mediation`, `pending`, … | — | continua pendente (não aprova) | — |
+| Estado do pagamento          | Sem comissão                 | Comissão pendente                           | Comissão aprovada / paga                                              |
+| ---------------------------- | ---------------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
+| `approved`                   | cria `pending` (se elegível) | recalcula sobre o líquido (estorno parcial) | estorno parcial → `adjustment` com a diferença                        |
+| `refunded`                   | —                            | → `reversed`                                | cria `reversal` **negativa**, `approved`, sem lote (entra no próximo) |
+| `charged_back`               | —                            | → `reversed`                                | cria `reversal` **negativa**, `approved`, sem lote                    |
+| `in_mediation`, `pending`, … | —                            | continua pendente (não aprova)              | —                                                                     |
 
 - **Elegível**: indicação não `rejected`; afiliado `approved`; pagamento com `paid_at` entre a atribuição e `expires_at`; ambiente `production` (sandbox só com `include_sandbox_payments`).
 - **Cálculo**: base = `amount_cents − refunded_cents`; comissão = ⌊base × `rate_bp` ÷ 10 000⌋ (para baixo, em centavos). A taxa usada é a do afiliado **no momento** (gravada em `commissions.rate_bp`); alterar a taxa vale para os próximos pagamentos.
@@ -95,17 +100,17 @@ Gancho `eloquent.saved` de `Payment` → `SyncCommissionsOnPaymentStatus` → `C
 
 ## 6. Repasses — o sistema calcula, não paga
 
-- **Montar lote** (moeda + data de corte): entram lançamentos `approved` sem lote até o corte — comissões, ajustes e estornos negativos. Por afiliado, só entra quem está **aprovado** (suspenso fica retido), tem **dados de repasse** e saldo líquido ≥ `min_payout_cents` (padrão R$ 50,00). O resto (inclusive saldo negativo, que abate as próximas comissões) fica para o próximo lote.
-- **Marcar como pago**: manual, com **senha confirmada**, data do repasse (não futura) e **referência externa** obrigatória (ex.: identificador E2E do PIX). Grava `paid_by_user_id`, `paid_at`, `marked_paid_at`; os lançamentos viram `paid`. Nenhuma chamada a banco, PIX ou gateway sai do sistema.
+- **Montar lote** (moeda + data de corte): entram lançamentos `approved` sem lote até o corte — comissões, ajustes e estornos negativos. Comissões e ajustes só entram se o pagamento de origem está numa situação **final** (`approved`, `refunded` ou `charged_back` — nos dois últimos o estorno negativo entra junto e compensa); pagamento **em disputa** (`in_mediation`) ou voltando a processamento deixa o lançamento para o próximo lote, até a disputa terminar (revisão adversarial I-3A; roadmap §3.10, "sobre pagamentos aprovados"). Por afiliado, só entra quem está **aprovado** (suspenso fica retido), tem **dados de repasse** e saldo líquido ≥ `min_payout_cents` (padrão R$ 50,00). O resto (inclusive saldo negativo, que abate as próximas comissões) fica para o próximo lote.
+- **Marcar como pago**: manual, com **senha confirmada**, data do repasse (não futura) e **referência externa** obrigatória (ex.: identificador E2E do PIX). Grava `paid_by_user_id`, `paid_at`, `marked_paid_at`; os lançamentos viram `paid`. Nenhuma chamada a banco, PIX ou gateway sai do sistema. **Separação de interesse:** quem tem comissão no lote recebe 403 e outra pessoa da equipe registra o pagamento; montar e cancelar continuam livres, porque não declaram que dinheiro saiu.
 - **Cancelar** (só lote aberto, com motivo): os lançamentos voltam para o próximo lote.
-- **CSV** (`;`, BOM UTF-8): uma linha por afiliado, dados de repasse **mascarados**, células com `= + - @ TAB CR` neutralizadas por `App\Support\Csv` (CWE-1236). Cada exportação fica na trilha.
+- **CSV** (`;`, BOM UTF-8): uma linha por afiliado, dados de repasse **mascarados**, células com `= + - @ TAB CR` neutralizadas por `App\Support\Csv` (CWE-1236). Cada exportação fica na trilha. No extrato do afiliado, as colunas numéricas (Base, Taxa, Valor) saem como número — só o que casa com `-?\d+,\d{2}` escapa da neutralização —, para que um estorno "-10,00" some na planilha em vez de virar texto.
 - **Dados de repasse nunca inteiros**: nem nas telas, nem no CSV, nem na trilha, nem em log. Hoje, portanto, a operadora precisa obter a chave completa por um canal fora do sistema — ver decisão pendente 6 em §8.
 
 ## 7. Telas
 
-- **Portal do afiliado** (`/afiliados`, `pages/affiliates/index.tsx`): regras do programa e candidatura (chave PIX + titular + aceite dos termos); depois de aprovado, código e link com "Copiar", comissões por estado (pendentes, a receber, pagas, revertidas), indicados (**só o nome da organização**, datas, estado e — quando barrada ou segurada — a regra e o botão "Pedir revisão humana"), extrato de lançamentos com filtro por estado e exportação CSV, dados de repasse mascarados com atualização protegida por senha.
+- **Portal do afiliado** (`/afiliados`, `pages/affiliates/index.tsx`): regras do programa e candidatura (chave PIX + titular + aceite dos termos); depois de aprovado, código e link com "Copiar", comissões por estado (pendentes, a receber, pagas, revertidas), indicados (**só o nome da organização**, datas, estado e — quando barrada ou segurada — a regra e o botão "Pedir revisão humana"), extrato de lançamentos com filtro por estado e exportação CSV, dados de repasse mascarados com atualização protegida por senha. O afiliado aprovado vê também "Como você recebe" (as regras do programa: o repasse é feito pela equipe, fora da plataforma, a partir do saldo mínimo; "Libera em" é a data de aprovação, não de pagamento). Motivo de reversão ao afiliado (portal e CSV): estorno e contestação do cliente indicado aparecem só como "Pagamento revertido" — a contestação de cartão é dado financeiro do cliente (LGPD); o rótulo detalhado fica no painel interno.
 - **Painel interno** (`/admin/afiliados`): KPIs, lista de afiliados (pendentes primeiro) com aprovar (taxa sugerida editável), recusar, suspender, reativar; fila de revisão humana de indicações; detalhe do afiliado com **alterar taxa (motivo + senha)** e a trilha; **lotes de repasse** (prévia do que entraria agora, montar, detalhe, marcar como pago, cancelar, exportar CSV).
-- **Navegação**: `resources/js/components/app-sidebar.tsx` está fora da área deste item, então as telas ainda **não têm entrada no menu** (acesso pela URL). Ver §9.
+- **Navegação**: desde a integração I-3A há entrada no menu do app ("Programa de afiliados") e do painel interno ("Afiliados") em `resources/js/components/app-sidebar.tsx`, visíveis só com a flag `affiliates` ligada (prop `features.affiliates`, em `HandleInertiaRequests::features()`).
 
 ## 8. Decisões pendentes do proprietário (condição para ligar em produção)
 
@@ -120,37 +125,47 @@ Gancho `eloquent.saved` de `Payment` → `SyncCommissionsOnPaymentStatus` → `C
 
 ## 9. Condições de ativação em produção
 
-1. **Registrar o provider** `App\Services\Affiliates\AffiliatesServiceProvider` em `bootstrap/providers.php` (fora da área deste item; uma linha). Sem ele, o gancho de pagamento e o comando `affiliates:settle` **não existem** — a atribuição no cadastro funciona (listener descoberto), mas nenhuma comissão é calculada. Os testes registram o provider explicitamente (`registerAffiliatesProvider()`), então continuam válidos depois dessa linha.
-2. **Entrada no menu** do painel interno ("Afiliados") e do app ("Programa de afiliados") em `app-sidebar.tsx` (fora da área), condicionada a uma prop de flag — hoje a flag não é exposta em `HandleInertiaRequests::features()` (também fora da área).
+1. ~~Registrar o provider~~ — **feito na integração I-3A**: `App\Services\Affiliates\AffiliatesServiceProvider` está em `bootstrap/providers.php` e não faz nada com a flag desligada. Sem ele, o gancho de pagamento e o comando `affiliates:settle` não existiriam.
+2. ~~Entrada no menu~~ — **feito na integração I-3A**: "Afiliados" no painel interno e "Programa de afiliados" no app, condicionados a `features.affiliates`, exposta em `HandleInertiaRequests::features()`.
 3. Fase 2 em produção por um ciclo de cobrança (pré-requisito do roadmap para a Fase 3) e a flag do antifraude (§3.7) avaliada — os sinais de autoindicação só são **gravados** com ela ligada.
 4. Decisões 1–7 de §8 registradas; texto dos termos publicado e `ASSINAVELOX_AFFILIATES_TERMS_VERSION` apontando para ele.
 5. `ASSINAVELOX_AFFILIATES_INCLUDE_SANDBOX=false` (padrão) em produção.
 6. Rodar a suíte `tests/Feature/Phase3/Affiliates` também em MySQL (roadmap §5: migrations aditivas).
 7. Ligar: `ASSINAVELOX_FEATURE_AFFILIATES=true`.
 
+> **Integração I-3A (2026-09-14).** Feito: `AffiliatesServiceProvider` registrado em `bootstrap/providers.php` (com a
+> flag desligada o gancho de pagamento e o `affiliates:settle` não fazem nada — a suíte inteira seguiu verde); a chave
+> `affiliates` entrou em `HandleInertiaRequests::features()` (desligada) e o menu ganhou "Programa de afiliados" (conta) e
+> "Afiliados" (painel interno), visíveis só com a flag. O ponta a ponta `tests/Feature/EndToEnd/Phase3PartOneTest.php`
+> cobre indicação → comissão pendente → aprovada após o prazo → estorno com lançamento negativo, sem nada pago. Os
+> dados de demonstração (parceira aprovada, indicação da Horizonte, comissão pendente) vêm do `DemoOrganizationSeeder`.
+> Continuam pendentes: as decisões do §8 e a chave `same_email_domain` do catálogo do antifraude (ver antifraude.md).
+
 ## 10. Configuração (`config('assinavelox.affiliates')`)
 
-| Chave | Env | Padrão |
-| --- | --- | --- |
-| `cookie_name` | `ASSINAVELOX_AFFILIATES_COOKIE` | `av_affiliate_ref` |
-| `attribution_window_days` | `ASSINAVELOX_AFFILIATES_WINDOW_DAYS` | 60 |
-| `attribution_model` | `ASSINAVELOX_AFFILIATES_ATTRIBUTION_MODEL` | `first_touch` |
-| `commission_months` | `ASSINAVELOX_AFFILIATES_COMMISSION_MONTHS` | 12 (0 = sem prazo) |
-| `approval_hold_days` | `ASSINAVELOX_AFFILIATES_HOLD_DAYS` | 30 |
-| `default_rate_bp` / `max_rate_bp` | `ASSINAVELOX_AFFILIATES_DEFAULT_RATE_BP` / `_MAX_RATE_BP` | 1000 / 5000 |
-| `min_payout_cents` | `ASSINAVELOX_AFFILIATES_MIN_PAYOUT_CENTS` | 5000 |
-| `include_sandbox_payments` | `ASSINAVELOX_AFFILIATES_INCLUDE_SANDBOX` | `false` |
-| `currencies` | — | `['BRL']` |
-| `terms_version` | `ASSINAVELOX_AFFILIATES_TERMS_VERSION` | `afiliados-rascunho-2026-09` |
-| `public_email_domains` | — | lista de provedores públicos |
+| Chave                             | Env                                                       | Padrão                       |
+| --------------------------------- | --------------------------------------------------------- | ---------------------------- |
+| `cookie_name`                     | `ASSINAVELOX_AFFILIATES_COOKIE`                           | `av_affiliate_ref`           |
+| `attribution_window_days`         | `ASSINAVELOX_AFFILIATES_WINDOW_DAYS`                      | 60                           |
+| `attribution_model`               | `ASSINAVELOX_AFFILIATES_ATTRIBUTION_MODEL`                | `first_touch`                |
+| `commission_months`               | `ASSINAVELOX_AFFILIATES_COMMISSION_MONTHS`                | 12 (0 = sem prazo)           |
+| `approval_hold_days`              | `ASSINAVELOX_AFFILIATES_HOLD_DAYS`                        | 30                           |
+| `default_rate_bp` / `max_rate_bp` | `ASSINAVELOX_AFFILIATES_DEFAULT_RATE_BP` / `_MAX_RATE_BP` | 1000 / 5000                  |
+| `min_payout_cents`                | `ASSINAVELOX_AFFILIATES_MIN_PAYOUT_CENTS`                 | 5000                         |
+| `include_sandbox_payments`        | `ASSINAVELOX_AFFILIATES_INCLUDE_SANDBOX`                  | `false`                      |
+| `currencies`                      | —                                                         | `['BRL']`                    |
+| `terms_version`                   | `ASSINAVELOX_AFFILIATES_TERMS_VERSION`                    | `afiliados-rascunho-2026-09` |
+| `public_email_domains`            | —                                                         | lista de provedores públicos |
 
 ## 11. Testes (`tests/Feature/Phase3/Affiliates`)
 
-| Arquivo | Cobre |
-| --- | --- |
-| `AttributionTest.php` | cookie só para código aprovado e resposta igual para os demais; dentro e fora da janela (e janela configurável); primeiro toque × último toque; cookie vencido substituído; organização atribuída uma única vez (serviço e UNIQUE no banco); sem cookie, convite e organização alheia; afiliado suspenso depois do clique |
-| `SelfReferralTest.php` | mesmo e-mail (+tag), mesmo domínio corporativo × domínio público, mesmo IP dentro × fora da janela, mesmo usuário; IP nunca em claro; conta duplicada segurada até revisão; pedido de revisão pelo afiliado; revisão que libera e que rejeita (reversão e estorno negativo); ponte real do antifraude não lança; revisão exige justificativa e equipe da plataforma |
-| `CommissionTest.php` | só aprovado gera, em centavos e moeda, prazo gravado; pendente → aprovada só depois do prazo (serviço e comando); prazo configurável; estorno e contestação antes e depois da aprovação (inclusive depois de paga); idempotência por pagamento; `in_mediation` segura; estorno parcial (pendente e aprovada); taxa do momento; período, organização não indicada, afiliado suspenso, sandbox; caminho real `SyncPaymentFromGateway`; indicação segurada não aprova |
-| `PayoutTest.php` | montagem por afiliado com exclusões (suspenso, sem dados, pendente, abaixo do mínimo); estorno abate; baixa manual com senha, referência, data e trilha; lote pago não muda; cancelamento devolve lançamentos; CSV com BOM, fórmula neutralizada e repasse mascarado; acesso só da equipe; telas |
-| `ProgramTest.php` | candidatura com dados cifrados em repouso; validação de chave/CPF; mascaramento; aprovação com código e taxa, suspensão com motivo e trilha; taxa com senha, motivo, teto e trilha antes → depois; portal sem dados pessoais de indicados; atualização de repasse sem valor na trilha; CSV do afiliado; isolamento entre usuários |
-| `FlagOffTest.php` | flag nasce desligada; todas as rotas 404; cadastro com cookie idêntico ao de sempre; pagamento aprovado sem comissão e comando sem efeito |
+| Arquivo                | Cobre                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AttributionTest.php`  | cookie só para código aprovado e resposta igual para os demais; dentro e fora da janela (e janela configurável); primeiro toque × último toque; cookie vencido substituído; organização atribuída uma única vez (serviço e UNIQUE no banco); sem cookie, convite e organização alheia; afiliado suspenso depois do clique                                                                                                                                                                                                                                                                                                                                 |
+| `SelfReferralTest.php` | mesmo e-mail (+tag), mesmo domínio corporativo × domínio público, mesmo IP dentro × fora da janela, mesmo usuário; IP nunca em claro; conta duplicada segurada até revisão; pedido de revisão pelo afiliado; revisão que libera e que rejeita (reversão e estorno negativo); revisão exige justificativa e equipe da plataforma. Usa o serviço **real** `App\Services\Risk\RiskSignals` (flag `antifraud` ligada) e confere a tabela `risk_signals`: regra, organização, evidência só com chaves permitidas (sem e-mail, IP ou repasse, sem `_dropped`), sujeito em HMAC; com a flag do antifraude desligada a indicação é barrada igual e nada é gravado |
+| `CommissionTest.php`   | só aprovado gera, em centavos e moeda, prazo gravado; pendente → aprovada só depois do prazo (serviço e comando); prazo configurável; estorno e contestação antes e depois da aprovação (inclusive depois de paga); idempotência por pagamento; `in_mediation` segura; estorno parcial (pendente e aprovada); taxa do momento; período, organização não indicada, afiliado suspenso, sandbox; caminho real `SyncPaymentFromGateway`; indicação segurada não aprova                                                                                                                                                                                        |
+| `PayoutTest.php`       | montagem por afiliado com exclusões (suspenso, sem dados, pendente, abaixo do mínimo); estorno abate; baixa manual com senha, referência, data e trilha; lote pago não muda; cancelamento devolve lançamentos; CSV com BOM, fórmula neutralizada e repasse mascarado; acesso só da equipe; telas                                                                                                                                                                                                                                                                                                                                                          |
+| `ProgramTest.php`      | candidatura com dados cifrados em repouso; validação de chave/CPF; mascaramento; aprovação com código e taxa, suspensão com motivo e trilha; taxa com senha, motivo, teto e trilha antes → depois; portal sem dados pessoais de indicados; atualização de repasse sem valor na trilha; CSV do afiliado; isolamento entre usuários                                                                                                                                                                                                                                                                                                                         |
+| `FlagOffTest.php`      | flag nasce desligada; todas as rotas 404; cadastro com cookie idêntico ao de sempre; pagamento aprovado sem comissão e comando sem efeito                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+Nenhum teste do programa usa mais dublê do antifraude (o `fakeAffiliateRisk()` da primeira versão foi removido; com a flag `antifraud` desligada — o padrão — o serviço real não grava nada). O teste de fumaça `tests/Feature/Smoke/AllGetRoutesTest.php` recebeu os parâmetros sintéticos das rotas GET do programa (`affiliates.link`, `admin.affiliates.show`, `admin.affiliates.payouts.show`/`export`) e o status esperado com a flag desligada (404 depois dos middlewares do grupo), além do parâmetro sintético de `admin.risk.show` (§3.7, sem mudar código do antifraude).

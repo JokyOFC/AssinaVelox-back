@@ -173,7 +173,21 @@ export type SignatureStatus =
     | 'none'
     | 'company_a1'
     | 'participants_a1'
-    | 'mixed';
+    | 'mixed'
+    /**
+     * Fase 3 §3.4 (espelho de `App\Enums\SignatureStatus`): participante com certificado A3
+     * por componente local REAL — nunca produzido pelo simulador; hoje não é produzido.
+     */
+    | 'participant_a3'
+    /** Fase 3 §3.4: participante por componente externo, origem em token não comprovada. */
+    | 'participant_external'
+    /**
+     * Fase 3 §3.5: documento devolvido pelo portal gov.br com a cadeia validada até a âncora
+     * gov.br fixada — "Assinatura gov.br (avançada)", nunca "qualificada" nem ICP-Brasil.
+     */
+    | 'participant_govbr'
+    /** Fase 3 §3.5: documento devolvido com assinatura íntegra, cadeia NÃO verificada (nunca "gov.br"). */
+    | 'participant_external_unverified';
 
 export type ActorType = 'user' | 'recipient' | 'system';
 

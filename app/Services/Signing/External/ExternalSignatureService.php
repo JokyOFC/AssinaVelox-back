@@ -155,7 +155,13 @@ final class ExternalSignatureService
             default => $status->value,
         };
 
-        $canPrepare = $authenticated && $open && $readiness['ready'] && ! $otherMethod
+        // Sem nenhum componente capaz de assinar (simulador desligado, NexU com a produção
+        // desabilitada), a opção não é oferecida: a intenção seguraria a finalização por uma
+        // assinatura impossível (revisão adversarial I-3A).
+        $components = $this->bridges->statuses();
+        $componentAvailable = self::anyAvailable($components);
+
+        $canPrepare = $authenticated && $open && $readiness['ready'] && ! $otherMethod && $componentAvailable
             && ($status === null || $status === ParticipantSignatureRequestStatus::Requested);
         $trust = $this->anchors->resolve();
 
@@ -168,13 +174,13 @@ final class ExternalSignatureService
             'message' => $otherMethod
                 ? 'Você já optou por assinar com o certificado A1 (arquivo) neste documento.'
                 : $readiness['message'],
-            'can_request' => $authenticated && $open && ! $otherMethod
+            'can_request' => $authenticated && $open && ! $otherMethod && $componentAvailable
                 && ($row === null || in_array($row->status, [ParticipantSignatureRequestStatus::Withdrawn], true)),
             'can_withdraw' => $authenticated && $status === ParticipantSignatureRequestStatus::Requested,
             'can_prepare' => $canPrepare,
             'request' => $external ? $this->requestProps($row) : null,
             'documents' => $readiness['ready'] && ($external || $row === null) ? $this->documentsState($context, $external ? $row : null) : [],
-            'components' => $this->bridges->statuses(),
+            'components' => $components,
             'local_component' => $this->bridges->nexuProtocol(),
             'chain' => [
                 'anchors_pinned' => $trust['pinned'],
@@ -204,6 +210,23 @@ final class ExternalSignatureService
         ];
     }
 
+    /**
+     * Algum componente pode assinar agora (simulador disponível ou componente real com a
+     * produção habilitada)? Lê o `available` que cada componente declara em `detect()`.
+     *
+     * @param  list<array<string, mixed>>  $components
+     */
+    private static function anyAvailable(array $components): bool
+    {
+        foreach ($components as $component) {
+            if (($component['available'] ?? false) === true) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // ------------------------------------------------------------------ escolha
 
     /**
@@ -213,6 +236,15 @@ final class ExternalSignatureService
     {
         $this->assertAuthenticated($context, $request);
         $this->assertOpen($context);
+
+        if (! self::anyAvailable($this->bridges->statuses())) {
+            throw new ExternalSignatureException(
+                'component_unavailable',
+                'Nenhum componente de assinatura está disponível nesta plataforma no momento, então não é possível assinar com certificado em token ou cartão.',
+                409,
+                'component',
+            );
+        }
 
         $row = $this->findRequest($context);
         $external = $row !== null && $row->getAttribute('signature_method') === self::METHOD;
@@ -913,6 +945,12 @@ final class ExternalSignatureService
                 );
             }
 
+            // O perfil gravado é o que o pdftool CONFERIU (inclusive os atributos PAdES do CMS
+            // pronto); nunca um padrão assumido aqui (revisão adversarial I-3A, T2).
+            if (! is_string($result['profile'] ?? null) || $result['profile'] === '') {
+                throw new ExternalSignatureException('cms_invalid', ExternalSignatureLabels::rejection('cms_invalid'), 422, 'signature');
+            }
+
             $kind = $this->kindFor($bridge, $pending);
             $acceptanceId = SignatureAcceptance::withoutOrganizationScope()->where('recipient_id', $pending->recipient_id)->value('id');
 
@@ -1067,7 +1105,7 @@ final class ExternalSignatureService
             'signed_document_version_id' => $version->getKey(),
             'revision_index' => $this->revisions->signedRevisions($document)->count(),
             'field_name' => (string) ($result['field_name'] ?? $pending->field_name),
-            'profile' => (string) ($result['profile'] ?? 'PAdES-B-B'),
+            'profile' => (string) $result['profile'],
             'subject' => $pending->certificate_subject,
             'issuer' => $pending->certificate_issuer,
             'serial_number' => $pending->certificate_serial,

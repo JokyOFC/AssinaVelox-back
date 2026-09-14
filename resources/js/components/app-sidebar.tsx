@@ -7,16 +7,18 @@ import {
     Code,
     CreditCard,
     FileText,
+    Handshake,
     History,
     LayoutDashboard,
     LayoutTemplate,
     PenLine,
     Plus,
+    ShieldAlert,
     ShieldCheck,
     SlidersHorizontal,
     Tablet,
-    Users,
     type LucideIcon,
+    Users,
 } from 'lucide-react';
 import { AccountMenu } from '@/components/account-menu';
 import AppLogo from '@/components/app-logo';
@@ -38,9 +40,12 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
 import type { RouteDefinition } from '@/wayfinder';
 import { dashboard } from '@/routes';
+import { index as affiliatesIndex } from '@/routes/affiliates';
+import { index as adminAffiliates } from '@/routes/admin/affiliates';
 import { index as adminAudit } from '@/routes/admin/audit';
 import { index as adminBilling } from '@/routes/admin/billing';
 import { index as adminOrganizations } from '@/routes/admin/organizations';
+import { index as adminRisk } from '@/routes/admin/risk';
 import { index as adminSettings } from '@/routes/admin/settings';
 import { index as adminUsers } from '@/routes/admin/users';
 import { index as billingIndex } from '@/routes/billing';
@@ -236,6 +241,14 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     hidden: !(permissions?.manage_members ?? false),
                 },
                 {
+                    // Fase 3 §3.10: portal do afiliado (conta do usuário, não da organização).
+                    key: 'affiliates',
+                    title: 'Programa de afiliados',
+                    href: affiliatesIndex(),
+                    icon: Handshake,
+                    hidden: !(features?.affiliates ?? false),
+                },
+                {
                     key: 'integrations',
                     title: 'API e integrações',
                     href: integrationsIndex(),
@@ -289,6 +302,22 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     // `extended_payments` ligada; desligada, o placeholder da Fase 1.
                     phase2: !(features?.extended_payments ?? false),
                     disabled: !(features?.extended_payments ?? false),
+                },
+                {
+                    // Fase 3 §3.7: fila de revisão humana do antifraude.
+                    key: 'admin-risk',
+                    title: 'Antifraude',
+                    href: adminRisk(),
+                    icon: ShieldAlert,
+                    hidden: !(features?.antifraud ?? false),
+                },
+                {
+                    // Fase 3 §3.10: afiliados, taxas e lotes de repasse (o sistema calcula, não paga).
+                    key: 'admin-affiliates',
+                    title: 'Afiliados',
+                    href: adminAffiliates(),
+                    icon: Handshake,
+                    hidden: !(features?.affiliates ?? false),
                 },
                 {
                     key: 'admin-users',

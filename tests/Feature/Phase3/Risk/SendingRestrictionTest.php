@@ -39,7 +39,10 @@ test('organização restricted não envia: mensagem clara com o canal de revisã
         ->assertRedirect()
         ->assertSessionHas('error', fn (string $message): bool => str_contains($message, 'suspenso')
             && str_contains($message, 'Documentos já enviados continuam disponíveis')
-            && str_contains($message, route('risk.appeal.show', [], false)));
+            // Revisão adversarial I-3A (roadmap §3.7, "mensagem clara"): o canal é nomeado pela
+            // página, não por um caminho cru de URL no meio do toast; o link fica na faixa do app.
+            && str_contains($message, 'Revisão de segurança da conta')
+            && ! str_contains($message, route('risk.appeal.show', [], false)));
 
     $envelope->refresh();
 

@@ -5,7 +5,7 @@ import { RiskStatusBadge } from '@/components/risk/risk-status-badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, plural } from '@/lib/format';
 import {
     show as riskAppealShow,
     store as riskAppealStore,
@@ -130,7 +130,8 @@ export default function RiskAppealShow({
                     <section className="border-border bg-card shadow-card rounded-xl border p-5 text-[13.5px]">
                         Pedido de revisão registrado em{' '}
                         {formatDateTime(review.appeal_requested_at)}. A equipe
-                        responde em até {response_days} dia(s) útil(eis), por
+                        responde em até{' '}
+                        {plural(response_days, 'dia útil', 'dias úteis')}, por
                         e-mail.
                     </section>
                 )}
@@ -152,7 +153,7 @@ export default function RiskAppealShow({
                             Conte o contexto (por exemplo, uma campanha legítima
                             de alto volume). Não envie documentos, senhas ou
                             dados pessoais de terceiros. Resposta em até{' '}
-                            {response_days} dia(s) útil(eis).
+                            {plural(response_days, 'dia útil', 'dias úteis')}.
                         </p>
                         <form onSubmit={submit} className="flex flex-col gap-3">
                             <div className="flex flex-col gap-1.5">
@@ -166,7 +167,15 @@ export default function RiskAppealShow({
                                     rows={5}
                                     maxLength={max_message}
                                     aria-invalid={!!error}
+                                    aria-describedby="appeal-message-help"
                                 />
+                                <p
+                                    id="appeal-message-help"
+                                    className="text-muted-foreground text-[12.5px]"
+                                >
+                                    Escreva pelo menos 20 caracteres (
+                                    {message.trim().length}/20).
+                                </p>
                                 {error && (
                                     <p className="text-danger text-[12.5px]">
                                         {error}

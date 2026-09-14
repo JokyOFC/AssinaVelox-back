@@ -25,6 +25,7 @@ import type {
     SigningOrder,
     SubscriptionStatus,
 } from '@/types/enums';
+import type { ExternalDocumentStatus } from '@/types/external-signing';
 import type { CryptoIntegrity, DossierExportStatus } from '@/types/signatures';
 
 /** Variantes semânticas de badge (cores em DESIGN §1.1 "Semânticas"). */
@@ -420,6 +421,13 @@ export const signatureStatusLabels: Record<SignatureStatus, string> = {
     company_a1: 'Certificado A1 da operadora',
     participants_a1: 'Certificado A1 dos participantes',
     mixed: 'Certificados A1 dos participantes e da operadora',
+    // Fase 3 §3.4 (espelho de `SignatureStatus::shortLabel()`).
+    participant_a3: 'Certificado A3 de participante',
+    participant_external: 'Certificado de participante (componente externo)',
+    // Fase 3 §3.5 (espelho de `SignatureStatus::shortLabel()`).
+    participant_govbr: 'Assinatura gov.br (avançada) de participante',
+    participant_external_unverified:
+        'Assinatura de terceiro, cadeia não verificada',
 };
 
 /** O arquivo final tem alguma assinatura criptográfica (da operadora ou de participante)? */
@@ -436,11 +444,46 @@ export function hasOperatorSignature(
     return status === 'company_a1' || status === 'mixed';
 }
 
-/** O arquivo final tem assinatura de participante com o próprio certificado? */
+/**
+ * O arquivo final tem assinatura de participante com o próprio certificado (A1 por arquivo
+ * ou, na Fase 3, feita fora da plataforma por componente)?
+ */
 export function hasParticipantSignatures(
     status: SignatureStatus | null | undefined,
 ): boolean {
-    return status === 'participants_a1' || status === 'mixed';
+    return (
+        status === 'participants_a1' ||
+        status === 'mixed' ||
+        hasExternalParticipantSignatures(status)
+    );
+}
+
+/**
+ * Fase 3 §3.4: há assinatura de participante feita FORA da plataforma (A3 por componente
+ * local real, ou componente externo — inclusive o simulador)? Espelho de
+ * `SignatureStatus::hasExternalParticipantSignatures()`.
+ */
+export function hasExternalParticipantSignatures(
+    status: SignatureStatus | null | undefined,
+): boolean {
+    return (
+        status === 'participant_a3' ||
+        status === 'participant_external' ||
+        isGovBrReturn(status)
+    );
+}
+
+/**
+ * Fase 3 §3.5: documento devolvido pelo portal gov.br (com ou sem cadeia verificada). Espelho
+ * de `SignatureStatus::isGovBrReturn()`.
+ */
+export function isGovBrReturn(
+    status: SignatureStatus | null | undefined,
+): boolean {
+    return (
+        status === 'participant_govbr' ||
+        status === 'participant_external_unverified'
+    );
 }
 
 /** Resultado técnico de UMA assinatura no arquivo final. */
@@ -500,6 +543,144 @@ export const participantCertificateErrorTitles: Record<string, string> = {
     not_authenticated: 'Confirme sua identidade',
     certificate_check_unavailable: 'Conferência indisponível no momento',
 };
+
+// ---------------------------------------------------------------------------
+// Fase 3, onda E — assinatura por componente local e devolução pelo portal gov.br
+// ---------------------------------------------------------------------------
+
+/**
+ * Situação de cada arquivo na assinatura por componente
+ * (`docs/fase-3/assinatura-externa-a3.md` §7, `documents[].status`).
+ */
+export const externalDocumentStatusLabels: Record<
+    ExternalDocumentStatus,
+    string
+> = {
+    to_sign: 'Pronto para assinar',
+    reserved: 'Resumo preparado',
+    busy: 'Em uso por outro participante',
+    waiting_base: 'Aguardando o arquivo consolidado',
+    signed: 'Assinado',
+};
+
+export const externalDocumentStatusTones: Record<
+    ExternalDocumentStatus,
+    BadgeTone
+> = {
+    to_sign: 'info',
+    reserved: 'warning',
+    busy: 'neutral',
+    waiting_base: 'neutral',
+    signed: 'success',
+};
+
+/**
+ * Título curto de cada recusa da assinatura por componente (§7). O texto explicativo é
+ * sempre o `message` do servidor; aqui só o título do alerta.
+ */
+export const externalSigningErrorTitles: Record<string, string> = {
+    not_ready: 'Ainda não é possível assinar',
+    document_reserved: 'Arquivo em uso por outro participante',
+    busy: 'O documento está ocupado',
+    waiting_base: 'Arquivo ainda não consolidado',
+    already_signed: 'Arquivo já assinado',
+    already_consumed: 'Resumo já utilizado',
+    expired: 'Resumo vencido',
+    pending_closed: 'Preparação encerrada',
+    stale_revision: 'O documento mudou depois da preparação',
+    pending_missing: 'Preparação indisponível',
+    request_closed: 'Pedido encerrado',
+    envelope_closed: 'Documento encerrado',
+    window_closed: 'Prazo encerrado',
+    other_method_chosen: 'Outro meio já escolhido',
+    component_unavailable: 'Componente indisponível',
+    simulator_only: 'Preparação do simulador',
+    not_simulated: 'Preparação que não é do simulador',
+    cannot_withdraw: 'Não é possível desistir agora',
+    not_requested: 'Nenhuma escolha registrada',
+    signature_invalid: 'Assinatura não confere',
+    certificate_mismatch: 'Certificado diferente do anunciado',
+    digest_mismatch: 'Assinatura de outro conteúdo',
+    cms_invalid: 'Pacote de assinatura inválido',
+    cms_too_large: 'Pacote de assinatura grande demais',
+    certificate_invalid: 'Certificado ilegível',
+    certificate_expired: 'Certificado vencido',
+    certificate_not_yet_valid: 'Certificado ainda não está válido',
+    certificate_not_for_signing: 'Certificado sem uso para assinatura',
+    certificate_is_ca: 'Certificado de autoridade certificadora',
+    unsupported_key_algorithm: 'Tipo de chave não aceito',
+    test_certificate_not_accepted: 'Certificado de teste não aceito',
+    holder_mismatch: 'Titular diferente do participante',
+    chain_not_trusted: 'Cadeia não validada',
+    chain_too_long: 'Cadeia grande demais',
+    invalid_encoding: 'Conteúdo mal codificado',
+    input_too_large: 'Conteúdo grande demais',
+    mode_mismatch: 'Modo diferente do preparado',
+    mode_not_supported: 'Modo não aceito',
+    component_unknown: 'Componente desconhecido',
+    not_authenticated: 'Confirme sua identidade',
+    pending_not_found: 'Preparação não encontrada',
+    document_not_found: 'Arquivo não encontrado',
+    embed_failed: 'A assinatura não foi incorporada',
+    prepare_failed: 'Preparação indisponível no momento',
+    revision_unavailable: 'Arquivo indisponível no momento',
+};
+
+/**
+ * Título curto de cada recusa da devolução pelo portal gov.br (`docs/fase-3/gov-br.md` §4 e
+ * §6). O motivo exato é o `message` do servidor.
+ */
+export const govbrReturnErrorTitles: Record<string, string> = {
+    base_not_prefix: 'Não é o arquivo esperado',
+    no_new_revision: 'Nenhuma assinatura nova',
+    no_new_signature: 'Nenhuma assinatura nova',
+    unexpected_revision_count: 'O arquivo foi alterado além da assinatura',
+    multiple_new_signatures: 'Mais de uma assinatura nova',
+    unexpected_document_timestamp: 'Selo de documento não aceito',
+    signature_not_intact: 'O conteúdo assinado foi alterado',
+    signature_invalid: 'Assinatura inválida',
+    signature_not_covering_file: 'Conteúdo acrescentado depois da assinatura',
+    unpermitted_changes: 'O arquivo foi alterado além da assinatura',
+    previous_signature_broken: 'Assinatura anterior deixou de conferir',
+    docmdp_violation: 'Permissões de alteração desrespeitadas',
+    docmdp_locks_document: 'A assinatura bloqueia o documento',
+    chain_not_trusted: 'Certificado fora da cadeia configurada',
+    holder_mismatch: 'Certificado de outra pessoa',
+    holder_cpf_not_found: 'CPF não encontrado no certificado',
+    test_certificate_not_accepted: 'Certificado de teste não aceito',
+    invalid_pdf: 'PDF ilegível',
+    encrypted_pdf: 'PDF protegido por senha',
+    not_pdf: 'O arquivo não é um PDF',
+    file_too_large: 'Arquivo grande demais',
+    upload_failed: 'O arquivo não foi recebido',
+    not_ready: 'Ainda não é possível reservar',
+    reservation_busy: 'Arquivo reservado por outro participante',
+    reservation_expired: 'Reserva vencida',
+    base_changed: 'O documento mudou depois da reserva',
+    not_reserved: 'Nenhuma versão reservada',
+    already_completed: 'Arquivo já recebido',
+    envelope_closed: 'Documento encerrado',
+    window_closed: 'Prazo encerrado',
+    cannot_withdraw: 'Não é possível desistir agora',
+    busy: 'O documento está ocupado',
+    not_authenticated: 'Confirme sua identidade',
+    not_found: 'Pedido não encontrado',
+    verification_unavailable: 'Conferência indisponível no momento',
+    trust_anchor_misconfigured: 'Conferência indisponível no momento',
+};
+
+/** Tom do selo do pedido gov.br (`ExternalSignatureRequestStatus`). */
+export function govbrRequestTone(status: string): BadgeTone {
+    switch (status) {
+        case 'completed':
+            return 'success';
+        case 'pending':
+        case 'requested':
+            return 'warning';
+        default:
+            return 'neutral';
+    }
+}
 
 export const dossierStatusTones: Record<DossierExportStatus, BadgeTone> = {
     pending: 'info',

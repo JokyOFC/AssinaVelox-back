@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Admin\AffiliateController;
+use App\Http\Controllers\Admin\AffiliatePayoutController;
+use App\Http\Controllers\Admin\AffiliateReferralController;
 use App\Http\Controllers\Admin\AuditController as AdminAuditController;
 use App\Http\Controllers\Admin\BillingActionController as AdminBillingActionController;
 use App\Http\Controllers\Admin\BillingController as AdminBillingController;
@@ -10,6 +13,8 @@ use App\Http\Controllers\Admin\RiskAppealController;
 use App\Http\Controllers\Admin\RiskReportController as AdminRiskReportController;
 use App\Http\Controllers\Admin\RiskReviewController as AdminRiskReviewController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Affiliates\AffiliatePortalController;
+use App\Http\Controllers\Affiliates\ReferralLinkController;
 use App\Http\Controllers\Batch\BatchLinkController;
 use App\Http\Controllers\Batch\BatchSigningController;
 use App\Http\Controllers\Billing\BillingCheckoutController;
@@ -68,6 +73,8 @@ use App\Http\Controllers\Sign\CaptureController as SignCaptureController;
 use App\Http\Controllers\Sign\CertificateController as SignCertificateController;
 use App\Http\Controllers\Sign\DocumentController as SignDocumentController;
 use App\Http\Controllers\Sign\DownloadController as SignDownloadController;
+use App\Http\Controllers\Sign\ExternalSignatureController;
+use App\Http\Controllers\Sign\ExternalSimulatorController;
 use App\Http\Controllers\Sign\GovBrReturnController as SignGovBrReturnController;
 use App\Http\Controllers\Sign\OtpController;
 use App\Http\Controllers\Sign\RefusalController;
@@ -180,13 +187,13 @@ Route::prefix('assinar/{token}')
         // por componente local (A3) — o servidor prepara a revisão e o digest, o componente assina,
         // o servidor incorpora e valida. JSON; 404 com a flag `a3_signing` desligada. O simulador
         // só existe em teste/local (FakeLocalSigner) e tudo o que assina é rotulado "simulado".
-        Route::get('externa', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'show'])->middleware('throttle:60,1,sign-external-show')->name('external.show');
-        Route::post('externa/intencao', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'intent'])->middleware('throttle:20,10,sign-external-intent')->name('external.intent');
-        Route::post('externa/desistir', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'withdraw'])->middleware('throttle:20,10,sign-external-withdraw')->name('external.withdraw');
-        Route::post('externa/preparar', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'prepare'])->middleware('throttle:30,10,sign-external-prepare')->name('external.prepare');
-        Route::post('externa/assinatura', [\App\Http\Controllers\Sign\ExternalSignatureController::class, 'submit'])->middleware('throttle:30,10,sign-external-submit')->name('external.submit');
-        Route::get('externa/simulador/certificado', [\App\Http\Controllers\Sign\ExternalSimulatorController::class, 'certificate'])->middleware('throttle:30,10,sign-external-simulator')->name('external.simulator.certificate');
-        Route::post('externa/simulador/assinar', [\App\Http\Controllers\Sign\ExternalSimulatorController::class, 'sign'])->middleware('throttle:30,10,sign-external-simulator-sign')->name('external.simulator.sign');
+        Route::get('externa', [ExternalSignatureController::class, 'show'])->middleware('throttle:60,1,sign-external-show')->name('external.show');
+        Route::post('externa/intencao', [ExternalSignatureController::class, 'intent'])->middleware('throttle:20,10,sign-external-intent')->name('external.intent');
+        Route::post('externa/desistir', [ExternalSignatureController::class, 'withdraw'])->middleware('throttle:20,10,sign-external-withdraw')->name('external.withdraw');
+        Route::post('externa/preparar', [ExternalSignatureController::class, 'prepare'])->middleware('throttle:30,10,sign-external-prepare')->name('external.prepare');
+        Route::post('externa/assinatura', [ExternalSignatureController::class, 'submit'])->middleware('throttle:30,10,sign-external-submit')->name('external.submit');
+        Route::get('externa/simulador/certificado', [ExternalSimulatorController::class, 'certificate'])->middleware('throttle:30,10,sign-external-simulator')->name('external.simulator.certificate');
+        Route::post('externa/simulador/assinar', [ExternalSimulatorController::class, 'sign'])->middleware('throttle:30,10,sign-external-simulator-sign')->name('external.simulator.sign');
         // Fase 3 §3.5 (P3-GOV, docs/fase-3/gov-br.md): o participante assina no portal gov.br e
         // DEVOLVE o PDF. JSON (exceto o download da revisão reservada); 404 com a flag
         // `govbr_return` desligada. Autenticação no serviço, como no A1 do participante.
@@ -590,71 +597,73 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
 // -- Fase 3 §3.10 (P3-AFF) — programa de afiliados (docs/fase-3/afiliados.md) ---------------
 // Flag `affiliates` (plataforma) desligada: todas respondem 404 e o cadastro não muda.
 // O sistema CALCULA comissões e monta lotes; o repasse é manual, fora da plataforma.
-Route::get('indicacao/{code}', [\App\Http\Controllers\Affiliates\ReferralLinkController::class, 'show'])
+Route::get('indicacao/{code}', [ReferralLinkController::class, 'show'])
     ->where('code', '[A-Za-z0-9]{6,16}')
     ->middleware('throttle:public')
     ->name('affiliates.link');
 
 Route::middleware(['auth', 'verified'])->prefix('afiliados')->name('affiliates.')->group(function (): void {
-    Route::get('/', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'index'])->name('index');
-    Route::post('/', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'apply'])
-        ->middleware('throttle:10,1')
+    Route::get('/', [AffiliatePortalController::class, 'index'])->name('index');
+    // Limites com prefixo próprio (3º parâmetro): o contador não é o mesmo do `throttle:N,M`
+    // genérico das outras rotas (inclusive o link de verificação de e-mail, 6/min).
+    Route::post('/', [AffiliatePortalController::class, 'apply'])
+        ->middleware('throttle:10,1,affiliates-apply')
         ->name('apply');
-    Route::put('repasse', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'updatePayout'])
-        ->middleware(['password.confirm', 'throttle:10,1'])
+    Route::put('repasse', [AffiliatePortalController::class, 'updatePayout'])
+        ->middleware(['password.confirm', 'throttle:10,1,affiliates-payout'])
         ->name('payout.update');
-    Route::post('indicacoes/{referral}/revisao', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'requestReview'])
+    Route::post('indicacoes/{referral}/revisao', [AffiliatePortalController::class, 'requestReview'])
         ->where('referral', '[A-Za-z0-9]{26}')
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,affiliates-review')
         ->name('referrals.review');
-    Route::get('comissoes/exportar', [\App\Http\Controllers\Affiliates\AffiliatePortalController::class, 'export'])
-        ->middleware('throttle:10,1')
+    Route::get('comissoes/exportar', [AffiliatePortalController::class, 'export'])
+        ->middleware('throttle:10,1,affiliates-export')
         ->name('commissions.export');
 });
 
 Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin/afiliados')->name('admin.affiliates.')->group(function (): void {
-    Route::get('/', [\App\Http\Controllers\Admin\AffiliateController::class, 'index'])->name('index');
+    Route::get('/', [AffiliateController::class, 'index'])->name('index');
 
-    Route::get('lotes', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'index'])->name('payouts.index');
-    Route::post('lotes', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'store'])
-        ->middleware('throttle:10,1')
+    Route::get('lotes', [AffiliatePayoutController::class, 'index'])->name('payouts.index');
+    Route::post('lotes', [AffiliatePayoutController::class, 'store'])
+        ->middleware('throttle:10,1,admin-affiliates-batch')
         ->name('payouts.store');
-    Route::get('lotes/{batch}', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'show'])
+    Route::get('lotes/{batch}', [AffiliatePayoutController::class, 'show'])
         ->where('batch', '[A-Za-z0-9]{26}')
         ->name('payouts.show');
-    Route::post('lotes/{batch}/pago', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'markPaid'])
+    Route::post('lotes/{batch}/pago', [AffiliatePayoutController::class, 'markPaid'])
         ->where('batch', '[A-Za-z0-9]{26}')
-        ->middleware(['password.confirm', 'throttle:10,1'])
+        ->middleware(['password.confirm', 'throttle:10,1,admin-affiliates-batch'])
         ->name('payouts.paid');
-    Route::post('lotes/{batch}/cancelar', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'cancel'])
+    Route::post('lotes/{batch}/cancelar', [AffiliatePayoutController::class, 'cancel'])
         ->where('batch', '[A-Za-z0-9]{26}')
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,admin-affiliates-batch')
         ->name('payouts.cancel');
-    Route::get('lotes/{batch}/exportar', [\App\Http\Controllers\Admin\AffiliatePayoutController::class, 'export'])
+    Route::get('lotes/{batch}/exportar', [AffiliatePayoutController::class, 'export'])
         ->where('batch', '[A-Za-z0-9]{26}')
-        ->middleware('throttle:20,1')
+        ->middleware('throttle:20,1,admin-affiliates-export')
         ->name('payouts.export');
 
-    Route::post('indicacoes/{referral}/revisar', [\App\Http\Controllers\Admin\AffiliateReferralController::class, 'review'])
+    Route::post('indicacoes/{referral}/revisar', [AffiliateReferralController::class, 'review'])
         ->where('referral', '[A-Za-z0-9]{26}')
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,admin-affiliates-review')
         ->name('referrals.review');
 
     Route::prefix('{affiliate}')->where(['affiliate' => '[A-Za-z0-9]{26}'])->group(function (): void {
-        Route::get('/', [\App\Http\Controllers\Admin\AffiliateController::class, 'show'])->name('show');
-        Route::post('aprovar', [\App\Http\Controllers\Admin\AffiliateController::class, 'approve'])
+        Route::get('/', [AffiliateController::class, 'show'])->name('show');
+        Route::post('aprovar', [AffiliateController::class, 'approve'])
             ->middleware(['password.confirm', 'throttle:30,1'])
             ->name('approve');
-        Route::post('recusar', [\App\Http\Controllers\Admin\AffiliateController::class, 'reject'])
+        Route::post('recusar', [AffiliateController::class, 'reject'])
             ->middleware('throttle:30,1')
             ->name('reject');
-        Route::post('suspender', [\App\Http\Controllers\Admin\AffiliateController::class, 'suspend'])
+        Route::post('suspender', [AffiliateController::class, 'suspend'])
             ->middleware(['password.confirm', 'throttle:30,1'])
             ->name('suspend');
-        Route::post('reativar', [\App\Http\Controllers\Admin\AffiliateController::class, 'reactivate'])
+        Route::post('reativar', [AffiliateController::class, 'reactivate'])
             ->middleware(['password.confirm', 'throttle:30,1'])
             ->name('reactivate');
-        Route::put('taxa', [\App\Http\Controllers\Admin\AffiliateController::class, 'updateRate'])
+        Route::put('taxa', [AffiliateController::class, 'updateRate'])
             ->middleware(['password.confirm', 'throttle:30,1'])
             ->name('rate.update');
     });

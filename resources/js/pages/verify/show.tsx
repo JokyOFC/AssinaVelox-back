@@ -19,8 +19,10 @@ import {
 } from '@/components/verification/signature-statement';
 import { VerificationSealCard } from '@/components/verification/verification-seal';
 import { PublicParticipantSignatureList } from '@/components/verification/crypto-signature-list';
+import { HashHistoryList } from '@/components/verification/long-term-state';
 import { TimestampList } from '@/components/verification/timestamp-list';
 import { formatDateTime, formatVerificationCode, plural } from '@/lib/format';
+import { hasExternalParticipantSignatures } from '@/lib/labels';
 import {
     check_file as verifyCheckFile,
     index as verifyIndex,
@@ -30,6 +32,7 @@ import type {
     RecipientStatus,
     SignatureStatus,
 } from '@/types/enums';
+import type { HashHistoryEntry } from '@/types/external-signing';
 import type {
     PublicParticipantSignature,
     PublicRetentionNotice,
@@ -103,6 +106,12 @@ export interface PublicVerificationResult {
     timestamps?: PublicTimestamp[];
     /** Fase 2 §2.19: registro excluído pela política de retenção (`RetentionTombstones`). */
     retention?: PublicRetentionNotice;
+    /**
+     * Fase 3 §3.6 (`VerificationHashHistory::publicProps`): só depois de um novo carimbo de
+     * arquivamento e se o produto decidir publicá-lo (docs/fase-3/longo-prazo.md §6).
+     */
+    hash_history?: HashHistoryEntry[];
+    hash_history_notice?: string | null;
 }
 
 export interface VerifyShowProps {
@@ -115,10 +124,13 @@ export interface VerifyShowProps {
      * no navegador e não passa por aqui.
      */
     file_check?: {
-        matches: 'signed' | 'original' | 'none';
+        /** `signed_previous`: Fase 3 §3.6, versão anterior do final (depois da integração). */
+        matches: 'signed' | 'original' | 'signed_previous' | 'none';
         checked_sha256: string;
         /** Fase 2 §2.3: com vários arquivos, qual deles conferiu. */
         document?: { position: number; name: string } | null;
+        valid_from?: string | null;
+        superseded_at?: string | null;
     } | null;
 }
 
@@ -209,8 +221,22 @@ export default function VerifyShow({
             : []),
     ];
 
+    /*
+     * Fase 3 §3.6: um arquivo baixado antes de um novo carimbo de arquivamento tem outro
+     * resumo. Com o histórico publicado, a conferência local reconhece a versão anterior —
+     * em âmbar, porque não é o arquivo final vigente.
+     */
+    const previousTargets: FileCheckTarget[] = (result.hash_history ?? [])
+        .filter((entry) => !entry.current)
+        .map((entry, index) => ({
+            key: `previous-${entry.position}-${index}`,
+            label: `versão anterior do arquivo final${multi ? ` (arquivo ${entry.position})` : ''}`,
+            sha256: entry.sha256,
+            hint: `Ela foi substituída${entry.superseded_at ? ` em ${formatDateTime(entry.superseded_at)}` : ''} por um novo carimbo do tempo de arquivamento; o conteúdo do documento não mudou.`,
+        }));
+
     // Fase 2 §2.3: o arquivo em mãos pode ser qualquer um dos arquivos do envelope.
-    const checkTargets: FileCheckTarget[] = multi
+    const baseTargets: FileCheckTarget[] = multi
         ? files.flatMap((file) => [
               ...(file.final_sha256
                   ? [
@@ -234,6 +260,24 @@ export default function VerifyShow({
                   : []),
           ])
         : singleTargets;
+    const checkTargets: FileCheckTarget[] = [
+        ...baseTargets,
+        ...previousTargets,
+    ];
+    // Fase 3 §3.4: assinatura por componente — simulada? a operadora assinou por último?
+    // Fase 3 §3.5: devolução do portal no mesmo arquivo (o selo cita os dois meios).
+    const portalSignature = (result.participant_signatures ?? []).some(
+        (item) =>
+            item.kind === 'participant_govbr' ||
+            item.kind === 'participant_external_unverified',
+    );
+    const simulatedSignature = (result.participant_signatures ?? []).some(
+        (item) => item.simulated === true,
+    );
+    const operatorLast =
+        result.signature_status === 'mixed' ||
+        (hasExternalParticipantSignatures(result.signature_status) &&
+            result.certificate !== null);
 
     // Fase 2 §2.19: excluído pela política de retenção — só o aviso e o resumo final.
     if (result.retention?.purged) {
@@ -293,6 +337,9 @@ export default function VerifyShow({
                     status={result.status}
                     signatureStatus={result.signature_status}
                     policy={policy}
+                    simulated={simulatedSignature}
+                    portal={portalSignature}
+                    operator={result.certificate !== null}
                 />
 
                 <dl className="grid gap-x-6 text-[13px] sm:grid-cols-2">
@@ -480,7 +527,7 @@ export default function VerifyShow({
                     {result.certificate && (
                         <div className="border-border rounded-lg border p-3.5">
                             <p className="mb-2 text-[12.5px] font-semibold">
-                                {result.signature_status === 'mixed'
+                                {operatorLast
                                     ? 'Certificado da operadora (assinou por último)'
                                     : 'Certificado da operadora'}
                             </p>
@@ -512,6 +559,20 @@ export default function VerifyShow({
                     <section className="flex flex-col gap-3">
                         <Heading variant="small" title="Carimbo do tempo" />
                         <TimestampList items={result.timestamps} />
+                    </section>
+                )}
+
+                {/* Fase 3 §3.6: só quando a chave existir (decisão de produto pendente). */}
+                {result.hash_history && result.hash_history.length > 0 && (
+                    <section className="flex flex-col gap-3">
+                        <Heading
+                            variant="small"
+                            title="Resumos anteriores do arquivo final"
+                        />
+                        <HashHistoryList
+                            entries={result.hash_history}
+                            notice={result.hash_history_notice}
+                        />
                     </section>
                 )}
 

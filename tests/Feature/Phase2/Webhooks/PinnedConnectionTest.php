@@ -28,9 +28,11 @@ require_once __DIR__.'/Support/WebhookHelpers.php';
 | conexão. Os controles negativos provam que (a) sem pino o nome não conecta e (b) o endereço
 | da conexão é o do pino, não o que o nome "deveria" ter.
 |
-| Não coberto aqui (documentado em docs/fase-2/webhooks.md §6.4): o caminho HTTPS com SNI e
-| certificado — o servidor embutido do PHP não fala TLS. O mecanismo é o mesmo CURLOPT_RESOLVE
-| com o nome mantido na URL.
+| O caminho HTTPS (SNI e verificação do certificado pelo NOME, com a conexão no IP pinado;
+| certificado inválido para o nome recusado; rebinding e redirecionamento bloqueados) é coberto
+| por tests/Feature/Phase2/Webhooks/HttpsPinTest.php, com servidor TLS local e AC de teste
+| (docs/fase-2/webhooks.md §6.5). Este arquivo fica com o caminho HTTP — o servidor embutido do
+| PHP não fala TLS. O mecanismo é o mesmo CURLOPT_RESOLVE com o nome mantido na URL.
 */
 
 const PIN_HOST = 'pinned-receiver.invalid';

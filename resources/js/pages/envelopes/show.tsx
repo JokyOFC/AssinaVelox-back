@@ -89,6 +89,8 @@ import {
     deliveryChannelLabels,
     fieldTypeLabels,
     hasCryptographicSignature,
+    hasExternalParticipantSignatures,
+    isGovBrReturn,
     hasParticipantSignatures,
     participantRoleLabels,
     signingOrderLabels,
@@ -668,7 +670,19 @@ export default function EnvelopeShow({
                 </StatusBanner>
             )}
             {envelope.status === 'completed' && (
-                <CompletionPanel envelope={envelope} verifyUrl={verifyUrl} />
+                <CompletionPanel
+                    envelope={envelope}
+                    verifyUrl={verifyUrl}
+                    simulated={participant_signatures.some(
+                        (signature) => signature.simulated === true,
+                    )}
+                    portal={participant_signatures.some(
+                        (signature) =>
+                            signature.kind === 'participant_govbr' ||
+                            signature.kind ===
+                                'participant_external_unverified',
+                    )}
+                />
             )}
             {participant_signatures.length > 0 && (
                 <section className="border-border bg-card shadow-card rounded-xl border p-5">
@@ -1724,9 +1738,18 @@ function RecipientEditDialog({
 function CompletionPanel({
     envelope,
     verifyUrl,
+    simulated = false,
+    portal = false,
 }: {
     envelope: EnvelopeShowProps['envelope'];
     verifyUrl: string | null;
+    /** Fase 3 §3.4: alguma assinatura por componente veio do simulador. */
+    simulated?: boolean;
+    /**
+     * Fase 3 §3.5: algum participante devolveu o arquivo assinado no portal. Com mais de um meio
+     * externo o `signature_status` é o genérico `participant_external`; o texto cita os dois.
+     */
+    portal?: boolean;
 }) {
     /*
      * Três estados, não dois. `signature_status` ausente não é "sem certificado":
@@ -1738,10 +1761,27 @@ function CompletionPanel({
     const signedByOperator = status === 'company_a1';
     // Fase 2 §2.12: participantes com o próprio certificado (com ou sem a operadora).
     const participants = hasParticipantSignatures(status);
+    // Fase 3 §3.4: feita FORA da plataforma, por componente (A3 real ou externo/simulado).
+    const external = hasExternalParticipantSignatures(status);
     const signedFile = hasCryptographicSignature(status);
     const knownStatus = status != null;
     const code = formatVerificationCode(envelope.verification_code);
     const completedAt = formatDateTime(envelope.completed_at);
+    // Fase 3 §3.5: documento devolvido pelo portal gov.br ("gov.br" só com a cadeia validada).
+    const portalReturn = isGovBrReturn(status);
+    const externalTitle =
+        status === 'participant_a3'
+            ? `Concluído e assinado com certificado A3 de participante em ${completedAt}`
+            : status === 'participant_govbr'
+              ? `Concluído · assinatura gov.br (avançada) de participante em ${completedAt}`
+              : status === 'participant_external_unverified'
+                ? `Concluído · documento devolvido com assinatura de terceiro (cadeia não verificada) em ${completedAt}`
+                : simulated
+                  ? `Concluído · assinatura de participante por componente externo (simulada) em ${completedAt}`
+                  : `Concluído e assinado por participante com componente externo em ${completedAt}`;
+    const externalText = portalReturn
+        ? `${status === 'participant_govbr' ? 'O participante assinou no portal gov.br a versão reservada pela plataforma e devolveu o arquivo' : 'O participante devolveu a versão reservada pela plataforma com uma assinatura digital acrescentada'}; a plataforma conferiu que ele começa pela versão entregue e só acrescenta uma assinatura. ${status === 'participant_govbr' ? 'A cadeia foi conferida contra a âncora gov.br fixada; não é assinatura com certificado ICP-Brasil.' : 'A cadeia não foi verificada: não se afirma que seja assinatura gov.br.'} A assinatura se soma ao aceite eletrônico, sem substituí-lo.${envelope.certificate ? ' Por último, a operadora aplicou a sua própria assinatura, que não é a assinatura pessoal de ninguém.' : ''} A lista está na página de evidências.`
+        : `O arquivo final recebeu assinatura feita pelo participante fora da plataforma, com um componente no próprio computador, sobre um resumo preparado pela plataforma — a chave do certificado não passou por ela. A assinatura se soma ao aceite eletrônico, sem substituí-lo.${envelope.certificate ? ' Por último, a operadora aplicou a sua própria assinatura, que não é a assinatura pessoal de ninguém.' : ''}${simulated ? ' Atenção: ao menos uma assinatura foi produzida pelo simulador — nenhum token foi usado — e não tem valor para uso real.' : ''}${portal ? ' Além disso, um participante devolveu a versão reservada pela plataforma com uma assinatura digital acrescentada; sem a cadeia validada até a âncora fixada, não se afirma que seja assinatura gov.br.' : ''} A lista está na página de evidências.`;
 
     return (
         <section className="border-success-border bg-success-bg text-success flex flex-col gap-3 rounded-[10px] border p-4">
@@ -1751,24 +1791,28 @@ function CompletionPanel({
                     <p className="text-[13.5px] font-semibold">
                         {!knownStatus
                             ? `Documento concluído em ${completedAt}`
-                            : status === 'mixed'
-                              ? `Concluído e assinado com certificados dos participantes e da operadora em ${completedAt}`
-                              : participants
-                                ? `Concluído e assinado com certificado dos participantes em ${completedAt}`
-                                : signedByOperator
-                                  ? `Concluído e assinado digitalmente pela operadora em ${completedAt}`
-                                  : `Concluído com aceite eletrônico e evidências em ${completedAt}`}
+                            : external
+                              ? externalTitle
+                              : status === 'mixed'
+                                ? `Concluído e assinado com certificados dos participantes e da operadora em ${completedAt}`
+                                : participants
+                                  ? `Concluído e assinado com certificado dos participantes em ${completedAt}`
+                                  : signedByOperator
+                                    ? `Concluído e assinado digitalmente pela operadora em ${completedAt}`
+                                    : `Concluído com aceite eletrônico e evidências em ${completedAt}`}
                     </p>
                     <p className="mt-1 text-[12.5px] leading-[1.55] opacity-90">
                         {!knownStatus
                             ? 'O arquivo final e o relatório de evidências estão disponíveis. A situação da assinatura — com ou sem certificado da operadora — está na página de evidências.'
-                            : status === 'mixed'
-                              ? 'O arquivo final recebeu assinaturas feitas com o certificado A1 do próprio participante e, por último, a assinatura da operadora, que lacra o arquivo e não é a assinatura pessoal de ninguém. Cada assinatura de participante se soma ao aceite eletrônico dele, sem substituí-lo. A lista está na página de evidências.'
-                              : participants
-                                ? 'O arquivo final recebeu assinaturas feitas com o certificado A1 do próprio participante, acrescentadas depois das evidências. Elas identificam o titular de cada certificado e se somam ao aceite eletrônico, sem substituí-lo. A operadora não aplicou assinatura própria. A lista está na página de evidências.'
-                                : signedByOperator
-                                  ? 'O arquivo final foi lacrado com o certificado A1 da AssinaVelox. A assinatura identifica a operadora e permite detectar alterações posteriores no arquivo; não é a assinatura pessoal dos participantes.'
-                                  : 'Nenhum certificado da operadora estava ativo na finalização, então o arquivo final não tem assinatura criptográfica. As evidências de cada aceite — data, IP, navegador, código confirmado por e-mail e a versão exata do documento — estão no relatório.'}
+                            : external
+                              ? externalText
+                              : status === 'mixed'
+                                ? 'O arquivo final recebeu assinaturas feitas com o certificado A1 do próprio participante e, por último, a assinatura da operadora, que lacra o arquivo e não é a assinatura pessoal de ninguém. Cada assinatura de participante se soma ao aceite eletrônico dele, sem substituí-lo. A lista está na página de evidências.'
+                                : participants
+                                  ? 'O arquivo final recebeu assinaturas feitas com o certificado A1 do próprio participante, acrescentadas depois das evidências. Elas identificam o titular de cada certificado e se somam ao aceite eletrônico, sem substituí-lo. A operadora não aplicou assinatura própria. A lista está na página de evidências.'
+                                  : signedByOperator
+                                    ? 'O arquivo final foi lacrado com o certificado A1 da AssinaVelox. A assinatura identifica a operadora e permite detectar alterações posteriores no arquivo; não é a assinatura pessoal dos participantes.'
+                                    : 'Nenhum certificado da operadora estava ativo na finalização, então o arquivo final não tem assinatura criptográfica. As evidências de cada aceite — data, IP, navegador, código confirmado por e-mail e a versão exata do documento — estão no relatório.'}
                     </p>
                 </div>
             </div>

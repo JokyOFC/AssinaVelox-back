@@ -3,6 +3,7 @@ import {
     CertificateFacts,
     TestCertificateNotice,
 } from '@/components/certificates/certificate-facts';
+import { SimulatedTag } from '@/components/external-signing/parts';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatDateTime, plural } from '@/lib/format';
 import {
@@ -64,7 +65,39 @@ function Rows({
     );
 }
 
-function ListIntro({ profile }: { profile?: string | null }) {
+/** Fase 3 §3.4: componente que produziu a assinatura (rótulo; o simulador é sempre dito). */
+const COMPONENT_LABELS: Record<string, string> = {
+    simulated:
+        'Simulador de componente local (simulado — nenhum token foi usado)',
+    nexu: 'NexU (componente local para token ou cartão)',
+};
+
+const MODE_LABELS: Record<string, string> = {
+    raw: 'Assinatura do resumo devolvida pelo componente',
+    cms: 'Pacote de assinatura (CMS) devolvido pelo componente',
+};
+
+function isExternal(kind: string): boolean {
+    return kind === 'participant_a3' || kind === 'participant_external';
+}
+
+/** Fase 3 §3.5: documento devolvido depois de assinado no portal gov.br. */
+function isPortalReturn(kind: string): boolean {
+    return (
+        kind === 'participant_govbr' ||
+        kind === 'participant_external_unverified'
+    );
+}
+
+function ListIntro({
+    profile,
+    external = false,
+    portal = false,
+}: {
+    profile?: string | null;
+    external?: boolean;
+    portal?: boolean;
+}) {
     return (
         <div className="flex items-start gap-2">
             <FileSignature className="text-primary mt-0.5 size-4 shrink-0" />
@@ -77,6 +110,10 @@ function ListIntro({ profile }: { profile?: string | null }) {
                     ao aceite eletrônico do participante, sem substituí-lo. Não
                     é a assinatura da operadora. Perfil:{' '}
                     {profile || DEFAULT_PROFILE}.
+                    {external &&
+                        ' As feitas por componente foram assinadas fora da plataforma, sobre um resumo preparado por ela: a chave do certificado não passou pela plataforma.'}
+                    {portal &&
+                        ' As devolvidas foram acrescentadas pelo participante à versão reservada pela plataforma; "gov.br" só aparece quando a cadeia foi validada até a âncora fixada — sem isso, não se afirma onde foram assinadas.'}
                 </p>
             </div>
         </div>
@@ -102,7 +139,11 @@ export function ParticipantSignatureList({
 
     return (
         <div className={cn('flex flex-col gap-3', className)}>
-            <ListIntro profile={profile} />
+            <ListIntro
+                profile={profile}
+                external={signatures.some((item) => isExternal(item.kind))}
+                portal={signatures.some((item) => isPortalReturn(item.kind))}
+            />
             <ol className="flex flex-col gap-3">
                 {signatures.map((signature) => (
                     <li
@@ -113,6 +154,9 @@ export function ParticipantSignatureList({
                             <div className="min-w-0">
                                 <p className="text-[13px] leading-[1.4] font-semibold">
                                     {signature.label}
+                                    {signature.simulated && (
+                                        <SimulatedTag className="ml-1.5 align-middle" />
+                                    )}
                                 </p>
                                 <p className="text-muted-foreground mt-0.5 text-[12px]">
                                     {signature.kind_label}
@@ -146,6 +190,14 @@ export function ParticipantSignatureList({
                         <Rows
                             className="mt-1"
                             rows={[
+                                [
+                                    'Componente',
+                                    signature.component
+                                        ? (COMPONENT_LABELS[
+                                              signature.component
+                                          ] ?? signature.component)
+                                        : null,
+                                ],
                                 [
                                     'Consentimento',
                                     signature.consent
@@ -192,10 +244,15 @@ export function ParticipantSignatureList({
                                                     {item.position}.{' '}
                                                     {item.name ??
                                                         `Arquivo ${item.position}`}
-                                                    <span className="text-muted-foreground font-normal">
-                                                        {' · '}revisão nº{' '}
-                                                        {item.revision_index}
-                                                    </span>
+                                                    {item.revision_index !=
+                                                        null && (
+                                                        <span className="text-muted-foreground font-normal">
+                                                            {' · '}revisão nº{' '}
+                                                            {
+                                                                item.revision_index
+                                                            }
+                                                        </span>
+                                                    )}
                                                 </span>
                                                 <Badge
                                                     variant={
@@ -240,6 +297,14 @@ export function ParticipantSignatureList({
                                                         item.profile ??
                                                             profile ??
                                                             DEFAULT_PROFILE,
+                                                    ],
+                                                    [
+                                                        'Modo',
+                                                        item.mode
+                                                            ? (MODE_LABELS[
+                                                                  item.mode
+                                                              ] ?? item.mode)
+                                                            : null,
                                                     ],
                                                     [
                                                         'Assinada em',
@@ -292,7 +357,11 @@ export function PublicParticipantSignatureList({
                 className,
             )}
         >
-            <ListIntro profile={profile} />
+            <ListIntro
+                profile={profile}
+                external={signatures.some((item) => isExternal(item.kind))}
+                portal={signatures.some((item) => isPortalReturn(item.kind))}
+            />
             <ol className="flex flex-col gap-2.5">
                 {signatures.map((signature, index) => (
                     <li
@@ -302,11 +371,18 @@ export function PublicParticipantSignatureList({
                         <div className="flex flex-wrap items-start justify-between gap-2">
                             <p className="min-w-0 text-[13px] leading-[1.4] font-semibold">
                                 {signature.label}
+                                {signature.simulated && (
+                                    <SimulatedTag className="ml-1.5 align-middle" />
+                                )}
                             </p>
-                            {/* Certificado de TESTE: "válida" em verde contradiria "não tem validade jurídica". */}
+                            {/*
+                             * Certificado de TESTE ou assinatura SIMULADA: "válida" em verde
+                             * contradiria "sem valor para uso real".
+                             */}
                             <Badge
                                 variant={
-                                    signature.is_test &&
+                                    (signature.is_test ||
+                                        signature.simulated) &&
                                     signature.integrity === 'intact'
                                         ? 'neutral'
                                         : cryptoIntegrityTones[
@@ -314,12 +390,15 @@ export function PublicParticipantSignatureList({
                                           ]
                                 }
                             >
-                                {signature.is_test &&
+                                {signature.simulated &&
                                 signature.integrity === 'intact'
-                                    ? 'Íntegra — certificado de teste'
-                                    : cryptoIntegrityLabels[
-                                          signature.integrity
-                                      ]}
+                                    ? 'Íntegra — assinatura simulada'
+                                    : signature.is_test &&
+                                        signature.integrity === 'intact'
+                                      ? 'Íntegra — certificado de teste'
+                                      : cryptoIntegrityLabels[
+                                            signature.integrity
+                                        ]}
                             </Badge>
                         </div>
                         {signature.is_test ? (

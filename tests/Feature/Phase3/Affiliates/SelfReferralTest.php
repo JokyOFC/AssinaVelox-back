@@ -8,6 +8,7 @@ use App\Services\Affiliates\AffiliateRiskSignals;
 use App\Services\Affiliates\Attribution;
 use App\Services\Affiliates\CommissionLedger;
 use App\Services\Affiliates\IpFingerprint;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 require_once __DIR__.'/Support/AffiliateHelpers.php';
@@ -19,12 +20,33 @@ require_once __DIR__.'/Support/AffiliateHelpers.php';
 | Autoindicação → indicação `rejected`, sem comissão, e sinal ao antifraude.
 | Possível conta duplicada → `held` (comissão segurada até revisão humana) e sinal.
 | Toda decisão automática pode ser revista por uma pessoa (LGPD art. 20).
+|
+| O sinal passa pelo serviço REAL do antifraude (App\Services\Risk\RiskSignals::record),
+| com a flag `antifraud` ligada; as asserções leem a tabela `risk_signals`.
 */
+
+/**
+ * Sinais `affiliate_self_referral` gravados pelo antifraude, com a evidência decodificada.
+ *
+ * @return Collection<int, object>
+ */
+function selfReferralSignals(): Collection
+{
+    return DB::table('risk_signals')
+        ->where('rule_code', AffiliateRiskSignals::RULE)
+        ->orderBy('id')
+        ->get()
+        ->map(function (object $row): object {
+            $row->evidence = json_decode((string) $row->evidence, true) ?? [];
+
+            return $row;
+        });
+}
 
 beforeEach(function (): void {
     $this->withoutVite();
     enableAffiliates();
-    $this->risk = fakeAffiliateRisk();
+    config()->set('assinavelox.features.antifraud', true);
 });
 
 test('mesmo e-mail do afiliado (com +tag) é autoindicação: barrada, sem comissão e sinalizada', function () {
@@ -39,13 +61,49 @@ test('mesmo e-mail do afiliado (com +tag) é autoindicação: barrada, sem comis
         ->and($referral->block_reasons)->toContain(Referral::REASON_SAME_EMAIL)
         ->and($referral->block_reasons)->toContain(Referral::REASON_SAME_DOMAIN);
 
-    expect($this->risk->calls)->toHaveCount(1)
-        ->and($this->risk->calls[0]['referral']->id)->toBe($referral->id)
-        ->and($this->risk->calls[0]['organization']->id)->toBe($referral->organization_id);
+    $signals = selfReferralSignals();
+    expect($signals)->toHaveCount(1)
+        ->and($signals[0]->organization_id)->toBe($referral->organization_id)
+        ->and($signals[0]->envelope_id)->toBeNull()
+        ->and($signals[0]->evidence['referral'] ?? null)->toBe($referral->ulid)
+        ->and($signals[0]->evidence['affiliate'] ?? null)->toBe($affiliate->ulid)
+        ->and($signals[0]->evidence['match'] ?? null)->toBe('same_email,same_domain')
+        ->and($signals[0]->evidence)->not->toHaveKey('_dropped');
 
     // Pagamento aprovado da organização barrada não gera comissão.
     paymentFor($referral->organization);
     expect(Commission::query()->count())->toBe(0);
+});
+
+test('a evidência do sinal só leva chaves permitidas: nunca e-mail, IP ou dados de repasse', function () {
+    $affiliate = makeAffiliate(user: User::factory()->create(['email' => 'mara@consultores-eta.com.br']));
+
+    signupWithReferral('ti@consultores-eta.com.br', referralCookieValue($affiliate->code), '198.51.100.44')
+        ->assertRedirect(route('dashboard', absolute: false));
+
+    expect(Referral::query()->sole()->status)->toBe(Referral::STATUS_REJECTED);
+
+    $row = DB::table('risk_signals')->where('rule_code', AffiliateRiskSignals::RULE)->sole();
+    $allowed = ['affiliate', 'referral', 'match', 'same_user', 'same_ip', 'same_device', 'same_payment_method', 'same_email_domain'];
+
+    expect(array_diff(array_keys(json_decode((string) $row->evidence, true)), $allowed))->toBe([])
+        ->and($row->evidence)->not->toContain('consultores-eta.com.br')
+        ->and($row->evidence)->not->toContain('198.51.100.44')
+        ->and($row->evidence)->not->toContain('52998224725')
+        // O sujeito é o HMAC do afiliado, nunca o valor bruto.
+        ->and($row->subject_key)->not->toBeNull()
+        ->and($row->subject_key)->not->toContain($affiliate->ulid);
+});
+
+test('com a flag do antifraude desligada a indicação é barrada do mesmo jeito, mas nenhum sinal é gravado', function () {
+    config()->set('assinavelox.features.antifraud', false);
+    $affiliate = makeAffiliate(user: User::factory()->create(['email' => 'nina@auditores-teta.com.br']));
+
+    signupWithReferral('rh@auditores-teta.com.br', referralCookieValue($affiliate->code))
+        ->assertRedirect(route('dashboard', absolute: false));
+
+    expect(Referral::query()->sole()->status)->toBe(Referral::STATUS_REJECTED)
+        ->and(DB::table('risk_signals')->count())->toBe(0);
 });
 
 test('mesmo domínio corporativo é autoindicação; domínio público não', function () {
@@ -62,6 +120,9 @@ test('mesmo domínio corporativo é autoindicação; domínio público não', fu
     $referral = Referral::query()->sole();
     expect($referral->status)->toBe(Referral::STATUS_ACTIVE)
         ->and($referral->block_reasons)->toBeNull();
+
+    // Só a primeira (domínio corporativo) virou sinal.
+    expect(selfReferralSignals())->toHaveCount(1);
 });
 
 test('mesmo IP usado pelo afiliado dentro da janela é autoindicação; fora da janela não', function () {
@@ -72,6 +133,7 @@ test('mesmo IP usado pelo afiliado dentro da janela é autoindicação; fora da 
 
     signupWithReferral('hugo@transportes-beta.com.br', referralCookieValue($affiliate->code), '198.51.100.77');
     expect(Referral::query()->sole()->block_reasons)->toBe([Referral::REASON_SAME_IP]);
+    expect(selfReferralSignals()->sole()->evidence['same_ip'] ?? null)->toBeTrue();
 
     $old = makeAffiliate([
         'last_ip_hash' => IpFingerprint::of('198.51.100.88'),
@@ -112,9 +174,12 @@ test('mesmo IP de outra indicação do afiliado dentro da janela: segurada até 
 
     $held = Referral::query()->whereKeyNot($earlier->id)->sole();
     expect($held->status)->toBe(Referral::STATUS_HELD)
-        ->and($held->block_reasons)->toBe([Referral::REASON_DUPLICATE_IP])
-        ->and($this->risk->calls)->toHaveCount(1)
-        ->and($this->risk->calls[0]['reasons'])->toBe([Referral::REASON_DUPLICATE_IP]);
+        ->and($held->block_reasons)->toBe([Referral::REASON_DUPLICATE_IP]);
+
+    $signal = selfReferralSignals()->sole();
+    expect($signal->organization_id)->toBe($held->organization_id)
+        ->and($signal->evidence['match'] ?? null)->toBe(Referral::REASON_DUPLICATE_IP)
+        ->and($signal->evidence['same_user'] ?? null)->toBeFalse();
 
     // A comissão nasce, mas não é aprovada enquanto a indicação estiver em revisão.
     paymentFor($held->organization, paidAt: now());
@@ -191,18 +256,6 @@ test('revisão que rejeita reverte pendentes e estorna aprovadas no próximo lot
     expect($reversal->amount_cents)->toBe(-1_000)
         ->and($reversal->status)->toBe(Commission::STATUS_APPROVED)
         ->and($reversal->reversal_reason)->toBe(Commission::REASON_REFERRAL_REJECTED);
-});
-
-test('a ponte real do antifraude não lança e só leva chaves permitidas', function () {
-    app()->forgetInstance(AffiliateRiskSignals::class);
-    app()->offsetUnset(AffiliateRiskSignals::class);
-
-    $affiliate = makeAffiliate(user: User::factory()->create(['email' => 'mara@consultores-eta.com.br']));
-
-    signupWithReferral('ti@consultores-eta.com.br', referralCookieValue($affiliate->code))
-        ->assertRedirect(route('dashboard', absolute: false));
-
-    expect(Referral::query()->sole()->status)->toBe(Referral::STATUS_REJECTED);
 });
 
 test('a revisão exige justificativa e só a equipe da plataforma revisa', function () {

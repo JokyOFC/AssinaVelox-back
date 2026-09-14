@@ -9,8 +9,8 @@ use App\Services\Timestamp\PadesProfilePolicy;
  *
  * O arquivo pode conter, tecnicamente, B-T/B-LT/B-LTA (`ltv_status`). O perfil exibido só deixa
  * de ser o gravado em `signature_profile` (hoje sempre PAdES-B-B) quando `pades_ltv_advertise`
- * estiver ligada — e ligá-la exige TODOS os itens de {@see self::checklist()}. Nenhum caminho
- * produz "ICP-Brasil": o carimbo é da TSA da operadora (T3).
+ * estiver ligada — e ligá-la exige TODOS os itens de {@see self::checklist()}. O carimbo vem da
+ * TSA da operadora, que não é ICP-Brasil, e nenhum caminho daqui produz esse rótulo (T3).
  *
  * Ponto de integração (fora da área P3-LTV): `SignatureNarrative`/`PublicVerification` e a página
  * de evidências devem obter o perfil daqui em vez de ler `signature_profile` direto.
@@ -67,7 +67,7 @@ final class LtvProfilePolicy
             [
                 'item' => 'ACT ICP-Brasil, se o anúncio mencionar ICP-Brasil',
                 'status' => 'bloqueado',
-                'detail' => 'Carimbo ICP-Brasil só com ACT credenciada pelo ITI contratada (viabilidade §4.2 item 7). Até lá o anúncio, se houver, é "carimbo do tempo da operadora — não é ICP-Brasil"; o provedor ICP continua simulador que nunca grava icp_brasil.',
+                'detail' => 'Sem ACT credenciada pelo ITI contratada não existe carimbo ICP-Brasil (viabilidade §4.2 item 7). Até lá o anúncio, se houver, é "carimbo do tempo da operadora — não é ICP-Brasil"; o provedor ICP continua simulador que nunca grava icp_brasil.',
             ],
             [
                 'item' => 'Política de assinatura e VRI conferidos',
@@ -76,8 +76,8 @@ final class LtvProfilePolicy
             ],
             [
                 'item' => 'Verificação pública aceita o histórico de hashes',
-                'status' => 'pendente',
-                'detail' => 'PublicVerification::checkHash consulta VerificationHashHistory::match() para que um arquivo baixado antes do re-carimbo continue conferindo (decisão de produto, viabilidade §4.5 item 29).',
+                'status' => 'cumprido',
+                'detail' => 'PublicVerification::checkHash consulta VerificationHashHistory::match() e responde "signed_previous" para um arquivo final anterior a um re-carimbo (revisão adversarial I-3A). Vale desde pades_ltv, porque é o re-carimbo que troca o final. Falta só registrar a decisão de produto (viabilidade §4.5 item 29) sobre o texto exibido.',
             ],
             [
                 'item' => 'Operação de produção',

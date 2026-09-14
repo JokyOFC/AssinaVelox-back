@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Affiliates\Attribution;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 require_once __DIR__.'/Support/AffiliateHelpers.php';
 
@@ -19,7 +20,9 @@ require_once __DIR__.'/Support/AffiliateHelpers.php';
 beforeEach(function (): void {
     $this->withoutVite();
     enableAffiliates();
-    $this->risk = fakeAffiliateRisk();
+    // Serviço real do antifraude (App\Services\Risk\RiskSignals), com a flag ligada: uma
+    // indicação legítima não grava sinal nenhum.
+    config()->set('assinavelox.features.antifraud', true);
 });
 
 test('o link grava o cookie de atribuição para um código aprovado e leva ao cadastro', function () {
@@ -64,7 +67,7 @@ test('cadastro dentro da janela atribui a organização criada ao afiliado', fun
         ->and($referral->block_reasons)->toBeNull()
         ->and($referral->source)->toBe(Referral::SOURCE_LINK)
         ->and($referral->expires_at?->toDateString())->toBe(now()->addMonths(12)->toDateString())
-        ->and($this->risk->calls)->toBe([]);
+        ->and(DB::table('risk_signals')->where('rule_code', 'affiliate_self_referral')->count())->toBe(0);
 });
 
 test('cadastro fora da janela não atribui nada', function () {

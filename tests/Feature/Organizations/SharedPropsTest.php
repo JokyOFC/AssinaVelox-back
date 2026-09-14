@@ -88,6 +88,12 @@ test('props compartilhadas do owner são coerentes com o contrato', function () 
             'rest_hooks' => false,
             'extended_payments' => false,
             'fiscal_invoices' => false,
+            // Fase 3, parte 1 (integração I-3A): chaves novas da plataforma, todas desligadas por
+            // padrão (roadmap §1 T8), como cada onda da Fase 2 acrescentou as suas.
+            'antifraud' => false,
+            'affiliates' => false,
+            'pades_ltv' => false,
+            'pades_ltv_advertise' => false,
         ])
         ->has('flash')
         ->has('sidebarOpen')

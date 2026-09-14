@@ -33,7 +33,7 @@ final class RiskAppeals
                 throw RiskException::appealNotApplicable();
             }
 
-            $review = RiskAssessment::openReviewFor($locked, $current, RiskAssessment::baseline((int) $locked->getKey()), RiskReview::TRIGGER_APPEAL);
+            $review = RiskAssessment::openReviewFor($locked, $current, self::baseline($locked), RiskReview::TRIGGER_APPEAL);
 
             if ($review->appeal_requested_at !== null) {
                 throw RiskException::appealAlreadyRequested();
@@ -56,5 +56,23 @@ final class RiskAppeals
 
             return $review;
         });
+    }
+
+    /**
+     * Início do intervalo de sinais do caso aberto pelo pedido. Um pedido contra uma decisão
+     * que MANTÉM o estado atual (restrição confirmada, observação mantida) herda o intervalo
+     * desse caso: o revisor julga o pedido com os mesmos sinais e evidências, e a página da
+     * organização continua mostrando os critérios que explicam o estado (art. 20 §1º).
+     * Revisão adversarial I-3A — antes, o caso novo começava DEPOIS desses sinais e ficava vazio.
+     */
+    private static function baseline(Organization $organization): int
+    {
+        $decided = RiskReview::query()
+            ->where('organization_id', $organization->getKey())
+            ->whereIn('status', [RiskReviewStatus::Confirmed->value, RiskReviewStatus::Watching->value])
+            ->latest('id')
+            ->value('after_signal_id');
+
+        return $decided !== null ? (int) $decided : RiskAssessment::baseline((int) $organization->getKey());
     }
 }

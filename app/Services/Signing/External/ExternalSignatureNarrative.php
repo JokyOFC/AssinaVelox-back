@@ -12,6 +12,9 @@ use App\Models\ParticipantSignature;
 use App\Models\ParticipantSignatureRequest;
 use App\Models\VerificationRecord;
 use App\Services\Signing\Certificates\IncrementalChain;
+use App\Services\Signing\GovBr\ExternalSignatureRequestStatus;
+use App\Services\Signing\GovBr\GovBrSignatureKind;
+use App\Services\Signing\GovBr\Models\ExternalSignatureRequest;
 use App\Services\Verification\SignatureNarrative;
 
 /**
@@ -23,6 +26,11 @@ use App\Services\Verification\SignatureNarrative;
  * componente real; perfil PAdES-B-B; cadeia "não verificada" sem âncora; ICP-Brasil nunca
  * afirmada; revogação não verificada. Integridade de uma cadeia de revisões vem da análise
  * gravada na conclusão (`validation_result.incremental_chain`, {@see IncrementalChain}).
+ *
+ * Fase 3 §3.5 (integração I-3A): também `participant_govbr` e `participant_external_unverified`
+ * — o documento devolvido depois de assinado no portal gov.br. "Assinatura gov.br (avançada)" só
+ * com a cadeia validada até a âncora fixada; sem isso, "assinatura digital de terceiro, cadeia não
+ * verificada", nunca gov.br.
  */
 final class ExternalSignatureNarrative
 {
@@ -48,10 +56,18 @@ final class ExternalSignatureNarrative
 
     public static function statusLabel(Envelope $envelope, VerificationRecord $record): string
     {
-        $simulated = self::facts($envelope)['simulated'] > 0;
+        $facts = self::facts($envelope);
+        $simulated = $facts['simulated'] > 0;
+
+        if ($facts['external'] > 0 && $facts['govbr'] > 0) {
+            return 'Concluído · assinaturas de participantes feitas fora da plataforma (componente externo e documento devolvido pelo portal)'
+                .($simulated ? ' ('.FakeLocalSigner::LABEL.')' : '');
+        }
 
         return match ($record->signature_status) {
             SignatureStatus::ParticipantA3 => 'Concluído · assinado com certificado A3 de participante (componente local)',
+            SignatureStatus::ParticipantGovBr => 'Concluído · assinado por participante com assinatura gov.br (avançada), devolvida pelo portal',
+            SignatureStatus::ParticipantExternalUnverified => 'Concluído · documento devolvido por participante com assinatura digital de terceiro, cadeia não verificada',
             default => $simulated
                 ? 'Concluído · assinado por participante com componente externo ('.FakeLocalSigner::LABEL.')'
                 : 'Concluído · assinado por participante com componente externo',
@@ -60,13 +76,16 @@ final class ExternalSignatureNarrative
 
     private static function label(SignatureStatus $status, bool $simulated): string
     {
-        return $status === SignatureStatus::ParticipantA3
-            ? 'Assinatura com certificado A3 de participante (componente local)'
-            : 'Assinatura de participante por componente externo'.($simulated ? ' ('.FakeLocalSigner::LABEL.')' : '');
+        return match ($status) {
+            SignatureStatus::ParticipantA3 => 'Assinatura com certificado A3 de participante (componente local)',
+            SignatureStatus::ParticipantGovBr => GovBrSignatureKind::ParticipantGovBr->label().' de participante, devolvida pelo portal',
+            SignatureStatus::ParticipantExternalUnverified => GovBrSignatureKind::ParticipantExternalUnverified->label(),
+            default => 'Assinatura de participante por componente externo'.($simulated ? ' ('.FakeLocalSigner::LABEL.')' : ''),
+        };
     }
 
     /**
-     * @return array{external: int, a3: int, simulated: int, a1: int, test: int}
+     * @return array{external: int, a3: int, simulated: int, a1: int, test: int, govbr: int, govbr_trusted: int}
      */
     private static function facts(Envelope $envelope): array
     {
@@ -77,7 +96,16 @@ final class ExternalSignatureNarrative
         $external = $rows->filter(fn (ParticipantSignature $row): bool => $row->getAttribute('signature_status') !== null);
         $requests = static fn ($collection): int => $collection->pluck('participant_signature_request_id')->unique()->count();
 
+        // Fase 3 §3.5 (I-3A): documentos devolvidos pelo portal e aceitos.
+        $returns = ExternalSignatureRequest::withoutOrganizationScope()
+            ->where('envelope_id', $envelope->getKey())
+            ->where('status', ExternalSignatureRequestStatus::Completed->value)
+            ->whereNotNull('signed_document_version_id')
+            ->get(['id', 'signature_kind', 'trusted', 'is_test_certificate']);
+
         return [
+            'govbr' => $returns->count(),
+            'govbr_trusted' => $returns->filter(fn (ExternalSignatureRequest $row): bool => $row->signature_kind === GovBrSignatureKind::ParticipantGovBr && $row->trusted)->count(),
             'external' => $requests($external),
             'a3' => $requests($external->filter(fn (ParticipantSignature $row): bool => $row->getAttribute('signature_status') === ExternalSignatureKind::ParticipantA3->value)),
             'simulated' => $requests($external->filter(fn (ParticipantSignature $row): bool => (bool) $row->getAttribute('is_simulated'))),
@@ -86,17 +114,22 @@ final class ExternalSignatureNarrative
                 ->where('envelope_id', $envelope->getKey())
                 ->where('is_test_certificate', true)
                 ->whereIn('id', $rows->pluck('participant_signature_request_id')->unique()->all())
-                ->count(),
+                ->count()
+                + $returns->filter(fn (ExternalSignatureRequest $row): bool => $row->is_test_certificate)->count(),
         ];
     }
 
     /**
-     * @param  array{external: int, a3: int, simulated: int, a1: int, test: int}  $facts
+     * @param  array{external: int, a3: int, simulated: int, a1: int, test: int, govbr: int, govbr_trusted: int}  $facts
      */
     private static function statement(VerificationRecord $record, array $facts, ?CertificateReference $operator): string
     {
         $count = max(1, $facts['external']);
         $profile = $record->signature_profile !== null && $record->signature_profile !== '' ? $record->signature_profile : 'PAdES-B-B';
+
+        if ($facts['external'] === 0 && $facts['govbr'] > 0) {
+            return self::govBrOnlyStatement($record, $facts, $operator, $profile);
+        }
 
         $statement = sprintf(
             'O arquivo final recebeu %d %s no perfil %s feita%s FORA da plataforma: o participante assinou, com um '
@@ -123,6 +156,101 @@ final class ExternalSignatureNarrative
             );
         }
 
+        if ($facts['govbr'] > 0) {
+            // T1 (revisão adversarial I-3A): "portal do governo" só quando a cadeia foi conferida
+            // contra a âncora fixada; sem isso, a plataforma não sabe onde o arquivo foi assinado.
+            $statement .= sprintf(
+                ' Além disso, %d %s pelo participante %s, sobre a versão reservada pela plataforma, e %s como revisão incremental.',
+                $facts['govbr'],
+                $facts['govbr'] === 1 ? 'documento foi devolvido' : 'documentos foram devolvidos',
+                self::govBrWhere($facts),
+                $facts['govbr'] === 1 ? 'incorporado' : 'incorporados',
+            ).self::govBrTrust($facts);
+        }
+
+        return self::closing($statement, $facts, $operator);
+    }
+
+    /**
+     * Onde a devolução foi assinada — só se afirma o portal gov.br quando TODAS as devoluções
+     * tiveram a cadeia conferida contra a âncora fixada.
+     *
+     * @param  array{external: int, a3: int, simulated: int, a1: int, test: int, govbr: int, govbr_trusted: int}  $facts
+     */
+    private static function govBrWhere(array $facts): string
+    {
+        if ($facts['govbr_trusted'] >= $facts['govbr']) {
+            return $facts['govbr'] === 1 ? 'depois de assinado no portal gov.br' : 'depois de assinados no portal gov.br';
+        }
+
+        return 'com uma assinatura digital acrescentada';
+    }
+
+    /**
+     * Só devoluções do portal (sem componente local).
+     *
+     * @param  array{external: int, a3: int, simulated: int, a1: int, test: int, govbr: int, govbr_trusted: int}  $facts
+     */
+    private static function govBrOnlyStatement(VerificationRecord $record, array $facts, ?CertificateReference $operator, string $profile): string
+    {
+        $count = $facts['govbr'];
+
+        $trustedOnly = $facts['govbr_trusted'] >= $count;
+
+        $statement = sprintf(
+            'O arquivo final recebeu %d %s no perfil %s feita%s FORA da plataforma: o participante baixou a versão '
+            .'reservada pela plataforma'.($trustedOnly
+                ? ', assinou-a no portal gov.br e devolveu o arquivo. '
+                : ' e a devolveu com uma assinatura digital acrescentada. ')
+            .'A plataforma '
+            .'conferiu que o arquivo devolvido começa, byte a byte, pela versão entregue e só acrescenta uma assinatura, e o '
+            .'incorporou como revisão incremental, depois da consolidação dos campos e do relatório de evidências. A chave do '
+            .'certificado não passou pela plataforma. Cada assinatura identifica o titular do certificado usado e se soma ao '
+            .'aceite eletrônico registrado para cada participante, sem substituí-lo.',
+            $count,
+            $count === 1 ? 'assinatura criptográfica de participante' : 'assinaturas criptográficas de participantes',
+            $profile,
+            $count === 1 ? '' : 's',
+        ).self::govBrTrust($facts);
+
+        return self::closing($statement, $facts, $operator);
+    }
+
+    /**
+     * @param  array{external: int, a3: int, simulated: int, a1: int, test: int, govbr: int, govbr_trusted: int}  $facts
+     */
+    private static function govBrTrust(array $facts): string
+    {
+        $text = '';
+        $trusted = $facts['govbr_trusted'];
+        $unverified = $facts['govbr'] - $trusted;
+
+        if ($trusted > 0) {
+            $text .= sprintf(
+                ' %d %s contra a cadeia gov.br fixada nesta plataforma por impressão digital: %s, que não é assinatura com certificado ICP-Brasil.',
+                $trusted,
+                $trusted === 1 ? 'foi conferida' : 'foram conferidas',
+                GovBrSignatureKind::ParticipantGovBr->label(),
+            );
+        }
+
+        if ($unverified > 0) {
+            $text .= sprintf(
+                ' %d %s cadeia verificada (%s): não se afirma que seja assinatura gov.br.',
+                $unverified,
+                $unverified === 1 ? 'devolução ficou sem' : 'devoluções ficaram sem',
+                mb_strtolower(GovBrSignatureKind::ParticipantExternalUnverified->label()),
+            );
+        }
+
+        return $text;
+    }
+
+    /**
+     * @param  array{external: int, a3: int, simulated: int, a1: int, test: int, govbr: int, govbr_trusted: int}  $facts
+     */
+    private static function closing(string $statement, array $facts, ?CertificateReference $operator): string
+    {
         if ($facts['a1'] > 0) {
             $statement .= sprintf(' O arquivo também recebeu %d %s com o certificado A1 (arquivo) do próprio participante.', $facts['a1'], $facts['a1'] === 1 ? 'assinatura' : 'assinaturas');
         }

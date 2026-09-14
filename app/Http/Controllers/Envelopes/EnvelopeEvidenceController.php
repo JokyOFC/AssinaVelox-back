@@ -11,8 +11,12 @@ use App\Models\AuditEvent;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\DocumentVersion;
 use App\Models\Envelope;
+use App\Models\VerificationRecord;
 use App\Services\Identity\CaptureEvidence;
 use App\Services\InPerson\InPersonEvidence;
+use App\Services\Ltv\LtvFeatures;
+use App\Services\Ltv\LtvState;
+use App\Services\Ltv\VerificationHashHistory;
 use App\Services\Signing\Certificates\ParticipantSignatureViews;
 use App\Services\Timestamp\TimestampEvidence;
 use App\Services\Verification\EvidenceDossier;
@@ -125,7 +129,23 @@ class EnvelopeEvidenceController extends Controller
             // Fase 2 §2.13 (K-TSA, integração I-2C): carimbos do tempo do envelope, só quando
             // existem (sem carimbo — o caso com `operator_tsa` desligada — a chave não aparece).
             ...self::timestampProps($envelope),
+            // Fase 3 §3.6 (P3-LTV, integração I-3A): estado técnico de longo prazo e histórico de
+            // resumos, só com a flag `pades_ltv` ligada e registro existente. Nunca é o perfil
+            // anunciado (T2): `announced_profile` vem de LtvProfilePolicy (hoje PAdES-B-B).
+            ...self::longTermProps($record),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function longTermProps(?VerificationRecord $record): array
+    {
+        if ($record === null || ! LtvFeatures::enabled()) {
+            return [];
+        }
+
+        return ['ltv' => LtvState::view($record)] + app(VerificationHashHistory::class)->publicProps($record);
     }
 
     /**

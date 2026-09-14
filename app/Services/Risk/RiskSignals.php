@@ -43,6 +43,7 @@ final class RiskSignals
         array $evidence,
         ?Envelope $envelope = null,
         ?string $subjectKey = null,
+        ?int $score = null,
     ): RiskSignal {
         $rule = RiskRule::tryFrom($ruleCode)
             ?? throw new InvalidArgumentException('Regra de risco desconhecida: '.$ruleCode);
@@ -55,7 +56,9 @@ final class RiskSignals
             'organization_id' => $organization->getKey(),
             'envelope_id' => $envelope?->getKey(),
             'rule_code' => $rule->value,
-            'score' => $rule->score(),
+            // `$score` só REDUZ (nunca aumenta) a pontuação da regra: sinal informativo, sem
+            // efeito de estado (ex.: indício que é sobre o afiliado, não sobre a organização).
+            'score' => $score === null ? $rule->score() : max(0, min($score, $rule->score())),
             'subject_key' => $subject,
             'fingerprint' => self::fingerprint($rule, $organization, $subject, $now),
             'evidence' => RiskEvidence::minimize($rule, $evidence),

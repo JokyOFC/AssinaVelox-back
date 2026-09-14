@@ -40,7 +40,7 @@ final class SendingRestriction
     {
         return 'O envio de novos documentos desta conta está suspenso até uma revisão de segurança da equipe AssinaVelox. '
             .'Documentos já enviados continuam disponíveis para leitura, assinatura e download. '
-            .'Para saber o motivo e pedir a revisão, acesse '.route('risk.appeal.show', [], false)
-            .' ou escreva para '.config('assinavelox.support_email', 'suporte@assinavelox.com.br').'.';
+            .'Para saber o motivo e pedir a revisão, abra a página “Revisão de segurança da conta”, no aviso no topo do app, '
+            .'ou escreva para '.config('assinavelox.support_email', 'suporte@assinavelox.com.br').'.';
     }
 }

@@ -172,22 +172,27 @@ class AffiliatePortalController extends Controller
             fwrite($out, Csv::BOM);
             fputcsv($out, Csv::row(['Lançamento', 'Data', 'Organização', 'Tipo', 'Base', 'Taxa (%)', 'Valor', 'Moeda', 'Estado', 'Motivo', 'Disponível em', 'Pago em', 'Lote']), ';');
 
+            // Colunas numéricas (Base, Taxa, Valor) saem como número, sem a neutralização de
+            // fórmula — senão "-10,00" vira texto ("'-10,00") e a soma da planilha ignora o
+            // estorno (revisão adversarial I-3A). Só passa direto o que casa com o formato.
+            $number = static fn (string $value): string => preg_match('/^-?\d+,\d{2}$/', $value) === 1 ? $value : Csv::cell($value);
+
             foreach ($rows as $row) {
-                fputcsv($out, Csv::row([
-                    $row['id'],
-                    $row['created_at'],
-                    $row['organization_name'],
-                    $row['kind_label'],
-                    PayoutBatches::decimal((int) $row['base_amount_cents']),
-                    number_format(((int) $row['rate_bp']) / 100, 2, ',', ''),
-                    PayoutBatches::decimal((int) $row['amount_cents']),
-                    $row['currency'],
-                    $row['status_label'],
-                    $row['reason_label'],
-                    $row['available_at'],
-                    $row['paid_at'],
-                    $row['payout_batch_id'],
-                ]), ';');
+                fputcsv($out, [
+                    Csv::cell($row['id']),
+                    Csv::cell($row['created_at']),
+                    Csv::cell($row['organization_name']),
+                    Csv::cell($row['kind_label']),
+                    $number(PayoutBatches::decimal((int) $row['base_amount_cents'])),
+                    $number(number_format(((int) $row['rate_bp']) / 100, 2, ',', '')),
+                    $number(PayoutBatches::decimal((int) $row['amount_cents'])),
+                    Csv::cell($row['currency']),
+                    Csv::cell($row['status_label']),
+                    Csv::cell($row['reason_label']),
+                    Csv::cell($row['available_at']),
+                    Csv::cell($row['paid_at']),
+                    Csv::cell($row['payout_batch_id']),
+                ], ';');
             }
 
             fclose($out);

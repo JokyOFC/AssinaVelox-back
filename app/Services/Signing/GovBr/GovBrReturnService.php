@@ -473,6 +473,7 @@ final class GovBrReturnService
                 $informedCpf !== null,
                 filter_var($this->config->get('assinavelox.govbr.require_holder_cpf', true), FILTER_VALIDATE_BOOLEAN),
                 filter_var($this->config->get('assinavelox.govbr.accept_test_certificates', false), FILTER_VALIDATE_BOOLEAN),
+                (string) $context->recipient->name,
             );
 
             if (! $decision->accepted) {
@@ -482,14 +483,20 @@ final class GovBrReturnService
             try {
                 $this->lock->run(
                     (int) $row->envelope_id,
-                    fn (): DocumentVersion => $this->store->store(
-                        $context->envelope,
-                        $document,
-                        $expected,
-                        $returned,
-                        fn (DocumentVersion $version) => $this->complete($row, $version, $decision, $received, $request),
-                        $correlationId,
-                    ),
+                    function () use ($context, $document, $expected, $returned, $row, $decision, $received, $request, $correlationId): DocumentVersion {
+                        // Sob o lock: o pedido ainda é esta mesma reserva? (duplo clique, retry,
+                        // segunda aba — a outra requisição pode já ter concluído o pedido.)
+                        $this->assertStillReserved($row, $received, $request);
+
+                        return $this->store->store(
+                            $context->envelope,
+                            $document,
+                            $expected,
+                            $returned,
+                            fn (DocumentVersion $version) => $this->complete($row, $version, $decision, $received, $request),
+                            $correlationId,
+                        );
+                    },
                     max(0, (int) $this->config->get('assinavelox.govbr.lock_wait_seconds', 20)),
                 );
             } catch (StaleRevisionException) {
@@ -592,8 +599,13 @@ final class GovBrReturnService
         $message = 'Outra assinatura entrou no documento depois que você baixou a versão para assinar. Reserve e baixe a nova versão, assine no portal e envie de novo.';
 
         $this->recordReturn($row, ExternalSignatureReturn::OUTCOME_REJECTED, 'base_changed', ['decision' => 'base_changed'], $received, $request);
-        $row->forceFill(['attempts' => $row->attempts + 1])->save();
+        ExternalSignatureRequest::withoutOrganizationScope()->whereKey($row->getKey())->increment('attempts');
+        // Condicional: se outra requisição já concluiu o pedido, nada volta a `requested`.
         $this->stage->releaseReservation($row, 'base_changed', $message);
+
+        if ($row->status === ExternalSignatureRequestStatus::Completed) {
+            throw new GovBrReturnException('already_completed', 'O arquivo assinado deste documento já foi recebido e conferido.', 409);
+        }
 
         $this->logger->info('gov.br (devolução): a revisão reservada deixou de ser a mais recente.', [
             'request_ulid' => $row->ulid,
@@ -601,6 +613,37 @@ final class GovBrReturnService
         ]);
 
         throw new GovBrReturnException('base_changed', $message, 409);
+    }
+
+    /**
+     * Relê o pedido sob o lock do envelope e exige que ele continue sendo a MESMA reserva que
+     * esta requisição conferiu (pending, sobre a mesma revisão). Sem isso, a perdedora de duas
+     * devoluções simultâneas desfaria o pedido já concluído (revisão adversarial I-3A).
+     *
+     * @param  array{sha256: string, size: int}  $received
+     *
+     * @throws GovBrReturnException
+     */
+    private function assertStillReserved(ExternalSignatureRequest $row, array $received, Request $request): void
+    {
+        /** @var ExternalSignatureRequest|null $current */
+        $current = ExternalSignatureRequest::withoutOrganizationScope()->whereKey($row->getKey())->lockForUpdate()->first();
+
+        if ($current !== null
+            && $current->status === ExternalSignatureRequestStatus::Pending
+            && (int) $current->expected_document_version_id === (int) $row->expected_document_version_id
+            && hash_equals((string) $row->expected_revision_sha256, (string) $current->expected_revision_sha256)) {
+            return;
+        }
+
+        $completed = $current?->status === ExternalSignatureRequestStatus::Completed;
+        $code = $completed ? 'already_completed' : 'not_reserved';
+
+        $this->recordReturn($current ?? $row, ExternalSignatureReturn::OUTCOME_REJECTED, $code, ['decision' => $code], $received, $request);
+
+        throw $completed
+            ? new GovBrReturnException('already_completed', 'O arquivo assinado deste documento já foi recebido e conferido.', 409)
+            : new GovBrReturnException('not_reserved', 'A reserva desta versão mudou enquanto o arquivo era conferido. Reserve e baixe a versão para assinar de novo.', 409);
     }
 
     /**

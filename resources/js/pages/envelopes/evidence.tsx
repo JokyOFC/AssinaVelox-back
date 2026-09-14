@@ -28,6 +28,10 @@ import {
 import { VerificationCodeBlock } from '@/components/verification/verification-code';
 import { VerificationSealCard } from '@/components/verification/verification-seal';
 import { ParticipantSignatureList } from '@/components/verification/crypto-signature-list';
+import {
+    HashHistoryList,
+    LongTermState,
+} from '@/components/verification/long-term-state';
 import { TimestampList } from '@/components/verification/timestamp-list';
 import {
     formatBytes,
@@ -38,6 +42,7 @@ import {
 } from '@/lib/format';
 import {
     authMethodLabels,
+    hasExternalParticipantSignatures,
     signatureKindLabels,
     signingOrderLabels,
 } from '@/lib/labels';
@@ -58,6 +63,8 @@ import type {
     SignerAuthMethod,
     EvidenceParticipantSignature,
     EvidenceTimestamps,
+    HashHistoryEntry,
+    LtvTechnicalState,
 } from '@/types';
 
 /** Participante como `App\Services\Verification\EvidenceDossier::recipients` o publica. */
@@ -213,6 +220,14 @@ export interface EvidenceProps {
     participant_signatures?: EvidenceParticipantSignature[];
     /** Fase 2 §2.13 (`TimestampEvidence::forEnvelope`): carimbos do envelope, quando houver. */
     timestamps?: EvidenceTimestamps | null;
+    /**
+     * Fase 3 §3.6 (`LtvState::view`, docs/fase-3/longo-prazo.md §8): estado TÉCNICO de longo
+     * prazo — não é o perfil anunciado. Ainda não enviado pelo controller (integração).
+     */
+    ltv?: LtvTechnicalState | null;
+    /** Fase 3 §3.6 (`VerificationHashHistory::publicProps`): só depois de um re-carimbo. */
+    hash_history?: HashHistoryEntry[];
+    hash_history_notice?: string | null;
 }
 
 /** Texto usado se o servidor não mandar `identity_capture_notice` (docs/fase-2/identidade.md §5.5). */
@@ -244,7 +259,24 @@ export default function EnvelopeEvidence({
     identity_capture_notice = null,
     participant_signatures = [],
     timestamps = null,
+    ltv = null,
+    hash_history = [],
+    hash_history_notice = null,
 }: EvidenceProps) {
+    // Fase 3 §3.4: assinatura por componente — simulada? a operadora assinou por último?
+    // Fase 3 §3.5: devolução do portal no mesmo arquivo (o selo cita os dois meios).
+    const portalSignature = participant_signatures.some(
+        (item) =>
+            item.kind === 'participant_govbr' ||
+            item.kind === 'participant_external_unverified',
+    );
+    const simulatedSignature = participant_signatures.some(
+        (item) => item.simulated === true,
+    );
+    const operatorLast =
+        signature_status === 'mixed' ||
+        (hasExternalParticipantSignatures(signature_status) &&
+            certificate !== null);
     const multi = documents.length > 1;
     const items = hashes.items ?? [];
     const byKey = (key: string) =>
@@ -406,6 +438,9 @@ export default function EnvelopeEvidence({
                 status={envelope.status}
                 signatureStatus={signature_status}
                 policy={policy}
+                simulated={simulatedSignature}
+                portal={portalSignature}
+                operator={certificate !== null}
             />
 
             <div className="flex flex-wrap items-start gap-4">
@@ -867,7 +902,7 @@ export default function EnvelopeEvidence({
                         {certificate && (
                             <div className="border-border rounded-lg border p-3.5">
                                 <p className="mb-2 text-[12.5px] font-semibold">
-                                    {signature_status === 'mixed'
+                                    {operatorLast
                                         ? 'Certificado da operadora (assinou por último)'
                                         : 'Certificado da operadora'}
                                 </p>
@@ -895,6 +930,34 @@ export default function EnvelopeEvidence({
                                 items={timestamps.items}
                                 notice={timestamps.notice}
                             />
+                        </section>
+                    )}
+
+                    {/*
+                     * Fase 3 §3.6: estado técnico de longo prazo e histórico de resumos — só
+                     * quando o servidor manda (flag `pades_ltv`). Nunca um selo de perfil: o
+                     * perfil anunciado continua o que o servidor registrou (PAdES-B-B).
+                     */}
+                    {((ltv && ltv.status !== 'not_applicable') ||
+                        hash_history.length > 0) && (
+                        <section className="border-border bg-card shadow-card flex flex-col gap-3 rounded-xl border p-5">
+                            <Heading
+                                variant="small"
+                                title="Material de longo prazo (estado técnico)"
+                                description="O que o arquivo final contém para ser validado no futuro. Não muda o perfil anunciado da assinatura."
+                            />
+                            {ltv && <LongTermState ltv={ltv} />}
+                            {hash_history.length > 0 && (
+                                <HashHistoryList
+                                    entries={hash_history}
+                                    notice={hash_history_notice}
+                                    className={
+                                        ltv
+                                            ? 'border-border border-t pt-3'
+                                            : undefined
+                                    }
+                                />
+                            )}
                         </section>
                     )}
 

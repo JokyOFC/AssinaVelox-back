@@ -37,7 +37,7 @@ test('o painel do antifraude é só do platform admin', function () {
     $this->get(route('admin.risk.index'))->assertForbidden();
     $this->get(route('admin.risk.show', $review))->assertForbidden();
     $this->get(route('admin.risk.precision'))->assertForbidden();
-    $this->post(route('admin.risk.decide', $review), ['decision' => 'clear', 'reason' => 'Tentativa de liberar a própria conta'])->assertForbidden();
+    $this->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'clear', 'reason' => 'Tentativa de liberar a própria conta'])->assertForbidden();
 
     expect($review->fresh()->status)->toBe(RiskReviewStatus::Open)
         ->and(riskStatusOf($organization))->toBe('restricted');
@@ -78,11 +78,11 @@ test('decisão exige motivo; sem ele nada muda', function () {
     $review = riskRestrictViaSignals($organization);
     $admin = User::factory()->platformAdmin()->create();
 
-    $this->actingAs($admin)->post(route('admin.risk.decide', $review), ['decision' => 'clear', 'reason' => ''])
+    $this->actingAs($admin)->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'clear', 'reason' => ''])
         ->assertSessionHasErrors('reason');
-    $this->actingAs($admin)->post(route('admin.risk.decide', $review), ['decision' => 'clear', 'reason' => 'curto'])
+    $this->actingAs($admin)->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'clear', 'reason' => 'curto'])
         ->assertSessionHasErrors('reason');
-    $this->actingAs($admin)->post(route('admin.risk.decide', $review), ['decision' => 'apagar', 'reason' => 'Motivo suficientemente longo'])
+    $this->actingAs($admin)->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'apagar', 'reason' => 'Motivo suficientemente longo'])
         ->assertSessionHasErrors('decision');
 
     expect(fn () => app(RiskReviewDecisions::class)->decide($review, RiskDecision::Clear, '   ', $admin))
@@ -99,7 +99,7 @@ test('liberar volta a organização a normal, registra autor e motivo na trilha 
     $admin = User::factory()->platformAdmin()->create();
     $reason = 'Cliente legítimo: campanha anual confirmada por telefone.';
 
-    $this->actingAs($admin)->post(route('admin.risk.decide', $review), ['decision' => 'clear', 'reason' => $reason])
+    $this->actingAs($admin)->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'clear', 'reason' => $reason])
         ->assertRedirect(route('admin.risk.show', $review))
         ->assertSessionHas('success');
 
@@ -139,13 +139,13 @@ test('confirmar restrição mantém restricted; caso decidido não pode ser deci
     $review = riskRestrictViaSignals($organization);
     $admin = User::factory()->platformAdmin()->create();
 
-    $this->actingAs($admin)->post(route('admin.risk.decide', $review), ['decision' => 'confirm', 'reason' => 'Envio de phishing confirmado por denúncias.'])
+    $this->actingAs($admin)->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'confirm', 'reason' => 'Envio de phishing confirmado por denúncias.'])
         ->assertRedirect();
 
     expect($review->fresh()->status)->toBe(RiskReviewStatus::Confirmed)
         ->and(riskStatusOf($organization))->toBe('restricted');
 
-    $this->actingAs($admin)->post(route('admin.risk.decide', $review), ['decision' => 'clear', 'reason' => 'Mudança de ideia depois de decidido'])
+    $this->actingAs($admin)->post(route('admin.risk.decide', $review), [...riskSeen($review), 'decision' => 'clear', 'reason' => 'Mudança de ideia depois de decidido'])
         ->assertSessionHas('error');
 
     expect($review->fresh()->status)->toBe(RiskReviewStatus::Confirmed)
@@ -254,8 +254,12 @@ test('pedido depois de uma restrição confirmada abre um caso novo por pedido d
 
     $appeal = RiskReview::query()->where('organization_id', $organization->id)->where('status', 'open')->sole();
 
+    // Revisão adversarial I-3A (LGPD art. 20 §1º): o caso do pedido HERDA o intervalo de sinais
+    // do caso confirmado que mantém a restrição — o revisor julga com a mesma evidência e a
+    // organização continua vendo os critérios. Antes, começava depois deles e ficava vazio.
     expect($appeal->trigger)->toBe('appeal')
-        ->and($appeal->after_signal_id)->toBe($review->fresh()->through_signal_id)
+        ->and($appeal->after_signal_id)->toBe($review->fresh()->after_signal_id)
+        ->and($appeal->signalsQuery()->count())->toBe(2)
         ->and(riskStatusOf($organization))->toBe('restricted');
 });
 

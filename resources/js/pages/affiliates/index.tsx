@@ -364,6 +364,22 @@ export default function AffiliatesIndex({
 
                 {active && affiliate && (
                     <>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Como você recebe</CardTitle>
+                                <CardDescription>
+                                    O AssinaVelox só calcula as comissões; o
+                                    repasse é feito pela equipe, fora da
+                                    plataforma. “Libera em” é a data em que a
+                                    comissão pendente passa a “A receber” — o
+                                    pagamento acontece no lote de repasse
+                                    seguinte, se o saldo alcançar o mínimo.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ProgramRules program={program} />
+                            </CardContent>
+                        </Card>
                         <div className="grid gap-4 lg:grid-cols-2">
                             <Card>
                                 <CardHeader>

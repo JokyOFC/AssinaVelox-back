@@ -25,6 +25,10 @@ use App\Services\Signing\Certificates\IncrementalChain;
 use App\Services\Signing\Certificates\IncrementalRevisions;
 use App\Services\Signing\Certificates\ParticipantA1Feature;
 use App\Services\Signing\Certificates\SealedCertificateStore;
+use App\Services\Signing\GovBr\ExternalSignatureRequestStatus;
+use App\Services\Signing\GovBr\GovBrReturnStage;
+use App\Services\Signing\GovBr\GovBrSignatureKind;
+use App\Services\Signing\GovBr\Models\ExternalSignatureRequest;
 use App\Services\Signing\SignerAudit;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
@@ -48,6 +52,12 @@ use Throwable;
  * - **validação da cadeia** inteira do arquivo final e o `validation_result` publicado;
  * - **reinício honesto**: se a base precisar ser refeita, as assinaturas calculadas sobre a
  *   antiga são descartadas (nunca publicadas) e os pedidos voltam a "aguardando certificado".
+ *
+ * Fase 3 §3.5 (integração I-3A, docs/fase-3/gov-br.md §8): as devoluções do PDF assinado no
+ * portal gov.br ({@see GovBrReturnStage}) entram no MESMO caminho — contam como pedido ativo,
+ * seguram a finalização enquanto esperam, somam na quantidade esperada de assinaturas da cadeia,
+ * entram no `signature_status` e são reabertas quando a base é refeita. Sem pedido gov.br (o caso
+ * com a flag `govbr_return` desligada), nada disso muda o comportamento.
  */
 final class ParticipantSignatureStage
 {
@@ -59,6 +69,7 @@ final class ParticipantSignatureStage
         private readonly SealedCertificateStore $sealed,
         private readonly Repository $config,
         private readonly LoggerInterface $logger,
+        private readonly GovBrReturnStage $govbr,
     ) {}
 
     public function activeFor(Envelope $envelope): bool
@@ -66,7 +77,9 @@ final class ParticipantSignatureStage
         return ParticipantSignatureRequest::withoutOrganizationScope()
             ->where('envelope_id', $envelope->getKey())
             ->whereIn('status', ParticipantSignatureRequestStatus::activeValues())
-            ->exists();
+            ->exists()
+            // Fase 3 §3.5 (I-3A): devolução gov.br pedida, reservada ou aceita.
+            || $this->govbr->activeFor($envelope);
     }
 
     /**
@@ -122,8 +135,28 @@ final class ParticipantSignatureStage
     /**
      * Ainda falta alguma assinatura de participante, dentro do prazo? Vence (e registra) os
      * pedidos que passaram do prazo e os que ficaram presos (material vencido, worker morto).
+     *
+     * Fase 3 §3.5 (I-3A): inclui as devoluções gov.br pendentes. As duas conferências rodam
+     * sempre (cada uma vence os próprios prazos), sem curto-circuito.
      */
     public function awaiting(Envelope $envelope, string $correlationId): bool
+    {
+        $certificates = $this->awaitingCertificates($envelope, $correlationId);
+        $govbr = $this->govbr->awaiting($envelope, $correlationId);
+
+        if ($govbr && ! $certificates) {
+            $pending = ExternalSignatureRequest::withoutOrganizationScope()
+                ->where('envelope_id', $envelope->getKey())
+                ->whereIn('status', ExternalSignatureRequestStatus::pendingValues())
+                ->count();
+
+            $this->announceWaiting($envelope, max(1, $pending), null, false, $correlationId);
+        }
+
+        return $certificates || $govbr;
+    }
+
+    private function awaitingCertificates(Envelope $envelope, string $correlationId): bool
     {
         $pending = ParticipantSignatureRequest::withoutOrganizationScope()
             ->with(['recipient' => fn ($query) => $query->withoutGlobalScopes()])
@@ -204,9 +237,14 @@ final class ParticipantSignatureStage
             ?? throw FinalizationException::writeFailed('pre_signature', ['reason' => 'base_missing']);
     }
 
+    /**
+     * Assinaturas de participante na cadeia do documento: A1/componente local
+     * (`participant_signatures`) + devoluções gov.br aceitas (Fase 3 §3.5, I-3A).
+     */
     public function signatureCount(Document $document): int
     {
-        return ParticipantSignature::withoutOrganizationScope()->where('document_id', $document->getKey())->count();
+        return ParticipantSignature::withoutOrganizationScope()->where('document_id', $document->getKey())->count()
+            + $this->govbr->signatureCount($document);
     }
 
     public function appliedRequestCount(Envelope $envelope): int
@@ -240,6 +278,25 @@ final class ParticipantSignatureStage
             ->unique()
             ->values()
             ->all();
+
+        // Fase 3 §3.5 (I-3A): devoluções gov.br aceitas. Só gov.br ⇒ `participant_govbr` quando
+        // TODAS têm a cadeia validada até a âncora fixada, senão `participant_external_unverified`
+        // (nunca dito gov.br). Junto com componente local ⇒ `participant_external`, o valor mais
+        // genérico ("feita fora da plataforma"); a lista por assinatura traz o meio de cada uma.
+        $govbr = array_values(array_unique(array_map(
+            static fn (GovBrSignatureKind $kind): string => $kind->value,
+            $this->govbr->kindsFor($document),
+        )));
+
+        if ($govbr !== []) {
+            if ($kinds !== []) {
+                return SignatureStatus::ParticipantExternal;
+            }
+
+            return $govbr === [GovBrSignatureKind::ParticipantGovBr->value]
+                ? SignatureStatus::ParticipantGovBr
+                : SignatureStatus::ParticipantExternalUnverified;
+        }
 
         if ($kinds === []) {
             return $status;
@@ -433,6 +490,8 @@ final class ParticipantSignatureStage
     private function resetDocument(Envelope $envelope, Document $document, string $reason, string $correlationId): void
     {
         $discarded = $this->revisions->discardAll($document, $reason);
+        // Fase 3 §3.5 (I-3A): devoluções gov.br aceitas/reservadas sobre a base antiga reabrem.
+        $this->govbr->resetDocument($document, $reason);
 
         $requests = ParticipantSignatureRequest::withoutOrganizationScope()
             ->with(['recipient' => fn ($query) => $query->withoutGlobalScopes()])

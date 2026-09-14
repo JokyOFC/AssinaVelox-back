@@ -79,6 +79,16 @@ const SMOKE_WAVE_B_STUBS_404 = [
     'sign.download',
     // Fase 2 §2.12 (K-A1): estado do certificado do participante — mesmo token sintético, 404.
     'sign.certificate.show',
+    // Fase 3 §3.4 (P3-EXT, docs/fase-3/assinatura-externa-a3.md §7): estado da assinatura por
+    // componente local e certificado do simulador — token sintético e flag `a3_signing`
+    // desligada (o padrão) respondem o mesmo 404.
+    'sign.external.show',
+    'sign.external.simulator.certificate',
+    // Fase 3 §3.5 (P3-GOV, docs/fase-3/gov-br.md §6): estado da devolução do PDF assinado no
+    // portal e download da revisão reservada — token sintético e flag `govbr_return` desligada
+    // (o padrão) respondem o mesmo 404.
+    'sign.govbr.show',
+    'sign.govbr.download',
     // Fase 2 §2.2 (C-FORM): token sintético de formulário público e de confirmação. Token
     // desconhecido, rascunho, revogado ou flag desligada recebem o mesmo 404
     // (docs/fase-2/formulario-publico.md §5).
@@ -137,6 +147,28 @@ const SMOKE_OVERRIDES = [
     'integrations.webhooks.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'integrations.webhooks.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'integrations.webhooks.deliveries.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.10 (P3-AFF, docs/fase-3/afiliados.md §2): com a flag `affiliates` desligada —
+    // o padrão — todas as rotas do programa respondem 404 depois dos middlewares do grupo
+    // (convidado continua indo para o login; nas rotas do painel sem parâmetro quem não é da
+    // plataforma continua com 403).
+    'affiliates.link' => ['*' => 404],
+    'affiliates.index' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    'affiliates.commissions.export' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    // Nas rotas com ULID sintético, o binding implícito (SubstituteBindings) roda antes do
+    // middleware `platform-admin` (fora da lista de prioridade), então quem não é da
+    // plataforma recebe 404 do ULID inexistente em vez de 403.
+    'admin.affiliates.index' => ['platform_admin' => 404],
+    'admin.affiliates.show' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    'admin.affiliates.payouts.index' => ['platform_admin' => 404],
+    'admin.affiliates.payouts.show' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    'admin.affiliates.payouts.export' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    // Fase 3 §3.7 (P3-RISK, docs/fase-3/antifraude.md; RiskFeature): com a flag `antifraud`
+    // desligada — o padrão — o painel e o pedido de revisão respondem 404. `admin.risk.show`
+    // usa ULID sintético: mesmo efeito do binding descrito acima para quem não é da plataforma.
+    'admin.risk.index' => ['platform_admin' => 404],
+    'admin.risk.precision' => ['platform_admin' => 404],
+    'admin.risk.show' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    'risk.appeal.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
 ];
 
 /**
@@ -167,6 +199,11 @@ function smokeRouteParameters(string $name, array $ctx): array
         'admin.organizations.show' => ['organization' => $org->ulid],
         'invitations.accept' => ['token' => str_repeat('a', 43)],
         'sign.show', 'sign.document', 'sign.certificate.show' => ['token' => str_repeat('b', 43)],
+        // Fase 3 §3.4 (P3-EXT): mesmo token sintético — 404.
+        'sign.external.show', 'sign.external.simulator.certificate' => ['token' => str_repeat('b', 43)],
+        // Fase 3 §3.5 (P3-GOV): mesmo token sintético e ULID de pedido inexistente — 404.
+        'sign.govbr.show' => ['token' => str_repeat('b', 43)],
+        'sign.govbr.download' => ['token' => str_repeat('b', 43), 'pedido' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         'sign.page' => ['token' => str_repeat('b', 43), 'page' => 1],
         'sign.download' => ['token' => str_repeat('b', 43), 'type' => 'signed'],
         'verify.show' => ['code' => 'ABCD-EFGH-JKLM'],
@@ -185,6 +222,12 @@ function smokeRouteParameters(string $name, array $ctx): array
         // Fase 2 §2.16 (D-HOOK): ULIDs sintéticos — flag `outbound_webhooks` desligada responde 404.
         'integrations.webhooks.show' => ['webhookEndpoint' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         'integrations.webhooks.deliveries.show' => ['webhookEndpoint' => '01HZZZZZZZZZZZZZZZZZZZZZZZ', 'delivery' => '01HZZZZZZZZZZZZZZZZZZZZZZY'],
+        // Fase 3 §3.10 (P3-AFF): código e ULIDs sintéticos — flag `affiliates` desligada responde 404.
+        'affiliates.link' => ['code' => 'ABCDEFGH'],
+        'admin.affiliates.show' => ['affiliate' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        'admin.affiliates.payouts.show', 'admin.affiliates.payouts.export' => ['batch' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 3 §3.7 (P3-RISK): ULID sintético de caso — flag `antifraud` desligada responde 404.
+        'admin.risk.show' => ['review' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         default => [],
     };
 }

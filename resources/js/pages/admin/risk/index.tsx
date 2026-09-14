@@ -10,7 +10,7 @@ import {
 } from '@/components/risk/risk-status-badge';
 import { TablePagination } from '@/components/table-pagination';
 import { Badge } from '@/components/ui/badge';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, plural } from '@/lib/format';
 import {
     index as adminRiskIndex,
     show as adminRiskShow,
@@ -100,7 +100,7 @@ export default function AdminRiskIndex({
                                 {rule.label}
                                 <span className="text-muted-foreground">
                                     {' '}
-                                    · {rule.signals} sinal(is)
+                                    · {plural(rule.signals, 'sinal', 'sinais')}
                                 </span>
                             </li>
                         ))}
@@ -147,7 +147,7 @@ export default function AdminRiskIndex({
             <Head title="Antifraude" />
             <PageHeader
                 title="Antifraude"
-                subtitle={`${counts.open} caso(s) aguardando revisão, ${counts.appeals} com pedido da organização. A ação automática máxima é suspender o envio de novos documentos; nada já enviado é alterado.`}
+                subtitle={`${plural(counts.open, 'caso')} aguardando revisão, ${counts.appeals} com pedido da organização. A ação automática máxima é suspender o envio de novos documentos; nada já enviado é alterado.`}
             />
             <RiskNav current="queue" />
             <div className="border-border bg-card shadow-card rounded-xl border">

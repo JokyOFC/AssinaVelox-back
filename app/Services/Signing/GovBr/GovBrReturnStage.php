@@ -120,10 +120,22 @@ final class GovBrReturnStage
      * A reserva deixa de valer: o pedido volta a `requested` (o participante pode reservar de
      * novo) e a revisão reservada deixa de poder ser baixada.
      */
-    public function releaseReservation(ExternalSignatureRequest $row, string $code, string $message): void
+    public function releaseReservation(ExternalSignatureRequest $row, string $code, string $message): bool
     {
-        $row->forceFill([
-            'status' => ExternalSignatureRequestStatus::Requested,
+        // Condicional (revisão adversarial I-3A): o modelo em memória pode estar velho — outra
+        // requisição do mesmo pedido pode já tê-lo CONCLUÍDO. Só a reserva que ainda está
+        // gravada (pending, sobre a mesma revisão) volta a `requested`; nunca um pedido concluído.
+        $query = ExternalSignatureRequest::withoutOrganizationScope()
+            ->whereKey($row->getKey())
+            ->where('status', ExternalSignatureRequestStatus::Pending->value);
+
+        $expected = $row->getOriginal('expected_document_version_id');
+        $expected === null
+            ? $query->whereNull('expected_document_version_id')
+            : $query->where('expected_document_version_id', $expected);
+
+        $updated = $query->update([
+            'status' => ExternalSignatureRequestStatus::Requested->value,
             'expected_document_version_id' => null,
             'expected_revision_sha256' => null,
             'expected_revision_size' => null,
@@ -131,7 +143,11 @@ final class GovBrReturnStage
             'expires_at' => null,
             'failure_code' => $code,
             'failure_message' => $message,
-        ])->save();
+        ]);
+
+        $row->refresh();
+
+        return $updated > 0;
     }
 
     /**

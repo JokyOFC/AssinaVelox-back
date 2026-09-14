@@ -171,6 +171,19 @@ class Commission extends Model
         };
     }
 
+    /**
+     * Motivo mostrado AO AFILIADO (portal e CSV): estorno e contestação do cliente indicado
+     * saem com um texto neutro — a contestação de cartão é dado financeiro do cliente (LGPD;
+     * afiliados.md §7). O rótulo detalhado ({@see self::reasonLabel()}) fica no painel interno.
+     */
+    public static function affiliateReasonLabel(?string $reason): ?string
+    {
+        return match ($reason) {
+            self::REASON_REFUND, self::REASON_CHARGEBACK => 'Pagamento revertido',
+            default => self::reasonLabel($reason),
+        };
+    }
+
     public static function reasonLabel(?string $reason): ?string
     {
         return match ($reason) {

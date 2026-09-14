@@ -2,9 +2,13 @@
 
 namespace App\Services\Affiliates;
 
+use App\Enums\MembershipRole;
+use App\Enums\MembershipStatus;
 use App\Enums\PaymentEnvironment;
 use App\Enums\PaymentStatus;
 use App\Models\Commission;
+use App\Models\Membership;
+use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\Referral;
 use Carbon\CarbonInterface;
@@ -102,6 +106,11 @@ final class CommissionLedger
 
                     // Pagamento em disputa (`in_mediation`) ou indicação em revisão: continua pendente.
                     if ($payment->status !== PaymentStatus::Approved || $referral === null || $referral->status !== Referral::STATUS_ACTIVE) {
+                        continue;
+                    }
+
+                    // O afiliado passou a administrar a organização depois da comissão: segura.
+                    if ($this->holdIfAffiliateAdministers($referral)) {
                         continue;
                     }
 
@@ -258,6 +267,11 @@ final class CommissionLedger
             return;
         }
 
+        // Afiliado que ADMINISTRA a organização indicada: autoindicação (revisão adversarial I-3A).
+        if ($this->holdIfAffiliateAdministers($referral)) {
+            return;
+        }
+
         $paidAt = $payment->paid_at ?? Carbon::now();
 
         // Pagamento anterior à atribuição ou depois do fim do período de comissão: fora.
@@ -288,6 +302,64 @@ final class CommissionLedger
             'status' => Commission::STATUS_PENDING,
             'available_at' => $paidAt->copy()->addDays($this->settings->approvalHoldDays()),
         ]);
+    }
+
+    /**
+     * Autoindicação por administração (revisão adversarial I-3A): as regras do cadastro (mesmo
+     * usuário, e-mail, domínio, IP) não pegam quem cadastra a organização com outros dados e
+     * DEPOIS entra nela como dono ou administrador. Se o usuário do afiliado tem vínculo ativo
+     * de owner/admin na organização indicada, a indicação vai para `held` (motivo `same_member`)
+     * até a revisão humana, e o antifraude recebe o sinal. Uma liberação humana que já viu esse
+     * motivo prevalece.
+     */
+    private function holdIfAffiliateAdministers(Referral $referral): bool
+    {
+        $affiliate = $referral->affiliate;
+
+        if ($affiliate->user_id === null || $referral->organization_id === null) {
+            return false;
+        }
+
+        $administers = Membership::query()
+            ->where('organization_id', $referral->organization_id)
+            ->where('user_id', $affiliate->user_id)
+            ->where('status', MembershipStatus::Active->value)
+            ->whereIn('role', [MembershipRole::Owner->value, MembershipRole::Admin->value])
+            ->exists();
+
+        if (! $administers) {
+            return false;
+        }
+
+        $reasons = array_values(array_filter((array) ($referral->block_reasons ?? []), 'is_string'));
+
+        if ($referral->status === Referral::STATUS_ACTIVE && $referral->reviewed_at !== null && in_array(Referral::REASON_SAME_MEMBER, $reasons, true)) {
+            return false; // revisão humana já liberou sabendo do vínculo
+        }
+
+        if ($referral->status !== Referral::STATUS_HELD || ! in_array(Referral::REASON_SAME_MEMBER, $reasons, true)) {
+            $updated = Referral::query()
+                ->whereKey($referral->getKey())
+                ->where('status', '!=', Referral::STATUS_REJECTED)
+                ->update([
+                    'status' => Referral::STATUS_HELD,
+                    'block_reasons' => json_encode(array_values(array_unique([...$reasons, Referral::REASON_SAME_MEMBER]))),
+                    'updated_at' => Carbon::now(),
+                ]);
+
+            $referral->refresh();
+
+            if ($updated > 0 && ($organization = Organization::withTrashed()->find($referral->organization_id)) !== null) {
+                AffiliateTrail::record(AffiliateTrail::REFERRAL_ATTRIBUTED, null, $affiliate, $referral, payload: [
+                    'status' => Referral::STATUS_HELD,
+                    'reasons' => [Referral::REASON_SAME_MEMBER],
+                    'organization' => $organization->ulid,
+                ]);
+                app(AffiliateRiskSignals::class)->report($organization, $affiliate, $referral, [Referral::REASON_SAME_MEMBER]);
+            }
+        }
+
+        return true;
     }
 
     /**

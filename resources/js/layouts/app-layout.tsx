@@ -4,6 +4,7 @@ import { AppSidebar, type SidebarMode } from '@/components/app-sidebar';
 import { AppTopbar } from '@/components/app-topbar';
 import { FlashToaster } from '@/components/flash-toaster';
 import { ImpersonationBanner } from '@/components/impersonation/impersonation-banner';
+import { RiskRestrictionBanner } from '@/components/risk/risk-restriction-banner';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { setTimeZone } from '@/lib/format';
@@ -49,6 +50,8 @@ export default function AppLayout({
             <SidebarInset className="bg-background min-w-0 overflow-x-clip">
                 {/* Fase 2 — "acessar como": banner persistente (só com a prop `impersonation`). */}
                 <ImpersonationBanner />
+                {/* Fase 3 §3.7 — organização com envio suspenso: motivo e revisão humana. */}
+                {mode === 'client' && <RiskRestrictionBanner />}
                 <AppTopbar
                     breadcrumbs={breadcrumbs}
                     mode={mode}

@@ -137,3 +137,16 @@ if (! function_exists('riskRestrictViaSignals')) {
         return RiskReview::query()->where('organization_id', $organization->id)->where('status', 'open')->sole();
     }
 }
+
+if (! function_exists('riskSeen')) {
+    /**
+     * O que a página do caso envia junto com a decisão: o ULID do sinal mais recente exibido
+     * (revisão adversarial I-3A — a decisão só cobre o que o revisor viu).
+     *
+     * @return array{seen_through: string|null}
+     */
+    function riskSeen(RiskReview $review): array
+    {
+        return ['seen_through' => $review->signalsQuery()->orderByDesc('id')->value('ulid')];
+    }
+}

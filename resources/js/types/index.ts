@@ -4,6 +4,7 @@ export type * from './enums';
 export type * from './models';
 export type * from './navigation';
 export type * from './signatures';
+export type * from './external-signing';
 
 // ---------------------------------------------------------------------------
 // Props compartilhadas (HandleInertiaRequests::share) — ROUTES §0.3
@@ -150,6 +151,18 @@ export interface Features {
     extended_payments?: boolean;
     /** §2.21 — status de NFS-e por pagamento (só a chave da plataforma; emissão real bloqueada). */
     fiscal_invoices?: boolean;
+    /*
+     * Fase 3, parte 1 — só chaves da plataforma. A3 e devolução gov.br NÃO têm chave aqui: a
+     * página pública descobre os recursos pelos próprios `GET` (404 = desligado).
+     */
+    /** §3.7 — antifraude com revisão humana (painel interno e pedido de revisão). */
+    antifraud?: boolean;
+    /** §3.10 — programa de afiliados (portal e painel). O sistema calcula, não paga. */
+    affiliates?: boolean;
+    /** §3.6 — material de longo prazo (estado técnico); nunca muda o perfil anunciado. */
+    pades_ltv?: boolean;
+    /** §3.6 — anúncio de perfil acima de B-B; só depois do checklist (hoje sempre `false`). */
+    pades_ltv_advertise?: boolean;
 }
 
 export interface SharedProps {
@@ -165,6 +178,12 @@ export interface SharedProps {
     features: Features;
     errors: Record<string, string>;
     sidebarOpen: boolean;
+    /** Fase 3 §3.7 — só com a conta em observação ou com envio suspenso (sem pontuação). */
+    risk?: {
+        status: 'watch' | 'restricted';
+        status_label: string;
+        appeal_url: string;
+    } | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -2,12 +2,15 @@
 
 namespace App\Services\Affiliates;
 
+use App\Enums\PaymentStatus;
 use App\Models\Affiliate;
 use App\Models\Commission;
+use App\Models\Payment;
 use App\Models\PayoutBatch;
 use App\Models\User;
 use App\Support\Csv;
 use Carbon\CarbonInterface;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -123,6 +126,7 @@ final class PayoutBatches
      */
     private function eligible($entries)
     {
+        $entries = $this->withoutDisputed($entries);
         $affiliates = Affiliate::query()->whereIn('id', $entries->pluck('affiliate_id')->unique()->all())->get()->keyBy('id');
 
         return $entries->groupBy('affiliate_id')->filter(function ($group, $affiliateId) use ($affiliates): bool {
@@ -136,6 +140,44 @@ final class PayoutBatches
         });
     }
 
+    /**
+     * Comissões e ajustes só entram no lote se o pagamento de origem está numa situação
+     * FINAL — aprovado, estornado ou contestado com perda (o estorno negativo correspondente
+     * entra junto e compensa). Pagamento em disputa (`in_mediation`) ou voltando a
+     * processamento: o lançamento fica para o próximo lote, até a disputa terminar (roadmap
+     * §3.10, "sobre pagamentos aprovados"; revisão adversarial I-3A).
+     *
+     * @param  \Illuminate\Database\Eloquent\Collection<int, Commission>  $entries
+     * @return \Illuminate\Database\Eloquent\Collection<int, Commission>
+     */
+    private function withoutDisputed($entries)
+    {
+        $paymentIds = $entries
+            ->filter(fn (Commission $entry): bool => in_array($entry->kind, [Commission::KIND_COMMISSION, Commission::KIND_ADJUSTMENT], true) && $entry->payment_id !== null)
+            ->pluck('payment_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($paymentIds === []) {
+            return $entries;
+        }
+
+        $settled = [PaymentStatus::Approved->value, PaymentStatus::Refunded->value, PaymentStatus::ChargedBack->value];
+        $statuses = Payment::withoutOrganizationScope()->whereIn('id', $paymentIds)->pluck('status', 'id');
+
+        return $entries->filter(function (Commission $entry) use ($statuses, $settled): bool {
+            if (! in_array($entry->kind, [Commission::KIND_COMMISSION, Commission::KIND_ADJUSTMENT], true) || $entry->payment_id === null) {
+                return true;
+            }
+
+            $status = $statuses->get($entry->payment_id);
+            $value = $status instanceof PaymentStatus ? $status->value : (string) $status;
+
+            return in_array($value, $settled, true);
+        })->values();
+    }
+
     public function markPaid(PayoutBatch $batch, User $actor, CarbonInterface $paidAt, string $externalReference, ?string $notes): void
     {
         DB::transaction(function () use ($batch, $actor, $paidAt, $externalReference, $notes): void {
@@ -143,6 +185,15 @@ final class PayoutBatches
 
             if (! $locked->isDraft()) {
                 throw ValidationException::withMessages(['batch' => 'Só um lote aberto pode ser marcado como pago.']);
+            }
+
+            // Separação de interesse (como em AffiliateProgram::assertNotSelf): quem tem comissão
+            // no lote não registra o próprio recebimento. Montar e cancelar continuam livres —
+            // nenhum dos dois declara que dinheiro saiu.
+            $ownAffiliateIds = Affiliate::query()->where('user_id', $actor->getKey())->pluck('id');
+
+            if ($ownAffiliateIds->isNotEmpty() && Commission::query()->where('payout_batch_id', $locked->getKey())->whereIn('affiliate_id', $ownAffiliateIds)->exists()) {
+                throw new AuthorizationException('Este lote inclui comissões suas. Outra pessoa da equipe precisa registrar o pagamento.');
             }
 
             $now = Carbon::now();

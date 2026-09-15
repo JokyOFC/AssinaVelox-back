@@ -49,12 +49,15 @@ function Panel({
     children: React.ReactNode;
 }) {
     return (
-        <section className="border-border bg-card shadow-card flex flex-col gap-2.5 rounded-xl border px-5 py-4">
-            <header className="flex items-center justify-between gap-2">
+        // `min-w-0`: sem isto o item da grade não encolhe abaixo da palavra mais
+        // larga do conteúdo (caminhos de API do checklist da NFS-e) e a fileira
+        // estoura a tela. `overflow-wrap: anywhere` quebra essas palavras.
+        <section className="border-border bg-card shadow-card mb-4 flex min-w-0 break-inside-avoid flex-col gap-2.5 rounded-xl border px-5 py-4">
+            <header className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-[14px] font-semibold">{title}</h3>
                 {badge}
             </header>
-            <div className="text-text-secondary text-[12.5px] leading-[1.55]">
+            <div className="text-text-secondary text-[12.5px] leading-[1.55] [overflow-wrap:anywhere]">
                 {children}
             </div>
         </section>
@@ -88,12 +91,10 @@ export function AdminBillingPanels({
     fiscal: FiscalSummary;
 }) {
     return (
-        <div
-            className="grid gap-4"
-            style={{
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            }}
-        >
+        // Colunas em vez de grade: os cartões têm alturas muito diferentes (duas
+        // linhas em Conciliação, um checklist longo em NFS-e) e a grade deixaria
+        // um vazio do tamanho do mais alto em cada linha.
+        <div className="columns-[320px] gap-4">
             <Panel
                 title="Conciliação"
                 badge={

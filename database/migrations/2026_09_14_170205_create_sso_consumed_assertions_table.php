@@ -21,7 +21,9 @@ return new class extends Migration
             $table->timestamp('expires_at');
             $table->timestamp('created_at')->nullable();
 
-            $table->unique(['sso_connection_id', 'assertion_id_hash']);
+            // Nome explícito: o gerado pelo Laravel teria 66 caracteres, acima do limite de 64
+            // do MySQL (erro 1059). Guarda: tests/Feature/Hardening/MysqlIdentifierLengthTest.php.
+            $table->unique(['sso_connection_id', 'assertion_id_hash'], 'sso_consumed_assertions_connection_hash_unique');
             $table->index('expires_at');
         });
     }

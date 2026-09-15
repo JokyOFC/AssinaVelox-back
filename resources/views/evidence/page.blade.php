@@ -160,6 +160,10 @@
                         <br><span class="small muted">Motivo: “{{ $participant['refusal_reason'] }}”</span>
                     @endif
                 @endif
+                @if (! empty($participant['flow_note']))
+                    {{-- Fase 3 §3.3 (F-FLOW): delegação (quem, quando, por quê) ou etapa não aplicável. --}}
+                    <br><span class="small muted">{{ $participant['flow_note'] }}</span>
+                @endif
             </td>
             <td>
                 @if ($participant['signed_at'])
@@ -174,6 +178,14 @@
                 @if (! empty($participant['in_person_label']))
                     {{-- Fase 2 §2.6 (C-PRES): o autor do aceite continua sendo o participante. --}}
                     <br>{{ $participant['in_person_label'] }}
+                @endif
+                @if (! empty($participant['identity_video_label']))
+                    {{-- Fase 3 §3.3 (F-VIDEO): só a citação (tipo, SHA-256, origem declarada); o vídeo não é embutido. --}}
+                    <br><span class="muted">{{ $participant['identity_video_label'] }}</span>
+                @endif
+                @if (! empty($participant['display_locale_label']))
+                    {{-- Fase 3 §3.3 (F-I18N): idioma em que a página foi exibida; o texto aceito é o de referência (PT-BR). --}}
+                    <br><span class="muted">{{ $participant['display_locale_label'] }}</span>
                 @endif
                 @if ($participant['ip'])
                     <br>IP {{ $participant['ip'] }}
@@ -201,6 +213,81 @@
         Receberam cópia para acompanhamento, sem registrar aceite (visualizadores):
         @foreach ($e['viewers'] as $viewer){{ $loop->first ? '' : '; ' }}{{ $viewer['name'] }} ({{ $viewer['email'] }})@endforeach.
     </p>
+@endif
+
+{{-- Fase 3 §3.3 (F-FLOW): só existe com etapas condicionais ou delegação no envelope. --}}
+@if (! empty($e['flow']['delegations']))
+    <h2>Delegações</h2>
+    <p class="small">
+        Quem delegou deixou de participar; quem recebeu a delegação registrou <span class="strong">aceite próprio</span>,
+        com código e evidências dele — nunca em nome de outra pessoa.
+    </p>
+    <table>
+        <thead>
+        <tr>
+            <th style="width: 34%">Quem delegou → quem recebeu</th>
+            <th style="width: 26%">Quando</th>
+            <th style="width: 40%">Motivo e origem</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach ($e['flow']['delegations'] as $delegation)
+            <tr>
+                <td>
+                    <span class="strong">{{ $delegation['from_name'] }}</span> <span class="small muted">({{ $delegation['from_email'] }})</span><br>
+                    → <span class="strong">{{ $delegation['to_name'] }}</span> <span class="small muted">({{ $delegation['to_email'] }})</span><br>
+                    <span class="small">{{ $delegation['status_label'] }}</span>
+                </td>
+                <td class="small">
+                    Pedido em {{ $delegation['requested_at'] ?? '—' }}
+                    @if ($delegation['confirmed_at'])<br>Confirmado por quem enviou em {{ $delegation['confirmed_at'] }}@endif
+                    @if ($delegation['delegated_at'])<br>Em vigor desde {{ $delegation['delegated_at'] }}@endif
+                    @if ($delegation['rejected_at'])<br>Recusado por quem enviou em {{ $delegation['rejected_at'] }}@endif
+                </td>
+                <td class="small">
+                    Motivo: “{{ $delegation['reason'] }}”
+                    @if ($delegation['ip'])<br>IP (truncado) {{ $delegation['ip'] }}@endif
+                    @if ($delegation['user_agent'])<br><span class="muted">{{ \Illuminate\Support\Str::limit($delegation['user_agent'], 90) }}</span>@endif
+                </td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
+@endif
+
+@if (! empty($e['flow']['steps']))
+    <h2>Etapas do fluxo</h2>
+    <p class="small">
+        As condições são regras fechadas (decisão de aprovador ou valor de campo comparado com um texto literal),
+        avaliadas pela plataforma quando a etapa foi alcançada, com os valores registrados naquele momento.
+    </p>
+    <table>
+        <thead>
+        <tr>
+            <th style="width: 24%">Etapa</th>
+            <th style="width: 20%">Situação</th>
+            <th style="width: 56%">Regra e valores avaliados</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach ($e['flow']['steps'] as $step)
+            <tr>
+                <td><span class="strong">{{ $step['index'] }}.</span> {{ $step['name'] ?? 'Etapa '.$step['index'] }}</td>
+                <td class="small">
+                    {{ $step['status_label'] }}
+                    @if ($step['evaluated_at'])<br><span class="muted">{{ $step['evaluated_at'] }}</span>@endif
+                </td>
+                <td class="small">
+                    @forelse ($step['rules'] as $line)
+                        {{ $line }}@if (! $loop->last)<br>@endif
+                    @empty
+                        {{ $step['has_condition'] ? '—' : 'Sem condição: sempre se aplica.' }}
+                    @endforelse
+                </td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
 @endif
 
 @if (count($e['documents'] ?? []) > 1)

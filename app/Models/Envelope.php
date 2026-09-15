@@ -46,6 +46,7 @@ use Illuminate\Support\Facades\DB;
  * @property array<string, mixed>|null $settings
  * @property Carbon|null $scheduled_send_at
  * @property int|null $scheduled_send_audit_id
+ * @property bool|null $uses_signing_steps
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -113,6 +114,8 @@ class Envelope extends Model
             'scheduled_send_audit_id' => 'integer',
             'settings' => 'array',
             'deleted_at' => 'datetime',
+            // Fase 3 §3.3 (F-FLOW): a vez é conduzida por `signing_steps`.
+            'uses_signing_steps' => 'boolean',
         ];
     }
 
@@ -226,6 +229,24 @@ class Envelope extends Model
         return $this->signing_order === SigningOrder::Sequential;
     }
 
+    /**
+     * A coleta anda por VEZES (`current_order`)? Sim no sequencial — como sempre — e, com as
+     * etapas condicionais da Fase 3 §3.3 (F-FLOW), também no paralelo: a etapa é a vez e todos
+     * os participantes dela assinam juntos. Sem etapas é exatamente {@see self::isSequential()}.
+     */
+    public function hasTurns(): bool
+    {
+        return $this->isSequential() || $this->usesSigningSteps();
+    }
+
+    /**
+     * Fase 3 §3.3 (F-FLOW): o envelope conduz a vez pelas etapas (`signing_steps`).
+     */
+    public function usesSigningSteps(): bool
+    {
+        return (bool) $this->getAttribute('uses_signing_steps');
+    }
+
     // -- Relações ---------------------------------------------------------------------
 
     /** @return BelongsTo<Folder, $this> */
@@ -290,6 +311,16 @@ class Envelope extends Model
         // Ordem da LISTA (`position`), não a vez de assinar (`order_index`): o visualizador não
         // tem vez e, ordenado por ela, subia para o topo em todas as telas (Fase 2 §2.4).
         return $this->hasMany(Recipient::class)->orderBy('position')->orderBy('id');
+    }
+
+    /**
+     * Fase 3 §3.3 (F-FLOW): etapas do fluxo, na ordem.
+     *
+     * @return HasMany<SigningStep, $this>
+     */
+    public function signingSteps(): HasMany
+    {
+        return $this->hasMany(SigningStep::class)->orderBy('step_index');
     }
 
     /** @return HasMany<SigningField, $this> */

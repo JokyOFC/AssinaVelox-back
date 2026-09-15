@@ -1,6 +1,11 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { useCallback, useEffect, useState } from 'react';
-import { type OpenedPdf, openPdfDocument, PdfLoadError } from '@/lib/pdf';
+import {
+    type OpenedPdf,
+    openPdfDocument,
+    type PdfErrorKind,
+    PdfLoadError,
+} from '@/lib/pdf';
 
 export type PdfDocumentStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -16,6 +21,11 @@ export interface PdfDocumentState {
     delivered: boolean;
     /** Mensagem PT-BR pronta para exibição (null enquanto não há erro). */
     error: string | null;
+    /**
+     * Tipo do erro (F-I18N): a página pública em outro idioma traduz pelo tipo, porque a
+     * mensagem de `lib/pdf` é escrita em PT-BR. `null` enquanto não há erro.
+     */
+    errorKind: PdfErrorKind | null;
     reload: () => void;
 }
 
@@ -30,6 +40,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
         url ? 'loading' : 'idle',
     );
     const [error, setError] = useState<string | null>(null);
+    const [errorKind, setErrorKind] = useState<PdfErrorKind | null>(null);
     const [delivered, setDelivered] = useState(false);
     const [attempt, setAttempt] = useState(0);
 
@@ -40,6 +51,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
             setDocument(null);
             setStatus('idle');
             setError(null);
+            setErrorKind(null);
             setDelivered(false);
 
             return;
@@ -51,6 +63,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
 
         setStatus('loading');
         setError(null);
+        setErrorKind(null);
         setDelivered(false);
 
         openPdfDocument(url, controller.signal, () => {
@@ -82,6 +95,9 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
                         ? cause.message
                         : 'Não foi possível exibir o documento. Baixe o arquivo para conferir.',
                 );
+                setErrorKind(
+                    cause instanceof PdfLoadError ? cause.kind : 'unknown',
+                );
             });
 
         return () => {
@@ -101,6 +117,7 @@ export function usePdfDocument(url: string | null): PdfDocumentState {
         status,
         delivered,
         error,
+        errorKind,
         reload,
     };
 }

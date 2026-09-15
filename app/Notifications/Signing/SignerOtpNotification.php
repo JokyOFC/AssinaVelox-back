@@ -9,6 +9,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\Locale\LocalizesRecipientMail;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
@@ -48,7 +49,7 @@ use Illuminate\Notifications\Notification;
  */
 class SignerOtpNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
-    use AppliesOrganizationBranding, Queueable;
+    use AppliesOrganizationBranding, LocalizesRecipientMail, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -58,6 +59,7 @@ class SignerOtpNotification extends Notification implements ShouldBeEncrypted, S
         public readonly string $correlationId,
     ) {
         $this->onQueue((string) config('assinavelox.queues.notifications', 'notifications'));
+        $this->localizeFor($recipient, $envelope->organization);
     }
 
     /**
@@ -81,16 +83,20 @@ class SignerOtpNotification extends Notification implements ShouldBeEncrypted, S
 
     public function toMail(object $notifiable): MailMessage
     {
+        // Fase 3 §3.3 (F-I18N): textos de `lang/{idioma}/signer_mail.php`, no idioma do participante
+        // quando a flag `multilingual` está ligada (PT-BR, idêntico ao de sempre, quando não).
         $message = (new MailMessage)
-            ->subject('Seu código para assinar '.$this->envelope->title)
-            ->greeting('Olá, '.$this->firstName().'!')
-            ->line('Use o código abaixo para confirmar sua identidade e assinar o documento **'
-                .MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.'), enviado por **'
-                .MailText::escape($this->envelope->organization->name).'**.')
+            ->subject($this->mailText('otp.subject', ['title' => $this->envelope->title]))
+            ->greeting($this->mailText('greeting_named', ['name' => $this->firstName()]))
+            ->line($this->mailText('otp.line', [
+                'title' => MailText::escape($this->envelope->title),
+                'code' => $this->envelope->display_code,
+                'organization' => MailText::escape($this->envelope->organization->name),
+            ]))
             ->line('**'.$this->spaced().'**')
-            ->line('O código vale por '.$this->ttlMinutes.' minutos e só pode ser usado uma vez.')
-            ->line('Se você não pediu este código, ignore esta mensagem: sem ele, nada é assinado.')
-            ->salutation('Equipe '.config('app.name'));
+            ->line($this->mailText('otp.ttl', ['minutes' => $this->ttlMinutes]))
+            ->line($this->mailText('otp.ignore'))
+            ->salutation($this->mailText('otp.salutation', ['app' => (string) config('app.name')]));
 
         return $this->applyOrganizationBranding($message, $this->envelope->organization);
     }

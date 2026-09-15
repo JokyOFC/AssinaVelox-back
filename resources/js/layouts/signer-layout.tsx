@@ -1,10 +1,12 @@
 import { FileText, Lock } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect } from 'react';
 import AppLogo from '@/components/app-logo';
 import { AvatarInitials } from '@/components/avatar-initials';
 import type { SignerBrand } from '@/components/branding/types';
 import { FlashToaster } from '@/components/flash-toaster';
+import { LanguageSwitcher } from '@/components/sign/language-switcher';
 import { Stepper, type StepperStep } from '@/components/stepper';
+import { useI18n, useSignerI18nProps } from '@/i18n';
 
 export type SignerLayoutProps = {
     children: ReactNode;
@@ -24,6 +26,7 @@ export type SignerLayoutProps = {
     documentTitle?: string | null;
     /** Índice do passo atual no stepper público (0 = Confirmar identidade). */
     step?: number | null;
+    /** Passos próprios (já traduzidos); ausente = os três padrão, no idioma da página. */
     steps?: StepperStep[];
     /** Link do aviso de privacidade exibido no rodapé. */
     privacyUrl?: string | null;
@@ -46,17 +49,46 @@ export const SIGNER_STEPS: StepperStep[] = [
  * Não há rastreador de terceiros nesta página: nenhuma fonte, script, pixel ou
  * iframe externo é carregado aqui (as fontes são servidas pelo próprio build,
  * ver `vite.config.ts`). É o que o aviso de privacidade ao signatário promete.
+ *
+ * Fase 3 §3.3 (F-I18N): textos no idioma da página e, com a flag `multilingual`
+ * ligada, o seletor de idioma no cabeçalho. Sem a flag, a casca é a de sempre.
  */
 export default function SignerLayout({
     children,
     sender,
     documentTitle = null,
     step = null,
-    steps = SIGNER_STEPS,
+    steps,
     privacyUrl = null,
     termsUrl = null,
 }: SignerLayoutProps) {
+    const { t, bcp47, isReference } = useI18n();
+    const shared = useSignerI18nProps();
     const brand = sender?.brand ?? null;
+
+    const shownSteps: StepperStep[] = steps ?? [
+        { key: 'identify', title: t('layout.steps.identify') },
+        { key: 'sign', title: t('layout.steps.sign') },
+        { key: 'completed', title: t('layout.steps.completed') },
+    ];
+
+    // `lang` do documento acompanha o idioma exibido (leitores de tela, hifenização).
+    useEffect(() => {
+        if (!shared) {
+            return;
+        }
+
+        const root = document.documentElement;
+        const previous = root.lang;
+        root.lang = bcp47;
+
+        return () => {
+            root.lang = previous;
+        };
+    }, [shared, bcp47]);
+
+    // Os avisos e os termos só existem em português: a página diz isso fora do PT-BR.
+    const onlyPortuguese = isReference ? '' : ` ${t('common.portuguese_only')}`;
 
     // As cores da marca ficam expostas como variáveis para as páginas públicas
     // que quiserem usá-las (contraste já validado no servidor).
@@ -88,7 +120,9 @@ export default function SignerLayout({
                         {brand?.logo_url ? (
                             <img
                                 src={brand.logo_url}
-                                alt={`Logo de ${brand.display_name}`}
+                                alt={t('layout.logo_alt', {
+                                    name: brand.display_name,
+                                })}
                                 className="h-9 max-w-[120px] shrink-0 object-contain"
                             />
                         ) : (
@@ -110,7 +144,7 @@ export default function SignerLayout({
                                         {documentTitle}
                                     </span>
                                 ) : (
-                                    'solicita sua assinatura'
+                                    t('layout.requests_signature')
                                 )}
                             </span>
                         </span>
@@ -121,19 +155,32 @@ export default function SignerLayout({
 
                 {step !== null && (
                     <div className="hidden flex-1 justify-center lg:flex">
-                        <Stepper steps={steps} current={step} variant="pills" />
+                        <Stepper
+                            steps={shownSteps}
+                            current={step}
+                            variant="pills"
+                        />
                     </div>
                 )}
 
-                <div className="text-muted-foreground border-border ml-auto flex shrink-0 items-center gap-1.5 border-l pl-3 text-[11.5px]">
-                    <span className="hidden sm:inline">via</span>
-                    <AppLogo height={18} />
+                <div className="ml-auto flex shrink-0 items-center gap-3">
+                    <LanguageSwitcher />
+                    <div className="text-muted-foreground border-border flex shrink-0 items-center gap-1.5 border-l pl-3 text-[11.5px]">
+                        <span className="hidden sm:inline">
+                            {t('layout.via')}
+                        </span>
+                        <AppLogo height={18} />
+                    </div>
                 </div>
             </header>
 
             {step !== null && (
                 <div className="border-border flex justify-center overflow-x-auto border-b bg-white px-4 py-2 lg:hidden">
-                    <Stepper steps={steps} current={step} variant="pills" />
+                    <Stepper
+                        steps={shownSteps}
+                        current={step}
+                        variant="pills"
+                    />
                 </div>
             )}
 
@@ -145,10 +192,10 @@ export default function SignerLayout({
                 <span className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1">
                     <span className="inline-flex items-center gap-1">
                         <Lock className="size-3" />
-                        Conexão protegida (TLS)
+                        {t('layout.footer.tls')}
                     </span>
                     <span aria-hidden>·</span>
-                    <span>Trilha de auditoria</span>
+                    <span>{t('layout.footer.audit')}</span>
                     {privacyUrl && (
                         <>
                             <span aria-hidden>·</span>
@@ -158,7 +205,8 @@ export default function SignerLayout({
                                 rel="noopener noreferrer"
                                 className="text-muted-foreground underline-offset-2 hover:underline"
                             >
-                                Aviso de privacidade
+                                {t('common.privacy')}
+                                {onlyPortuguese}
                             </a>
                         </>
                     )}
@@ -171,15 +219,13 @@ export default function SignerLayout({
                                 rel="noopener noreferrer"
                                 className="text-muted-foreground underline-offset-2 hover:underline"
                             >
-                                Termos de uso
+                                {t('common.terms')}
+                                {onlyPortuguese}
                             </a>
                         </>
                     )}
                 </span>
-                <span>
-                    Documento processado pela AssinaVelox · aceite eletrônico
-                    com evidências
-                </span>
+                <span>{t('layout.footer.processed')}</span>
             </footer>
 
             <FlashToaster />

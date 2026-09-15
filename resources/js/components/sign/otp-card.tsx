@@ -22,8 +22,7 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
-import { formatDateMedium, formatTime, plural } from '@/lib/format';
-import { channelPhraseLabels } from '@/lib/labels';
+import { useI18n } from '@/i18n';
 import { send as otpSend, verify as otpVerify } from '@/routes/sign/otp';
 import type { SignerAuth } from '@/types/models';
 
@@ -44,6 +43,8 @@ export interface OtpCardProps {
     expiresAt: string | null;
     otp: OtpState | null;
     notice: PrivacyNoticeContent;
+    /** Original em PT-BR do aviso quando `notice` é tradução (F-I18N). */
+    noticeReference?: PrivacyNoticeContent | null;
     termsUrl: string;
     privacyUrl: string;
     /** `errors.code` / `errors.otp` / `errors.pin` da resposta 422. */
@@ -121,6 +122,8 @@ function clock(seconds: number): string {
  * Fase 2 §2.9 (`auth`): o código pode sair por SMS ou WhatsApp, para o número mascarado.
  * Ele prova a posse do canal, não a identidade. Com PIN do remetente, depois do código vem
  * a etapa do PIN (`auth.step === 'pin'`). Sem `auth`, a tela é a da Fase 1.
+ *
+ * Fase 3 §3.3 (F-I18N): textos pelo dicionário (`@/i18n`), idênticos em PT-BR.
  */
 export function OtpCard({
     token,
@@ -132,15 +135,18 @@ export function OtpCard({
     expiresAt,
     otp,
     notice,
+    noticeReference = null,
     termsUrl,
     privacyUrl,
     errors,
     codeLength = 6,
     ttlMinutes = 10,
-    heading = 'Confirme sua identidade para assinar',
+    heading,
     auth = null,
     extra,
 }: OtpCardProps) {
+    const i18n = useI18n();
+    const { t, tp, rich } = i18n;
     const CODE_LENGTH = codeLength;
     const requested = otp?.sent_at != null;
     const [sending, setSending] = useState(false);
@@ -148,10 +154,11 @@ export function OtpCard({
     const submittedCode = useRef<string | null>(null);
 
     const channel = auth?.channel ?? 'email';
-    const phrase = channelPhraseLabels[channel];
+    const phrase = t(`common.channel.${channel}`);
     const destination = auth?.destination || emailMasked;
     const ChannelIcon = CHANNEL_ICONS[channel];
-    const byChannel = channel === 'email' ? '' : ` por ${phrase}`;
+    const byChannel =
+        channel === 'email' ? '' : t('otp.by_channel', { channel: phrase });
     const unavailable = auth !== null && !auth.available;
     const pin = auth?.pin ?? null;
     const pinStep = auth?.step === 'pin' && pin !== null && pin.step_active;
@@ -197,17 +204,17 @@ export function OtpCard({
     };
 
     const deadline = useMemo(
-        () => (expiresAt ? formatDateMedium(expiresAt) : null),
-        [expiresAt],
+        () => (expiresAt ? i18n.dateMedium(expiresAt) : null),
+        [expiresAt, i18n],
     );
 
     const simulatedBadge = auth?.simulated ? (
         <Badge
             variant="warning"
             className="px-1.5 py-px text-[10.5px]"
-            title="Ambiente de testes: a mensagem não chega ao celular."
+            title={t('otp.simulated_title')}
         >
-            simulado
+            {t('otp.simulated')}
         </Badge>
     ) : null;
 
@@ -227,7 +234,7 @@ export function OtpCard({
                 >
                     <span className="text-danger flex items-center gap-2 font-semibold">
                         <ShieldAlert className="size-4 shrink-0" />
-                        Não é possível enviar o código{byChannel} agora
+                        {t('otp.unavailable_title', { by: byChannel })}
                     </span>
                     {auth?.unavailable_reason && (
                         <span className="text-text-secondary">
@@ -235,8 +242,10 @@ export function OtpCard({
                         </span>
                     )}
                     <span className="text-text-secondary">
-                        Fale com {senderName} ({organizationName}) para receber
-                        o documento por outro canal.
+                        {t('otp.unavailable_contact', {
+                            sender: senderName,
+                            organization: organizationName,
+                        })}
                     </span>
                 </div>
             );
@@ -249,8 +258,11 @@ export function OtpCard({
                         <span className="flex items-center gap-2.5">
                             <ChannelIcon className="text-primary size-4 shrink-0" />
                             <span>
-                                Enviaremos um código de {CODE_LENGTH} dígitos
-                                {byChannel} para <b>{destination}</b>.
+                                {rich('otp.will_send', {
+                                    length: CODE_LENGTH,
+                                    by: byChannel,
+                                    destination: <b>{destination}</b>,
+                                })}
                             </span>
                             {simulatedBadge}
                         </span>
@@ -267,7 +279,7 @@ export function OtpCard({
                         ) : (
                             <KeyRound className="size-4" />
                         )}
-                        Receber código por {phrase}
+                        {t('otp.receive', { channel: phrase })}
                     </Button>
                     {errors.otp && (
                         <p role="alert" className="text-danger text-[12.5px]">
@@ -283,7 +295,10 @@ export function OtpCard({
                 <div className="flex flex-wrap items-center gap-2.5 text-[13px]">
                     <ChannelIcon className="text-primary size-4 shrink-0" />
                     <span>
-                        Enviamos um código{byChannel} para <b>{destination}</b>
+                        {rich('otp.sent', {
+                            by: byChannel,
+                            destination: <b>{destination}</b>,
+                        })}
                     </span>
                     {simulatedBadge}
                 </div>
@@ -295,7 +310,10 @@ export function OtpCard({
                     inputMode="numeric"
                     autoFocus
                     disabled={pinLocked}
-                    aria-label={`Código de ${CODE_LENGTH} dígitos recebido por ${phrase}`}
+                    aria-label={t('otp.input_aria', {
+                        length: CODE_LENGTH,
+                        channel: phrase,
+                    })}
                     onChange={(code) => {
                         setData('code', code);
                         submit(code);
@@ -315,7 +333,7 @@ export function OtpCard({
 
                 <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-[12px]">
                     <span className="tabular">
-                        Código válido por {ttlMinutes} min
+                        {t('otp.valid_for', { minutes: ttlMinutes })}
                     </span>
                     <button
                         type="button"
@@ -324,8 +342,8 @@ export function OtpCard({
                         className="text-primary font-semibold disabled:opacity-60"
                     >
                         {countdown > 0
-                            ? `Reenviar em ${countdown}s`
-                            : 'Reenviar código'}
+                            ? t('otp.resend_in', { seconds: countdown })
+                            : t('otp.resend')}
                     </button>
                 </div>
 
@@ -341,8 +359,8 @@ export function OtpCard({
                 {!errors.code && otp && otp.attempts_left < 3 && (
                     <p className="text-warning text-[12.5px]">
                         {otp.attempts_left === 0
-                            ? 'Tentativas esgotadas. Peça um novo código.'
-                            : `${plural(otp.attempts_left, 'tentativa restante', 'tentativas restantes')} antes de precisar de um novo código.`}
+                            ? t('otp.attempts_exhausted')
+                            : tp('otp.attempts_left', otp.attempts_left)}
                     </p>
                 )}
                 {errors.otp && (
@@ -366,36 +384,50 @@ export function OtpCard({
                     }}
                 >
                     {processing && <Spinner className="size-4" />}
-                    Confirmar código e continuar
+                    {t('otp.confirm')}
                 </Button>
             </div>
         );
     };
 
+    const people = { sender: senderName, organization: organizationName };
+
     return (
         <div className="border-border bg-card shadow-card flex flex-col gap-4 rounded-[14px] border p-5 sm:p-[22px]">
             <div>
                 <p className="text-muted-foreground text-[11px] font-bold tracking-[.16em] uppercase">
-                    Olá, {firstName}
+                    {t('otp.hello', { name: firstName })}
                 </p>
                 <h1 className="mt-1.5 text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
-                    {heading}
+                    {heading ?? t('otp.heading_default')}
                 </h1>
                 <p className="text-text-secondary mt-2 text-[13.5px] leading-[1.55]">
-                    {senderName} ({organizationName}) enviou este documento para
-                    você
-                    {sentAt ? ` em ${formatDateMedium(sentAt)}` : ''}.
+                    {sentAt
+                        ? t('otp.intro_sent', {
+                              ...people,
+                              date: i18n.dateMedium(sentAt),
+                          })
+                        : t('otp.intro', people)}
                     {deadline && (
                         <>
                             {' '}
-                            Prazo: <b className="text-foreground">{deadline}</b>
-                            .
+                            {rich('otp.deadline', {
+                                deadline: (
+                                    <b className="text-foreground">
+                                        {deadline}
+                                    </b>
+                                ),
+                            })}
                         </>
                     )}
                 </p>
             </div>
 
-            <PrivacyNotice notice={notice} privacyUrl={privacyUrl} />
+            <PrivacyNotice
+                notice={notice}
+                privacyUrl={privacyUrl}
+                reference={noticeReference}
+            />
 
             {extra}
 
@@ -406,12 +438,10 @@ export function OtpCard({
                 >
                     <span className="text-danger flex items-center gap-2 font-semibold">
                         <Ban className="size-4 shrink-0" />
-                        PIN bloqueado
+                        {t('otp.pin_blocked_title')}
                     </span>
                     <span className="text-text-secondary">
-                        O PIN foi bloqueado depois de várias tentativas
-                        incorretas. Fale com {senderName} ({organizationName}):
-                        só quem enviou o documento pode definir um PIN novo.
+                        {t('otp.pin_blocked_body', people)}
                     </span>
                     {errors.pin && (
                         <span className="text-danger">{errors.pin}</span>
@@ -433,17 +463,17 @@ export function OtpCard({
                         >
                             <span className="flex items-center gap-2 font-semibold">
                                 <TimerReset className="size-4 shrink-0" />
-                                PIN bloqueado temporariamente
+                                {t('otp.pin_locked_title')}
                             </span>
                             <span>
-                                Depois de várias tentativas incorretas, o PIN
-                                fica bloqueado até{' '}
-                                {formatTime(pin?.locked_until ?? null)} (faltam{' '}
-                                <span className="tabular">
-                                    {clock(lockSeconds)}
-                                </span>
-                                ). Em seguida, peça um novo código e informe o
-                                PIN de novo.
+                                {rich('otp.pin_locked_body', {
+                                    time: i18n.time(pin?.locked_until ?? null),
+                                    remaining: (
+                                        <span className="tabular">
+                                            {clock(lockSeconds)}
+                                        </span>
+                                    ),
+                                })}
                             </span>
                         </div>
                     )}
@@ -456,19 +486,24 @@ export function OtpCard({
                     {pin?.required && !unavailable && (
                         <p className="text-muted-foreground flex items-start gap-1.5 text-[12px] leading-[1.5]">
                             <KeyRound className="mt-px size-3.5 shrink-0" />
-                            Depois do código, você vai informar o PIN que{' '}
-                            {senderName} combinou com você.
+                            {t('otp.pin_after_code', { sender: senderName })}
                         </p>
                     )}
                 </>
             )}
 
             <p className="text-muted-foreground text-center text-[12px] leading-[1.5]">
-                Ao continuar você concorda com os{' '}
-                <a href={termsUrl} target="_blank" rel="noopener noreferrer">
-                    termos de uso
-                </a>
-                . Seus dados são tratados conforme a LGPD.
+                {rich('otp.agree', {
+                    terms: (
+                        <a
+                            href={termsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            {t('otp.terms_link')}
+                        </a>
+                    ),
+                })}
             </p>
         </div>
     );

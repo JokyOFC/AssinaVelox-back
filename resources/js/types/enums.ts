@@ -21,7 +21,9 @@ export type RecipientStatus =
     | 'signed'
     | 'refused'
     | 'expired'
-    | 'canceled';
+    | 'canceled'
+    // Fase 3 §3.3 (F-FLOW): delegou a outra pessoa (nunca "assinado"). Só com a flag `delegation`.
+    | 'delegated';
 // ROUTES §6.2: o badge dos três primeiros é sempre "Pendente" (âmbar); o texto abaixo é a NOTA.
 //   pending  = criado; ainda não notificado (envelope não enviado OU aguarda a vez no sequencial) → nota "Aguarda a vez" quando envelope in_progress
 //   notified = convite despachado (não implica entrega) → nota "Enviado · não visualizou"

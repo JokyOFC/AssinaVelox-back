@@ -6,7 +6,6 @@ use App\Enums\AccessLinkPurpose;
 use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
-use App\Enums\SigningOrder;
 use App\Models\Envelope;
 use App\Models\Organization;
 use App\Models\Recipient;
@@ -172,7 +171,8 @@ class ReminderSender
             return 'viewer';
         }
 
-        if ($envelope->signing_order === SigningOrder::Sequential
+        // Fase 3 §3.3 (F-FLOW): com etapas o paralelo também anda por vez; sem etapas = sequencial.
+        if ($envelope->hasTurns()
             && (int) $recipient->order_index !== (int) $envelope->current_order) {
             return 'not_their_turn';
         }

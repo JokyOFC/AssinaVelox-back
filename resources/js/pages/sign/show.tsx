@@ -12,13 +12,23 @@ import type { SignerBrand } from '@/components/branding/types';
 import { ParticipantCertificateCard } from '@/components/certificates/participant-certificate-card';
 import { ExternalSigningCard } from '@/components/external-signing/external-signing-card';
 import { GovBrReturnCard } from '@/components/external-signing/govbr-return-card';
+import { DelegationCard } from '@/components/sign/delegation/delegation-card';
 import {
     CaptureStepCard,
     CaptureStepPreview,
 } from '@/components/identity/capture-step';
+import {
+    useVideoStep,
+    VideoCaptureStepCard,
+} from '@/components/identity/video-capture-step';
+import type { IdentityVideoStep } from '@/components/identity/video-types';
 import { DocumentSwitcher } from '@/components/pdf/document-switcher';
 import type { PdfDocumentStatus } from '@/components/pdf/use-pdf-document';
-import { ConsentBox, defaultConsentLabel } from '@/components/sign/consent-box';
+import {
+    ConsentBox,
+    type ConsentTranslation,
+    defaultConsentLabel,
+} from '@/components/sign/consent-box';
 import { FieldChecklist } from '@/components/sign/field-checklist';
 import { OtpCard } from '@/components/sign/otp-card';
 import {
@@ -51,12 +61,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import {
-    formatDateMedium,
-    formatDateTime,
-    isValidCpf,
-    plural,
-} from '@/lib/format';
-import { channelPhraseLabels } from '@/lib/labels';
+    type I18n,
+    type Locale,
+    type SignerI18nProps,
+    translate,
+    useI18n,
+} from '@/i18n';
+import { isLocale, REFERENCE_LOCALE } from '@/i18n/locales';
+import { isValidCpf } from '@/lib/format';
 import {
     complete as signComplete,
     document as signDocument,
@@ -238,12 +250,20 @@ export interface SignShowProps {
         statement: string;
         /** O que a plataforma afirma sobre a conclusão (§7 do doc jurídico). */
         completion_notice: string;
+        /**
+         * Fase 3 §3.3 (F-I18N): tradução de cortesia do rótulo e da declaração. Só existe
+         * com a flag `multilingual` ligada e idioma diferente do PT-BR; `checkbox_label` e
+         * `statement` continuam sendo o texto de referência, o que é gravado.
+         */
+        translation?: ConsentTranslation | null;
     } | null;
     /** Aviso de privacidade ao signatário, já com as variáveis substituídas. */
     privacy: {
         version: string;
         summary: string;
         notice: string;
+        /** F-I18N: o original em PT-BR quando `summary`/`notice` são tradução. */
+        reference?: { summary: string | null; notice: string | null } | null;
     } | null;
     /** Token de autorização final, exigido por `sign.complete`. */
     authorization: { token: string; expires_at: string | null } | null;
@@ -269,6 +289,8 @@ export interface SignShowProps {
      * `null` quando não se aplica.
      */
     identity_capture?: IdentityCaptureStep | null;
+    /** Fase 3 §3.3 (F-VIDEO): só existe quando o vídeo curto foi exigido desta pessoa. */
+    identity_video?: IdentityVideoStep | null;
     limits?: {
         otp_length?: number;
         otp_ttl_minutes?: number;
@@ -282,6 +304,8 @@ export interface SignShowProps {
     action?: SignerAction | null;
     /** Fase 2 §2.4 — só em `view`. */
     copy?: ViewerCopy | null;
+    /** Fase 3 §3.3 (F-I18N): prop compartilhada, só com a flag `multilingual` ligada. */
+    i18n?: SignerI18nProps | null;
 }
 
 const STEP_BY_SCREEN: Record<SignerScreen, number | null> = {
@@ -303,19 +327,29 @@ const STEP_BY_SCREEN: Record<SignerScreen, number | null> = {
  */
 function stepsFor(
     action: SignerAction | null | undefined,
+    locale: Locale,
 ): StepperStep[] | undefined {
     if (action?.type === 'approve') {
         return [
-            { key: 'identify', title: 'Confirmar identidade' },
-            { key: 'sign', title: 'Aprovar' },
-            { key: 'completed', title: 'Concluído' },
+            {
+                key: 'identify',
+                title: translate(locale, 'layout.steps.identify'),
+            },
+            { key: 'sign', title: translate(locale, 'sign.steps.approve') },
+            {
+                key: 'completed',
+                title: translate(locale, 'layout.steps.completed'),
+            },
         ];
     }
 
     if (action?.type === 'view') {
         return [
-            { key: 'identify', title: 'Confirmar identidade' },
-            { key: 'sign', title: 'Acompanhar' },
+            {
+                key: 'identify',
+                title: translate(locale, 'layout.steps.identify'),
+            },
+            { key: 'sign', title: translate(locale, 'sign.steps.view') },
         ];
     }
 
@@ -365,8 +399,27 @@ function signerAuthOf(value: unknown): SignerAuth | null {
         : null;
 }
 
-function fileLabel(item: { position: number; name: string | null }): string {
-    return `${item.position}. ${item.name?.trim() || `Arquivo ${item.position}`}`;
+function fileLabel(
+    item: { position: number; name: string | null },
+    t: I18n['t'],
+): string {
+    return t('sign.file_label', {
+        position: item.position,
+        name:
+            item.name?.trim() ||
+            t('sign.file_fallback', { position: item.position }),
+    });
+}
+
+/** O original em PT-BR do aviso de privacidade, quando o exibido é tradução. */
+function referenceNotice(
+    privacy: SignShowProps['privacy'],
+): PrivacyNoticeContent | null {
+    const reference = privacy?.reference;
+
+    return reference?.summary
+        ? { summary: reference.summary, body: reference.notice ?? null }
+        : null;
 }
 
 /**
@@ -384,6 +437,10 @@ function fileLabel(item: { position: number; name: string | null }): string {
  * - `documents` (§2.3): com mais de um arquivo, navegação entre eles com os campos
  *   pendentes de cada um; o aceite só habilita depois de TODOS os arquivos terem sido
  *   entregues a esta sessão (o servidor exige o mesmo — `document_not_presented`).
+ *
+ * Fase 3 §3.3 (F-I18N): os textos da tela vêm do dicionário (`@/i18n`) no idioma da prop
+ * `i18n` — PT-BR, idêntico ao de antes, quando ela não existe. O texto jurídico traduzido
+ * é tradução de cortesia; o de referência continua sendo o conferido e gravado.
  */
 export default function SignShow(props: SignShowProps) {
     const {
@@ -409,8 +466,11 @@ export default function SignShow(props: SignShowProps) {
         action = null,
         copy = null,
         identity_capture = null,
+        identity_video = null,
     } = props;
 
+    const i18n = useI18n();
+    const { t, tp, rich } = i18n;
     const errors = usePage().props.errors;
 
     /*
@@ -434,6 +494,9 @@ export default function SignShow(props: SignShowProps) {
     useEffect(() => {
         setCaptureStep(identity_capture);
     }, [identity_capture]);
+
+    // Fase 3 §3.3 (F-VIDEO): vídeo curto exigido; o servidor recusa o aceite sem ele.
+    const videoCapture = useVideoStep(identity_video);
 
     const stampOwner = {
         brand: sender.brand ?? null,
@@ -489,6 +552,7 @@ export default function SignShow(props: SignShowProps) {
 
     const approving = action?.requires_signature === false;
     const witnessing = action?.type === 'witness';
+    const verb = approving ? t('common.verb.approve') : t('common.verb.sign');
 
     const docIndex = (id: string | null): number =>
         Math.max(
@@ -560,12 +624,12 @@ export default function SignShow(props: SignShowProps) {
                 ? null
                 : `${field.recipient_name.split(' ')[0]} · ${
                       afterMe.get(field.recipient_name)
-                          ? 'assina depois de você'
-                          : 'ainda não assinou'
+                          ? t('sign.other.signs_after_you')
+                          : t('sign.other.not_signed_yet')
                   }`,
             documentId: field.document_id ?? firstDocId,
         }));
-    }, [other_fields, others, firstDocId]);
+    }, [other_fields, others, firstDocId, t]);
 
     /** Um campo por id (a rubrica repetida em N páginas conta uma vez). */
     const uniqueFields = useMemo(() => {
@@ -748,6 +812,7 @@ export default function SignShow(props: SignShowProps) {
         pending.length === 0 &&
         !cpfInvalid &&
         captureReady &&
+        videoCapture.ready &&
         (!needsSignature || signature !== null) &&
         (!needsInitials || initials !== null) &&
         !submitting;
@@ -764,9 +829,7 @@ export default function SignShow(props: SignShowProps) {
         );
 
         if (oversize && !approving) {
-            setLocalError(
-                'A imagem da assinatura ficou grande demais. Limpe o quadro e faça um traço mais simples, ou envie uma imagem menor.',
-            );
+            setLocalError(t('sign.error.signature_too_large'));
 
             return;
         }
@@ -819,14 +882,13 @@ export default function SignShow(props: SignShowProps) {
     if (screen === 'invalid' || envelope === null || recipient === null) {
         return (
             <>
-                <Head title="Link inválido" />
+                <Head title={t('sign.invalid.title')} />
                 <div className="mx-auto w-full max-w-[520px]">
                     <TerminalCard
                         icon={TERMINAL_ICONS.invalid}
-                        title="Link inválido"
+                        title={t('sign.invalid.title')}
                     >
-                        Este link não existe ou foi substituído. Verifique o
-                        e-mail mais recente.
+                        {t('sign.invalid.body')}
                     </TerminalCard>
                 </div>
             </>
@@ -836,6 +898,7 @@ export default function SignShow(props: SignShowProps) {
     const notice: PrivacyNoticeContent = privacy
         ? { summary: privacy.summary, body: privacy.notice }
         : defaultPrivacyNotice(sender.organization_name);
+    const noticeReference = referenceNotice(privacy);
 
     const myRoleLabel =
         recipient.participant_role && recipient.participant_role !== 'signer'
@@ -852,21 +915,23 @@ export default function SignShow(props: SignShowProps) {
                     {screen === 'expired' && (
                         <TerminalCard
                             icon={TERMINAL_ICONS.expired}
-                            title="Prazo encerrado"
+                            title={t('sign.expired.title')}
                         >
-                            O prazo para assinar este documento terminou em{' '}
-                            {formatDateMedium(envelope.expires_at)}. Entre em
-                            contato com {sender.user_name} (
-                            {sender.organization_name}).
+                            {t('sign.expired.body', {
+                                date: i18n.dateMedium(envelope.expires_at),
+                                sender: sender.user_name,
+                                organization: sender.organization_name,
+                            })}
                         </TerminalCard>
                     )}
                     {screen === 'canceled' && (
                         <TerminalCard
                             icon={TERMINAL_ICONS.canceled}
-                            title="Documento cancelado"
+                            title={t('sign.canceled.title')}
                         >
-                            {sender.organization_name} cancelou esta solicitação
-                            de assinatura.
+                            {t('sign.canceled.body', {
+                                organization: sender.organization_name,
+                            })}
                         </TerminalCard>
                     )}
                     {screen === 'refused' && (
@@ -875,24 +940,32 @@ export default function SignShow(props: SignShowProps) {
                             tone="danger"
                             title={
                                 approver
-                                    ? 'Aprovação recusada'
-                                    : 'Assinatura recusada'
+                                    ? t('sign.refused.title_approve')
+                                    : t('sign.refused.title_sign')
                             }
                         >
                             {refusal ? (
                                 <>
-                                    Você recusou{' '}
-                                    {approver ? 'aprovar' : 'assinar'} este
-                                    documento em{' '}
-                                    {formatDateTime(refusal.refused_at)}.
+                                    {t(
+                                        approver
+                                            ? 'sign.refused.at_approve'
+                                            : 'sign.refused.at_sign',
+                                        {
+                                            date: i18n.dateTime(
+                                                refusal.refused_at,
+                                            ),
+                                        },
+                                    )}
                                     <span className="mt-1.5 block">
-                                        Motivo informado: “{refusal.reason}”
+                                        {t('sign.refused.reason', {
+                                            reason: refusal.reason,
+                                        })}
                                     </span>
                                 </>
                             ) : approver ? (
-                                'Você recusou aprovar este documento.'
+                                t('sign.refused.approve')
                             ) : (
-                                'Você recusou assinar este documento.'
+                                t('sign.refused.sign')
                             )}
                         </TerminalCard>
                     )}
@@ -929,7 +1002,9 @@ export default function SignShow(props: SignShowProps) {
 
         return (
             <>
-                <Head title={`Comprovante · ${envelope.title}`} />
+                <Head
+                    title={t('sign.tab.receipt', { title: envelope.title })}
+                />
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                     <aside
                         className={`order-1 w-full min-w-0 lg:order-2 lg:max-w-[420px] lg:flex-[1_1_320px] ${documentProps ? '' : 'lg:mx-auto'}`}
@@ -944,7 +1019,7 @@ export default function SignShow(props: SignShowProps) {
                                 />
                             ) : (
                                 <p className="text-text-secondary text-[13.5px]">
-                                    Seu aceite foi registrado.
+                                    {t('sign.receipt_fallback')}
                                 </p>
                             )}
                         </div>
@@ -968,12 +1043,13 @@ export default function SignShow(props: SignShowProps) {
                                     expiresAt={envelope.expires_at}
                                     otp={otp}
                                     notice={notice}
+                                    noticeReference={noticeReference}
                                     termsUrl={legal.terms_url}
                                     privacyUrl={legal.privacy_url}
                                     errors={errors}
                                     codeLength={limits?.otp_length}
                                     ttlMinutes={limits?.otp_ttl_minutes}
-                                    heading="Confirme sua identidade para enviar o certificado"
+                                    heading={t('sign.heading.certificate')}
                                     auth={auth}
                                 />
                             </div>
@@ -1053,18 +1129,18 @@ export default function SignShow(props: SignShowProps) {
     if (screen === 'identify') {
         // Título da aba conforme o papel (Fase 2 §2.4, regra T1): aprovar não é
         // assinar, e o visualizador só lê o documento.
-        const tabVerb =
+        const tabKey =
             recipient.participant_role === 'viewer'
-                ? 'Documento'
+                ? 'sign.tab.document'
                 : approving
-                  ? 'Aprovar'
+                  ? 'sign.tab.approve'
                   : witnessing
-                    ? 'Assinar como testemunha'
-                    : 'Assinar';
+                    ? 'sign.tab.witness'
+                    : 'sign.tab.sign';
 
         return (
             <>
-                <Head title={`${tabVerb} · ${envelope.title}`} />
+                <Head title={t(tabKey, { title: envelope.title })} />
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                     <aside className="order-1 w-full min-w-0 lg:sticky lg:top-[76px] lg:order-2 lg:max-w-[420px] lg:flex-[1_1_320px]">
                         <OtpCard
@@ -1077,6 +1153,7 @@ export default function SignShow(props: SignShowProps) {
                             expiresAt={envelope.expires_at}
                             otp={otp}
                             notice={notice}
+                            noticeReference={noticeReference}
                             termsUrl={legal.terms_url}
                             privacyUrl={legal.privacy_url}
                             errors={errors}
@@ -1084,9 +1161,9 @@ export default function SignShow(props: SignShowProps) {
                             ttlMinutes={limits?.otp_ttl_minutes}
                             heading={
                                 action?.type === 'approve'
-                                    ? 'Confirme sua identidade para aprovar'
+                                    ? t('sign.heading.approve')
                                     : action?.type === 'view'
-                                      ? 'Confirme sua identidade para ver o documento'
+                                      ? t('sign.heading.view')
                                       : undefined
                             }
                             auth={auth}
@@ -1118,8 +1195,8 @@ export default function SignShow(props: SignShowProps) {
             className="mb-3"
             label={
                 screen === 'view'
-                    ? 'Arquivos deste documento'
-                    : 'Confira todos os arquivos'
+                    ? t('sign.files.view_label')
+                    : t('sign.files.sign_label')
             }
             items={docs.map((item) => {
                 const open = delivered[item.id] === true;
@@ -1133,19 +1210,17 @@ export default function SignShow(props: SignShowProps) {
                 return {
                     id: item.id,
                     position: item.position,
-                    name: item.name?.trim() || `Arquivo ${item.position}`,
+                    name:
+                        item.name?.trim() ||
+                        t('sign.file_fallback', { position: item.position }),
                     meta:
                         screen === 'view'
-                            ? plural(item.pages, 'página')
+                            ? tp('common.pages', item.pages)
                             : !open
-                              ? 'Ainda não aberto'
+                              ? t('sign.files.not_opened')
                               : missing > 0
-                                ? plural(
-                                      missing,
-                                      'campo pendente',
-                                      'campos pendentes',
-                                  )
-                                : 'Aberto · sem pendências',
+                                ? tp('sign.files.pending', missing)
+                                : t('sign.files.done'),
                     tone:
                         screen === 'view'
                             ? 'default'
@@ -1168,7 +1243,9 @@ export default function SignShow(props: SignShowProps) {
 
         return (
             <>
-                <Head title={`Documento · ${envelope.title}`} />
+                <Head
+                    title={t('sign.tab.document', { title: envelope.title })}
+                />
 
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                     <div className="min-w-0 lg:flex-[1.5_1_380px]">
@@ -1182,7 +1259,7 @@ export default function SignShow(props: SignShowProps) {
                                 }
                                 title={
                                     currentDoc
-                                        ? fileLabel(currentDoc)
+                                        ? fileLabel(currentDoc, t)
                                         : envelope.title
                                 }
                                 pages={pageCount}
@@ -1212,29 +1289,31 @@ export default function SignShow(props: SignShowProps) {
                             <div>
                                 <Badge variant="success">
                                     <Check className="size-3 stroke-[3]" />
-                                    Código confirmado
+                                    {t('sign.code_confirmed')}
                                 </Badge>
                                 <h1 className="mt-3 text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
-                                    Cópia para acompanhamento
+                                    {t('sign.viewer.title')}
                                 </h1>
                                 <p className="text-text-secondary mt-1.5 text-[13.5px] leading-[1.55]">
                                     {copy?.notice ??
-                                        'Você recebeu este documento para acompanhamento. Não é necessário assinar nem aprovar.'}
+                                        t('sign.viewer.notice_fallback')}
                                 </p>
                             </div>
 
                             <p className="border-border bg-sidebar text-text-secondary rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
-                                Como visualizador, você não registra aceite nem
-                                recusa. Esta tela é somente leitura e não altera
-                                o andamento do documento.
+                                {t('sign.viewer.readonly')}
                             </p>
 
                             {copy?.can_download && available.length > 0 ? (
                                 <div className="flex flex-col gap-2">
                                     <p className="text-[13px] font-semibold">
                                         {copy.completed_at
-                                            ? `Cópia final — concluído em ${formatDateTime(copy.completed_at)}`
-                                            : 'Cópia final'}
+                                            ? t('sign.viewer.final_completed', {
+                                                  date: i18n.dateTime(
+                                                      copy.completed_at,
+                                                  ),
+                                              })
+                                            : t('sign.viewer.final')}
                                     </p>
                                     {available.map((item) => (
                                         <Button
@@ -1248,8 +1327,18 @@ export default function SignShow(props: SignShowProps) {
                                                 <span className="truncate">
                                                     {available.length > 1 ||
                                                     multi
-                                                        ? `Baixar ${fileLabel(item)}`
-                                                        : 'Baixar cópia final'}
+                                                        ? t(
+                                                              'sign.viewer.download_file',
+                                                              {
+                                                                  file: fileLabel(
+                                                                      item,
+                                                                      t,
+                                                                  ),
+                                                              },
+                                                          )
+                                                        : t(
+                                                              'sign.viewer.download_final',
+                                                          )}
                                                 </span>
                                             </a>
                                         </Button>
@@ -1258,7 +1347,7 @@ export default function SignShow(props: SignShowProps) {
                             ) : (
                                 <Button variant="outline" disabled>
                                     <Download className="size-4" />
-                                    Disponível quando todos concluírem
+                                    {t('sign.viewer.available_when_done')}
                                 </Button>
                             )}
                         </div>
@@ -1282,11 +1371,11 @@ export default function SignShow(props: SignShowProps) {
     const visibleOthers = multi
         ? otherFields.filter((field) => field.documentId === currentDocId)
         : otherFields;
-    const buttonLabel = action?.button_label ?? 'Assinar documento';
+    const buttonLabel = action?.button_label ?? t('sign.button_fallback');
 
     return (
         <>
-            <Head title={`Assinar · ${envelope.title}`} />
+            <Head title={t('sign.tab.sign', { title: envelope.title })} />
 
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                 <div className="min-w-0 lg:flex-[1.5_1_380px]">
@@ -1299,7 +1388,7 @@ export default function SignShow(props: SignShowProps) {
                             }
                             title={
                                 currentDoc
-                                    ? fileLabel(currentDoc)
+                                    ? fileLabel(currentDoc, t)
                                     : envelope.title
                             }
                             pages={pageCount}
@@ -1340,50 +1429,46 @@ export default function SignShow(props: SignShowProps) {
                         <div>
                             <Badge variant="success">
                                 <Check className="size-3 stroke-[3]" />
-                                Código confirmado
+                                {t('sign.code_confirmed')}
                             </Badge>
                             <h1 className="mt-3 text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
                                 {approving
-                                    ? 'Sua aprovação'
+                                    ? t('sign.panel.title_approve')
                                     : witnessing
-                                      ? 'Sua assinatura como testemunha'
-                                      : 'Sua assinatura'}
+                                      ? t('sign.panel.title_witness')
+                                      : t('sign.panel.title_sign')}
                             </h1>
                             <p className="text-text-secondary mt-1.5 text-[13.5px] leading-[1.55]">
-                                {approving ? (
-                                    <>
-                                        Você aprova o conteúdo{' '}
-                                        {multi
-                                            ? 'dos arquivos'
-                                            : 'do documento'}
-                                        . Não há representação visual de
-                                        assinatura: o que registra sua{' '}
-                                        <b className="text-foreground">
-                                            aprovação eletrônica
-                                        </b>{' '}
-                                        é o aceite abaixo.
-                                    </>
-                                ) : witnessing ? (
-                                    <>
-                                        Você participa como{' '}
-                                        <b className="text-foreground">
-                                            testemunha
-                                        </b>
-                                        . A imagem é a representação visual da
-                                        sua assinatura; o que registra sua
-                                        manifestação é o aceite abaixo, com a
-                                        declaração própria de testemunha.
-                                    </>
-                                ) : (
-                                    <>
-                                        Escolha como quer assinar. A imagem é a{' '}
-                                        <b className="text-foreground">
-                                            representação visual
-                                        </b>{' '}
-                                        da sua assinatura; o que registra sua
-                                        vontade é o aceite abaixo.
-                                    </>
-                                )}
+                                {approving
+                                    ? rich('sign.panel.approve_intro', {
+                                          what: multi
+                                              ? t('sign.panel.approve_files')
+                                              : t(
+                                                    'sign.panel.approve_document',
+                                                ),
+                                          bold: (
+                                              <b className="text-foreground">
+                                                  {t('sign.panel.approve_bold')}
+                                              </b>
+                                          ),
+                                      })
+                                    : witnessing
+                                      ? rich('sign.panel.witness_intro', {
+                                            bold: (
+                                                <b className="text-foreground">
+                                                    {t(
+                                                        'sign.panel.witness_bold',
+                                                    )}
+                                                </b>
+                                            ),
+                                        })
+                                      : rich('sign.panel.sign_intro', {
+                                            bold: (
+                                                <b className="text-foreground">
+                                                    {t('sign.panel.sign_bold')}
+                                                </b>
+                                            ),
+                                        })}
                             </p>
                         </div>
 
@@ -1404,7 +1489,7 @@ export default function SignShow(props: SignShowProps) {
                                 className="border-border scroll-mt-24 border-t pt-4"
                             >
                                 <p className="text-text-secondary mb-2 text-[12.5px] font-semibold">
-                                    Sua rubrica
+                                    {t('sign.panel.initials')}
                                 </p>
                                 <InitialsCapture
                                     value={initials}
@@ -1438,9 +1523,18 @@ export default function SignShow(props: SignShowProps) {
                             />
                         )}
 
+                        {videoCapture.step && (
+                            <VideoCaptureStepCard
+                                step={videoCapture.step}
+                                onChange={videoCapture.setStep}
+                                className="border-border border-t pt-4"
+                            />
+                        )}
+
                         <PrivacyNotice
                             notice={notice}
                             privacyUrl={legal.privacy_url}
+                            reference={noticeReference}
                         />
 
                         {consent?.completion_notice && (
@@ -1460,51 +1554,58 @@ export default function SignShow(props: SignShowProps) {
                             version={consent?.version}
                             termsUrl={legal.terms_url}
                             privacyUrl={legal.privacy_url}
+                            translation={consent?.translation ?? null}
                         />
 
                         {!documentPresented &&
                             (multi ? (
                                 <p className="text-warning text-[12.5px]">
-                                    Abra e confira todos os arquivos antes de{' '}
-                                    {approving ? 'aprovar' : 'assinar'}. Falta
-                                    {missingDocs.length === 1 ? '' : 'm'}:{' '}
-                                    {missingDocs.map(fileLabel).join(', ')}.
+                                    {tp(
+                                        'sign.warn.open_all',
+                                        missingDocs.length,
+                                        {
+                                            verb,
+                                            files: missingDocs
+                                                .map((item) =>
+                                                    fileLabel(item, t),
+                                                )
+                                                .join(', '),
+                                        },
+                                    )}
                                     {documentStatus === 'error' &&
-                                        ' O arquivo aberto não chegou — use “Tentar de novo” ou “Baixar PDF” na barra do documento.'}
+                                        t('sign.warn.file_not_arrived')}
                                 </p>
                             ) : (
                                 <p className="text-warning text-[12.5px]">
                                     {documentStatus === 'error'
-                                        ? 'O documento não chegou. Use “Tentar de novo” ou “Baixar PDF” na barra do documento — só é possível assinar depois de conferir o que está sendo assinado.'
-                                        : 'Aguarde o documento terminar de carregar para assinar.'}
+                                        ? t('sign.warn.document_not_arrived')
+                                        : t('sign.warn.document_loading')}
                                 </p>
                             ))}
                         {documentPresented && pending.length > 0 && (
                             <p className="text-warning text-[12.5px]">
-                                Faltam{' '}
-                                {plural(
-                                    pending.length,
-                                    'campo obrigatório',
-                                    'campos obrigatórios',
-                                )}{' '}
-                                — use “Próximo campo” na barra do documento.
+                                {tp('sign.warn.pending', pending.length)}
                             </p>
                         )}
                         {cpfInvalid && (
                             <p className="text-warning text-[12.5px]">
-                                Confira o CPF informado: os dígitos não
-                                conferem.
+                                {t('sign.warn.cpf')}
+                            </p>
+                        )}
+                        {!videoCapture.ready && (
+                            <p className="text-warning text-[12.5px]">
+                                {t('sign.warn.video', { verb })}
                             </p>
                         )}
                         {!captureReady && captureStep && (
                             <p className="text-warning text-[12.5px]">
-                                Antes de {approving ? 'aprovar' : 'assinar'},
-                                envie:{' '}
-                                {captureStep.items
-                                    .filter((item) => !item.captured)
-                                    .map((item) => item.label.toLowerCase())
-                                    .join(', ')}
-                                .
+                                {t('sign.warn.capture', {
+                                    verb,
+                                    items: captureStep.items
+                                        .filter((item) => !item.captured)
+                                        .map((item) => item.label.toLowerCase())
+                                        .join(', '),
+                                })}
                             </p>
                         )}
                         {(localError ||
@@ -1546,8 +1647,8 @@ export default function SignShow(props: SignShowProps) {
                             className="text-muted-foreground hover:text-danger text-center text-[12.5px] font-semibold"
                         >
                             {approving
-                                ? 'Recusar aprovação'
-                                : 'Recusar assinatura'}
+                                ? t('sign.refuse.approve')
+                                : t('sign.refuse.sign')}
                         </button>
                     </div>
 
@@ -1559,6 +1660,11 @@ export default function SignShow(props: SignShowProps) {
                     {/* Fase 3 §3.4 e §3.5: 404 = o cartão não existe (flag desligada). */}
                     {!approving && <ExternalSigningCard token={token} />}
                     {!approving && <GovBrReturnCard token={token} />}
+                    {/* Fase 3 §3.3 (F-FLOW): 404 = o cartão de delegação não existe. */}
+                    <DelegationCard
+                        token={token}
+                        noun={approving ? 'aprovação' : 'assinatura'}
+                    />
 
                     <ParticipantsCard
                         others={others}
@@ -1594,6 +1700,8 @@ function LockedDocument({
     /** Fase 2 §2.9: por onde o código chega (o texto do e-mail é o da Fase 1). */
     channel?: SignerAuth['channel'];
 }) {
+    const { t, tp } = useI18n();
+
     return (
         <div className="border-border bg-card shadow-card flex flex-col items-center gap-3 rounded-xl border p-8 text-center">
             <span className="bg-primary-soft text-primary flex size-12 items-center justify-center rounded-xl">
@@ -1601,13 +1709,15 @@ function LockedDocument({
             </span>
             <p className="text-[15px] font-semibold">{title}</p>
             <p className="text-muted-foreground tabular text-[12.5px]">
-                {displayCode} · {plural(pages, 'página')}
+                {displayCode} · {tp('common.pages', pages)}
             </p>
             <p className="text-text-secondary max-w-[380px] text-[13px] leading-[1.55]">
                 {channel === 'email'
-                    ? 'O documento é exibido depois que você confirmar o código enviado ao seu e-mail.'
-                    : `O documento é exibido depois que você confirmar o código enviado por ${channelPhraseLabels[channel]} ao seu celular.`}{' '}
-                Ele nunca fica acessível por um endereço público.
+                    ? t('sign.locked.email')
+                    : t('sign.locked.phone', {
+                          channel: t(`common.channel.${channel}`),
+                      })}{' '}
+                {t('sign.locked.never_public')}
             </p>
         </div>
     );
@@ -1629,6 +1739,8 @@ function ParticipantsCard({
     recipientRoleLabel?: string | null;
     className?: string;
 }) {
+    const { t } = useI18n();
+
     if (others.length === 0) {
         return null;
     }
@@ -1639,14 +1751,14 @@ function ParticipantsCard({
         >
             <h2 className="flex items-center gap-1.5 text-[13.5px] font-semibold">
                 <ShieldCheck className="text-primary size-3.5" />
-                Participantes
+                {t('sign.participants.title')}
             </h2>
             <ul className="mt-2.5 flex flex-col gap-2 text-[12.5px]">
                 <li className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium">
                         {recipientName}{' '}
                         <span className="text-muted-foreground">
-                            (você
+                            ({t('sign.participants.you')}
                             {recipientRoleLabel
                                 ? ` · ${recipientRoleLabel.toLowerCase()}`
                                 : ''}
@@ -1682,15 +1794,17 @@ function ParticipantsCard({
                             <span className="text-muted-foreground shrink-0 text-[12px]">
                                 {other.status === 'signed'
                                     ? other.participant_role === 'approver'
-                                        ? 'Aprovou'
-                                        : 'Assinou'
+                                        ? t('sign.participants.approved')
+                                        : t('sign.participants.signed')
                                     : other.status === 'refused'
-                                      ? 'Recusou'
+                                      ? t('sign.participants.refused')
                                       : other.signs_after_me
                                         ? special
-                                            ? 'depois de você'
-                                            : 'assina depois de você'
-                                        : 'pendente'}
+                                            ? t('sign.participants.after_you')
+                                            : t(
+                                                  'sign.participants.signs_after_you',
+                                              )
+                                        : t('sign.participants.pending')}
                             </span>
                         </li>
                     );
@@ -1701,7 +1815,10 @@ function ParticipantsCard({
 }
 
 SignShow.layout = (props: SignShowProps) => {
-    const steps = stepsFor(props.action);
+    const locale: Locale = isLocale(props.i18n?.locale)
+        ? props.i18n.locale
+        : REFERENCE_LOCALE;
+    const steps = stepsFor(props.action, locale);
 
     return {
         sender: props.sender,

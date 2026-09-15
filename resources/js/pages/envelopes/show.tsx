@@ -24,7 +24,9 @@ import { StartInPersonLink } from '@/components/in-person/start-in-person-link';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DossierButton } from '@/components/dossier/dossier-buttons';
 import { useEnvelopeLegalHold } from '@/components/envelopes/use-envelope-legal-hold';
+import { EnvelopeFlowPanel } from '@/components/envelopes/steps/flow-panel';
 import { EnvelopeLegalHoldPanel } from '@/components/retention/envelope-legal-hold-panel';
+import { IdentityVideoPanel } from '@/components/identity/identity-video-panel';
 import { PreservedBadge } from '@/components/retention/preserved-badge';
 import type { EnvelopeLegalHold } from '@/components/retention/types';
 import { ParticipantSignatureList } from '@/components/verification/crypto-signature-list';
@@ -1160,6 +1162,12 @@ export default function EnvelopeShow({
 
             {/* Fase 2 §2.19: sem a flag e sem preservação, o painel não renderiza nada. */}
             {legalHold && <EnvelopeLegalHoldPanel legalHold={legalHold} />}
+
+            {/* Fase 3 §3.3 (F-FLOW): sem etapas nem delegações (ou flags desligadas), nada renderiza. */}
+            <EnvelopeFlowPanel envelopeId={envelope.id} />
+
+            {/* Fase 3 §3.3 (F-VIDEO): sem a flag `identity_video` ou sem vídeo, não renderiza nada. */}
+            <IdentityVideoPanel envelopeId={envelope.id} />
 
             <ConfirmDialog
                 open={cancelOpen}

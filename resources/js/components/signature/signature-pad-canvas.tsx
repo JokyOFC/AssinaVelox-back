@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type SignaturePad from 'signature_pad';
 import type { PointGroup } from 'signature_pad';
 import { Button } from '@/components/ui/button';
+import { Trans, useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export interface SignaturePadCanvasProps {
@@ -160,6 +161,48 @@ export function SignaturePadCanvas({
     };
 
     return (
+        <PadFrame
+            className={className}
+            height={height}
+            canvasRef={canvasRef}
+            ariaLabel={ariaLabel}
+            hint={hint}
+            ready={ready}
+            empty={empty}
+            onUndo={undo}
+            onClear={clear}
+        />
+    );
+}
+
+/**
+ * Moldura do quadro (F-I18N): os rótulos "Desfazer"/"Limpar" e o aviso de preparo vêm do
+ * dicionário, no idioma da página.
+ */
+function PadFrame({
+    className,
+    height,
+    canvasRef,
+    ariaLabel,
+    hint,
+    ready,
+    empty,
+    onUndo: undo,
+    onClear: clear,
+}: {
+    className?: string;
+    height: number;
+    canvasRef: React.RefObject<HTMLCanvasElement | null>;
+    ariaLabel: string;
+    hint: string;
+    ready: boolean;
+    empty: boolean;
+    onUndo: () => void;
+    onClear: () => void;
+}) {
+    const { t } = useI18n();
+
+    return (
         <div className={cn('flex flex-col gap-2', className)}>
             <div
                 className="border-border-dashed bg-background relative rounded-[10px] border-[1.5px] border-dashed"
@@ -176,7 +219,7 @@ export function SignaturePadCanvas({
                     className="bg-input pointer-events-none absolute inset-x-4 bottom-7 h-px"
                 />
                 <span className="text-muted-foreground pointer-events-none absolute bottom-2.5 left-4 text-[11px]">
-                    {ready ? hint : 'Preparando o quadro…'}
+                    {ready ? hint : t('signature.pad.preparing')}
                 </span>
                 <div className="absolute top-2.5 right-2.5 flex gap-1.5">
                     <Button
@@ -187,7 +230,7 @@ export function SignaturePadCanvas({
                         onClick={undo}
                     >
                         <Undo2 className="size-3" />
-                        Desfazer
+                        <Trans k="signature.pad.undo">Desfazer</Trans>
                     </Button>
                     <Button
                         type="button"
@@ -197,7 +240,7 @@ export function SignaturePadCanvas({
                         onClick={clear}
                     >
                         <Eraser className="size-3" />
-                        Limpar
+                        {t('signature.pad.clear')}
                     </Button>
                 </div>
             </div>

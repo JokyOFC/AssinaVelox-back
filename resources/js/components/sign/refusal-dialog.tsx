@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { useI18n } from '@/i18n';
 import { refuse as signRefuse } from '@/routes/sign';
 
 /**
@@ -37,6 +38,8 @@ export function RefusalDialog({
     /** O que se recusa (Fase 2 §2.4): "assinatura" (padrão) ou "aprovação". */
     noun?: 'assinatura' | 'aprovação';
 }) {
+    const { t } = useI18n();
+    const approval = noun === 'aprovação';
     const { data, setData, post, processing, errors, reset } = useForm({
         reason: '',
     });
@@ -58,16 +61,22 @@ export function RefusalDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[440px]">
                 <DialogHeader>
-                    <DialogTitle>Recusar a {noun}?</DialogTitle>
+                    <DialogTitle>
+                        {approval
+                            ? t('refusal.title_approval')
+                            : t('refusal.title_signature')}
+                    </DialogTitle>
                     <DialogDescription>
-                        {organizationName} receberá o motivo informado. A recusa
-                        encerra este documento e não pode ser desfeita por você.
+                        {t('refusal.description', {
+                            organization: organizationName,
+                        })}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-1.5">
                     <Label htmlFor="refusal-reason">
-                        Motivo da recusa <span className="text-danger">*</span>
+                        {t('refusal.reason_label')}{' '}
+                        <span className="text-danger">*</span>
                     </Label>
                     <Textarea
                         id="refusal-reason"
@@ -78,10 +87,10 @@ export function RefusalDialog({
                         onChange={(event) =>
                             setData('reason', event.target.value)
                         }
-                        placeholder="Ex.: o valor do aluguel está diferente do combinado."
+                        placeholder={t('refusal.placeholder')}
                     />
                     <p className="text-muted-foreground flex justify-between text-[12px]">
-                        <span>Mínimo de {minReason} caracteres.</span>
+                        <span>{t('refusal.min', { min: minReason })}</span>
                         <span className="tabular">
                             {data.reason.length}/{maxReason}
                         </span>
@@ -99,7 +108,7 @@ export function RefusalDialog({
                         variant="outline"
                         onClick={() => onOpenChange(false)}
                     >
-                        Voltar ao documento
+                        {t('common.back_to_document')}
                     </Button>
                     <Button
                         type="button"
@@ -108,7 +117,9 @@ export function RefusalDialog({
                         onClick={submit}
                     >
                         {processing && <Spinner className="size-4" />}
-                        Recusar {noun}
+                        {approval
+                            ? t('refusal.submit_approval')
+                            : t('refusal.submit_signature')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

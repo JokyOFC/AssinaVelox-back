@@ -11,13 +11,16 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Services\AdminLog\ToolFlags;
 use App\Services\Affiliates\AffiliatesFeature;
+use App\Services\Anchors\AnchorFeatures;
 use App\Services\Api\ApiFeature;
 use App\Services\Billing\BillingSettings;
 use App\Services\Branding\BrandingFeature;
 use App\Services\Branding\BrandingPresenter;
+use App\Services\BulkGeneration\BulkGenerationFeature;
 use App\Services\Dossier\DossierFeature;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\Reminders\RemindersFeature;
+use App\Services\Envelopes\Steps\FlowFeatures;
 use App\Services\Fiscal\FiscalFeature;
 use App\Services\Identity\IdentityFeatures;
 use App\Services\InPerson\PresenceFeatures;
@@ -33,6 +36,7 @@ use App\Services\Templates\TemplatesFeature;
 use App\Services\Timestamp\TimestampFeatures;
 use App\Services\Webhooks\WebhooksFeature;
 use App\Support\CurrentOrganization;
+use App\Support\Locale\MultilingualFeature;
 use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -179,6 +183,16 @@ class HandleInertiaRequests extends Middleware
             'affiliates' => AffiliatesFeature::enabled(),
             'pades_ltv' => LtvFeatures::enabled(),
             'pades_ltv_advertise' => LtvFeatures::advertise(),
+            // Fase 3 §3.3 (F-FLOW): `conditional_steps` e `delegation` — global E plano.
+            ...FlowFeatures::forOrganization($organization),
+            // Fase 3 §3.3 (F-VIDEO): vídeo curto no aceite — global E plano, desligada (T8).
+            'identity_video' => IdentityFeatures::identityVideo($organization),
+            // Fase 3 §3.1 (F-BULK): geração em lote — global E plano (exige `templates`), desligada (T8).
+            'bulk_generation' => BulkGenerationFeature::enabled($organization),
+            // Fase 3 §3.2 (F-ANCHOR): âncoras e OCR — global E plano (`ocr` exige `field_anchors`).
+            ...AnchorFeatures::forOrganization($organization),
+            // Fase 3 §3.3 (F-I18N): página pública e e-mails multilíngues — global E plano, desligada (T8).
+            'multilingual' => MultilingualFeature::enabled($organization),
         ];
     }
 

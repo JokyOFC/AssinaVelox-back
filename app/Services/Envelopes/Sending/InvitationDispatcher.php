@@ -6,7 +6,6 @@ use App\Enums\AccessLinkPurpose;
 use App\Enums\AuditEventType;
 use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
-use App\Enums\SigningOrder;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Envelopes\RecipientInvitationNotification;
@@ -157,7 +156,9 @@ class InvitationDispatcher implements RotatesInvitations
     {
         $query = $envelope->recipients()->where('status', RecipientStatus::Pending->value);
 
-        if ($envelope->signing_order === SigningOrder::Sequential) {
+        // Fase 3 §3.3 (F-FLOW): com etapas o paralelo também anda por vez (a etapa); sem etapas,
+        // `hasTurns()` é exatamente "sequencial".
+        if ($envelope->hasTurns()) {
             // Fase 2 §2.4 (B-DOM, alteração mínima): o visualizador não tem vez — recebe o
             // link somente leitura já no envio, junto com quem está na vez.
             $query->where(fn ($turn) => $turn
@@ -170,7 +171,7 @@ class InvitationDispatcher implements RotatesInvitations
 
     public function isTheirTurn(Recipient $recipient, Envelope $envelope): bool
     {
-        return $envelope->signing_order !== SigningOrder::Sequential
+        return ! $envelope->hasTurns()
             || $recipient->role === RecipientRole::Viewer
             || (int) $recipient->order_index === (int) $envelope->current_order;
     }

@@ -38,6 +38,13 @@ use Illuminate\Support\Carbon;
  * @property string|null $source
  * @property Carbon $captured_at
  * @property Carbon|null $purged_at
+ *
+ * Fase 3 §3.3 (F-VIDEO) — só para `kind = video` (nulos nas fotos):
+ * @property string|null $container `webm` | `matroska` | `mp4`, lido dos bytes
+ * @property int|null $duration_ms duração lida do arquivo, quando legível
+ * @property int|null $declared_duration_ms duração informada pelo navegador (não verificada)
+ * @property Carbon|null $consented_at
+ * @property string|null $consent_version SHA-256 do texto de consentimento exibido
  */
 class IdentityCapture extends Model
 {
@@ -61,6 +68,11 @@ class IdentityCapture extends Model
         'source',
         'captured_at',
         'purged_at',
+        'container',
+        'duration_ms',
+        'declared_duration_ms',
+        'consented_at',
+        'consent_version',
     ];
 
     /**
@@ -75,7 +87,15 @@ class IdentityCapture extends Model
             'size_bytes' => 'integer',
             'captured_at' => 'datetime',
             'purged_at' => 'datetime',
+            'duration_ms' => 'integer',
+            'declared_duration_ms' => 'integer',
+            'consented_at' => 'datetime',
         ];
+    }
+
+    public function isVideo(): bool
+    {
+        return $this->kind === CaptureKind::Video;
     }
 
     /**

@@ -3,8 +3,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SignerField } from '@/components/sign/signer-field-layer';
+import { useI18n } from '@/i18n';
 import { formatCpf, isValidCpf, onlyDigits } from '@/lib/format';
-import { fieldTypeLabels } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
 /** Limite padrão de `text` no aceite; o servidor manda o real em `limits`. */
@@ -31,6 +31,9 @@ export interface FieldChecklistProps {
  *
  * No celular, digitar dentro de uma caixa de 2 cm sobre a página é inviável:
  * clicar no campo do documento destaca e foca a linha correspondente aqui.
+ *
+ * O rótulo escrito pelo remetente é dado (T6) e aparece como veio; só o rótulo
+ * padrão do tipo de campo é traduzido (F-I18N).
  */
 export function FieldChecklist({
     fields,
@@ -42,6 +45,8 @@ export function FieldChecklist({
     errors,
     className,
 }: FieldChecklistProps) {
+    const { t } = useI18n();
+
     if (fields.length === 0) {
         return null;
     }
@@ -49,13 +54,13 @@ export function FieldChecklist({
     return (
         <div className={cn('flex flex-col gap-2.5', className)}>
             <p className="text-text-secondary text-[12.5px] font-semibold">
-                Campos a preencher
+                {t('fields.title')}
             </p>
 
             {fields.map((field) => {
                 const value = values[field.id];
                 const label =
-                    field.label?.trim() || fieldTypeLabels[field.type];
+                    field.label?.trim() || t(`fields.type.${field.type}`);
                 const active = activeId === field.id;
 
                 if (field.type === 'checkbox') {
@@ -119,7 +124,7 @@ export function FieldChecklist({
                     const serverError = errors?.[`fields.${field.id}`];
                     const localError =
                         onlyDigits(text).length === 11 && !isValidCpf(text)
-                            ? 'CPF inválido: confira os dígitos.'
+                            ? t('fields.cpf_invalid')
                             : null;
                     const message = serverError ?? localError;
 
@@ -176,8 +181,7 @@ export function FieldChecklist({
                                 id={`field-${field.id}-hint`}
                                 className="text-muted-foreground mt-1 text-[11.5px] leading-[1.45]"
                             >
-                                O CPF é conferido só pelos dígitos; isso não
-                                confirma que a pessoa é a titular.
+                                {t('fields.cpf_hint')}
                             </p>
                         </div>
                     );

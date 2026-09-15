@@ -9,6 +9,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\Locale\LocalizesRecipientMail;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
@@ -24,10 +25,13 @@ use Illuminate\Notifications\Notification;
  * mensagem só sai se a transação que emitiu o link e registrou o lembrete for confirmada.
  *
  * Vocabulário (arquitetura §2): "assinar eletronicamente", nunca "assinatura digital".
+ *
+ * Fase 3 §3.3 (F-I18N): textos de `lang/{idioma}/signer_mail.php`, no idioma do participante
+ * quando a flag `multilingual` está ligada.
  */
 class RecipientReminderNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
-    use AppliesOrganizationBranding, Queueable;
+    use AppliesOrganizationBranding, LocalizesRecipientMail, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -39,6 +43,7 @@ class RecipientReminderNotification extends Notification implements ShouldBeEncr
     ) {
         $this->onQueue((string) config('assinavelox.queues.notifications', 'notifications'));
         $this->afterCommit();
+        $this->localizeFor($recipient, $envelope->organization);
     }
 
     /**
@@ -64,25 +69,29 @@ class RecipientReminderNotification extends Notification implements ShouldBeEncr
         $organization = $this->envelope->organization;
 
         $message = (new MailMessage)
-            ->subject('Lembrete: '.$this->envelope->title.' aguarda sua assinatura')
-            ->greeting('Olá, '.$this->firstName().'!')
-            ->line('Este é um lembrete automático: o documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.'), enviado por **'.MailText::escape($organization->name).'**, ainda aguarda a sua assinatura eletrônica.');
+            ->subject($this->mailText('reminder.subject', ['title' => $this->envelope->title]))
+            ->greeting($this->mailText('greeting_named', ['name' => $this->firstName()]))
+            ->line($this->mailText('reminder.line', [
+                'title' => MailText::escape($this->envelope->title),
+                'code' => $this->envelope->display_code,
+                'organization' => MailText::escape($organization->name),
+            ]));
 
         if (filled($this->envelope->message)) {
-            $message->line('Mensagem de quem enviou: "'.MailText::escape($this->envelope->message).'"');
+            $message->line($this->mailText('sender_message', ['message' => MailText::escape($this->envelope->message)]));
         }
 
         $message
-            ->action('Abrir e assinar', $this->signingUrl)
-            ->line('Para confirmar que é você, vamos enviar um código de 6 dígitos para este mesmo e-mail.');
+            ->action($this->mailText('reminder.action'), $this->signingUrl)
+            ->line($this->mailText('code_notice'));
 
         if ($this->envelope->expires_at !== null) {
-            $message->line('O prazo para assinar termina em '.$this->deadline().'.');
+            $message->line($this->mailText('reminder.deadline', ['deadline' => $this->deadline()]));
         }
 
         $message
-            ->line('Este link substitui os enviados antes — use sempre o e-mail mais recente. Ele é pessoal: não encaminhe esta mensagem.')
-            ->salutation('Atenciosamente, AssinaVelox');
+            ->line($this->mailText('reminder.link_notice'))
+            ->salutation($this->mailText('salutation'));
 
         return $this->applyOrganizationBranding($message, $organization);
     }
@@ -91,14 +100,11 @@ class RecipientReminderNotification extends Notification implements ShouldBeEncr
     {
         $parts = preg_split('/\s+/u', trim($this->recipient->name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-        return MailText::escape($parts[0] ?? 'tudo bem?');
+        return MailText::escape($parts[0] ?? $this->mailText('first_name_fallback'));
     }
 
     private function deadline(): string
     {
-        return $this->envelope->expires_at
-            ->copy()
-            ->setTimezone($this->envelope->organization->timezone)
-            ->format('d/m/Y \à\s H:i');
+        return $this->mailDeadline($this->envelope->expires_at, $this->envelope->organization->timezone);
     }
 }

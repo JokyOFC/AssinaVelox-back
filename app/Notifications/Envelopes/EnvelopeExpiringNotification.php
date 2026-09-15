@@ -9,6 +9,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\Locale\LocalizesRecipientMail;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -23,10 +24,13 @@ use Illuminate\Notifications\Notification;
  * Propósito de entrega: `resend`. `delivery_attempts.purpose` não tem um caso próprio para
  * "expirando" e o enum é área de outro agente — `meta.reason = expiring_soon` distingue os
  * dois casos. Ver docs/envio-e-convites.md › Limitações.
+ *
+ * Fase 3 §3.3 (F-I18N): textos de `lang/{idioma}/signer_mail.php`, no idioma do participante
+ * quando a flag `multilingual` está ligada.
  */
 class EnvelopeExpiringNotification extends Notification implements ShouldQueue, TracksDelivery
 {
-    use AppliesOrganizationBranding, Queueable;
+    use AppliesOrganizationBranding, LocalizesRecipientMail, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -35,6 +39,7 @@ class EnvelopeExpiringNotification extends Notification implements ShouldQueue, 
         public readonly string $correlationId,
     ) {
         $this->onQueue((string) config('assinavelox.queues.notifications', 'notifications'));
+        $this->localizeFor($recipient, $envelope->organization);
     }
 
     /**
@@ -57,20 +62,23 @@ class EnvelopeExpiringNotification extends Notification implements ShouldQueue, 
 
     public function toMail(object $notifiable): MailMessage
     {
-        $deadline = $this->envelope->expires_at
-            ?->setTimezone($this->envelope->organization->timezone)
-            ->format('d/m/Y \à\s H:i');
+        $deadline = $this->envelope->expires_at === null
+            ? null
+            : $this->mailDeadline($this->envelope->expires_at, $this->envelope->organization->timezone);
 
         $message = (new MailMessage)
-            ->subject('Seu prazo para assinar '.$this->envelope->title.' está acabando')
-            ->greeting('Olá!')
-            ->line('O documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') ainda aguarda a sua assinatura.')
+            ->subject($this->mailText('expiring.subject', ['title' => $this->envelope->title]))
+            ->greeting($this->mailText('greeting'))
+            ->line($this->mailText('expiring.line', [
+                'title' => MailText::escape($this->envelope->title),
+                'code' => $this->envelope->display_code,
+            ]))
             ->line($deadline !== null
-                ? 'O prazo termina em '.$deadline.'. Depois disso o link deixa de funcionar e a solicitação precisa ser reenviada.'
-                : 'O prazo está próximo do fim. Depois disso o link deixa de funcionar.')
-            ->action('Assinar agora', $this->signingUrl)
-            ->line('Este link é pessoal — não encaminhe este e-mail.')
-            ->salutation('Atenciosamente, AssinaVelox');
+                ? $this->mailText('expiring.deadline', ['deadline' => $deadline])
+                : $this->mailText('expiring.deadline_unknown'))
+            ->action($this->mailText('expiring.action'), $this->signingUrl)
+            ->line($this->mailText('expiring.personal_link'))
+            ->salutation($this->mailText('salutation'));
 
         return $this->applyOrganizationBranding($message, $this->envelope->organization);
     }

@@ -15,6 +15,7 @@ use App\Models\SigningField;
 use App\Models\User;
 use App\Services\Documents\DocumentStorage;
 use App\Services\Documents\EnvelopeDocuments;
+use App\Services\Envelopes\Steps\FlowDuplication;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -56,8 +57,23 @@ final class DuplicateEnvelope
             $versionMap = $this->copyDocuments($source, $copy);
 
             $recipientMap = [];
+            // Fase 3 §3.3 (F-FLOW): ULIDs de origem → cópia, para remapear etapas e delegação.
+            $recipientUlids = [];
+            $cloneUlidBySourceId = [];
 
             foreach ($source->recipients as $recipient) {
+                // Fase 3 §3.3 (F-FLOW): quem entrou por DELEGAÇÃO não é copiado — a cópia recomeça
+                // com o participante original, que recebe de volta os campos. Sem delegação, nada muda.
+                $delegatedFrom = $recipient->getAttribute('delegated_from_recipient_id');
+
+                if ($delegatedFrom !== null && isset($recipientMap[(int) $delegatedFrom], $cloneUlidBySourceId[(int) $delegatedFrom])) {
+                    $recipientMap[$recipient->getKey()] = $recipientMap[(int) $delegatedFrom];
+                    $cloneUlidBySourceId[$recipient->getKey()] = $cloneUlidBySourceId[(int) $delegatedFrom];
+                    $recipientUlids[$recipient->ulid] = $cloneUlidBySourceId[(int) $delegatedFrom];
+
+                    continue;
+                }
+
                 $clone = new Recipient;
                 $clone->forceFill([
                     'envelope_id' => $copy->getKey(),
@@ -76,10 +92,16 @@ final class DuplicateEnvelope
                     'signed_at' => null,
                     'refused_at' => null,
                     'refusal_reason' => null,
+                    // Fase 3 §3.3 (F-FLOW): etapa do participante (nula sem etapas).
+                    'signing_step_index' => $recipient->getAttribute('signing_step_index'),
                 ])->save();
 
                 $recipientMap[$recipient->getKey()] = $clone->getKey();
+                $cloneUlidBySourceId[$recipient->getKey()] = $clone->ulid;
+                $recipientUlids[$recipient->ulid] = $clone->ulid;
             }
+
+            $fieldUlids = [];
 
             if ($versionMap !== []) {
                 foreach ($source->fields as $field) {
@@ -111,8 +133,14 @@ final class DuplicateEnvelope
                         'options' => $field->options,
                         'sort_order' => $field->sort_order,
                     ])->save();
+
+                    $fieldUlids[$field->ulid] = $clone->ulid;
                 }
             }
+
+            // Fase 3 §3.3 (F-FLOW): etapas e regras de delegação, com as referências da cópia.
+            // Sem etapas e sem regras de delegação não faz nada.
+            FlowDuplication::copy($source, $copy, $recipientUlids, $fieldUlids);
 
             return $copy;
         });

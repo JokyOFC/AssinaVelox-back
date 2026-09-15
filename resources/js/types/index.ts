@@ -163,6 +163,20 @@ export interface Features {
     pades_ltv?: boolean;
     /** §3.6 — anúncio de perfil acima de B-B; só depois do checklist (hoje sempre `false`). */
     pades_ltv_advertise?: boolean;
+    /** Fase 3 §3.3 — vídeo curto no aceite (captura, não verificação; global E plano). */
+    identity_video?: boolean;
+    /** Fase 3 §3.1 — geração documental em lote a partir de modelo + planilha (global E plano). */
+    bulk_generation?: boolean;
+    /** Fase 3 §3.2 — "Detectar campos" por âncoras (sugestões revisadas no editor; global E plano). */
+    field_anchors?: boolean;
+    /** Fase 3 §3.2 — OCR de páginas escaneadas (exige `field_anchors` e o Tesseract no servidor). */
+    ocr?: boolean;
+    /** Fase 3 §3.3 — página pública e e-mails ao participante em pt_BR, en e es (global E plano). */
+    multilingual?: boolean;
+    /** Fase 3 §3.3 — etapas condicionais (motor declarativo fechado; global E plano). */
+    conditional_steps?: boolean;
+    /** Fase 3 §3.3 — delegação auditada pelo participante (política do remetente; global E plano). */
+    delegation?: boolean;
 }
 
 export interface SharedProps {

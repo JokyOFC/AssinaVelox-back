@@ -40,7 +40,8 @@ class CaptureRequirementController extends Controller
 
         $validated = $request->validate([
             'kinds' => ['present', 'array', 'max:3'],
-            'kinds.*' => ['string', 'distinct', Rule::in(CaptureKind::values())],
+            // Só fotos: o vídeo curto tem rota própria (`envelopes.recipients.identity_video`).
+            'kinds.*' => ['string', 'distinct', Rule::in(CaptureKind::photoValues())],
         ], [
             'kinds.*.in' => 'Tipo de foto inválido.',
         ]);

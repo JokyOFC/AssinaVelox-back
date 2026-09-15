@@ -4,7 +4,6 @@ namespace App\Services\Envelopes\Reminders;
 
 use App\Enums\EnvelopeStatus;
 use App\Enums\RecipientStatus;
-use App\Enums\SigningOrder;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
@@ -141,7 +140,8 @@ class ReminderPlanner
             ->orderBy('order_index')
             ->orderBy('id');
 
-        if ($envelope->signing_order === SigningOrder::Sequential) {
+        // Fase 3 §3.3 (F-FLOW): com etapas, só a vez (etapa) corrente; sem etapas = sequencial.
+        if ($envelope->hasTurns()) {
             $query->where('order_index', (int) $envelope->current_order);
         }
 

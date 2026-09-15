@@ -40,6 +40,20 @@ final class IdentityFeatures
 
     public const FLAGS = [self::CPF_FIELD, self::CPF_LOOKUP, self::CNPJ_LOOKUP, self::IDENTITY_CAPTURE];
 
+    /**
+     * Fase 3 §3.3 (F-VIDEO, docs/fase-3/captura-de-video.md): aceite complementado por vídeo
+     * curto. Mesma regra (global E plano), desligada até a decisão jurídica (viabilidade §4.4
+     * item 20). Fora de {@see self::FLAGS} e de {@see self::forOrganization()} de propósito: o
+     * contrato das quatro chaves da Fase 2 não muda; `HandleInertiaRequests` compartilha
+     * `identity_video` numa linha própria.
+     */
+    public const IDENTITY_VIDEO = 'identity_video';
+
+    public static function identityVideo(?Organization $organization): bool
+    {
+        return self::enabled(self::IDENTITY_VIDEO, $organization);
+    }
+
     public static function cpfField(?Organization $organization): bool
     {
         return self::enabled(self::CPF_FIELD, $organization);

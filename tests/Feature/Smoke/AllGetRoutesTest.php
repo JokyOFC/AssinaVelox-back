@@ -89,6 +89,9 @@ const SMOKE_WAVE_B_STUBS_404 = [
     // (o padrão) respondem o mesmo 404.
     'sign.govbr.show',
     'sign.govbr.download',
+    // Fase 3 §3.3 (F-FLOW, docs/fase-3/etapas-e-delegacao.md §5): estado da delegação do
+    // participante — token sintético e flag `delegation` desligada (o padrão) respondem 404.
+    'sign.delegation.show',
     // Fase 2 §2.2 (C-FORM): token sintético de formulário público e de confirmação. Token
     // desconhecido, rascunho, revogado ou flag desligada recebem o mesmo 404
     // (docs/fase-2/formulario-publico.md §5).
@@ -169,6 +172,27 @@ const SMOKE_OVERRIDES = [
     'admin.risk.precision' => ['platform_admin' => 404],
     'admin.risk.show' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
     'risk.appeal.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.3 (F-FLOW, docs/fase-3/etapas-e-delegacao.md §5): JSON do fluxo (etapas e
+    // delegação) — com as flags `conditional_steps` e `delegation` desligadas, 404 para todos.
+    'envelopes.flow.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.3 (F-VIDEO, docs/fase-3/captura-de-video.md): com a flag `identity_video`
+    // desligada — o padrão — a lista de vídeos e o arquivo respondem 404 (antes da assinatura).
+    'envelopes.identity_videos.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'envelopes.identity_videos.file' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.1 (F-BULK, docs/fase-3/geracao-em-lote.md): com a flag `bulk_generation`
+    // desligada — o padrão — todas as telas do lote respondem 404.
+    'bulk_generations.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'bulk_generations.create' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'bulk_generations.sample' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'bulk_generations.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'bulk_generations.report' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.2 (F-ANCHOR, docs/fase-3/ancoras-e-ocr.md §8): JSON do painel de âncoras e das
+    // regras do modelo — com a flag `field_anchors` desligada (o padrão), 404 para todos.
+    'anchors.envelope.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'anchors.template.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §3): JSON dos idiomas dos participantes —
+    // com a flag `multilingual` desligada (o padrão), 404 para todos.
+    'envelopes.recipients.locales' => ['owner' => 404, 'admin' => 404, 'member' => 404],
 ];
 
 /**
@@ -204,6 +228,9 @@ function smokeRouteParameters(string $name, array $ctx): array
         // Fase 3 §3.5 (P3-GOV): mesmo token sintético e ULID de pedido inexistente — 404.
         'sign.govbr.show' => ['token' => str_repeat('b', 43)],
         'sign.govbr.download' => ['token' => str_repeat('b', 43), 'pedido' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 3 §3.3 (F-FLOW): token sintético (404) e o envelope em andamento do seeder (flags desligadas, 404).
+        'sign.delegation.show' => ['token' => str_repeat('b', 43)],
+        'envelopes.flow.show' => ['envelope' => $envelope->ulid],
         'sign.page' => ['token' => str_repeat('b', 43), 'page' => 1],
         'sign.download' => ['token' => str_repeat('b', 43), 'type' => 'signed'],
         'verify.show' => ['code' => 'ABCD-EFGH-JKLM'],
@@ -228,6 +255,17 @@ function smokeRouteParameters(string $name, array $ctx): array
         'admin.affiliates.payouts.show', 'admin.affiliates.payouts.export' => ['batch' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         // Fase 3 §3.7 (P3-RISK): ULID sintético de caso — flag `antifraud` desligada responde 404.
         'admin.risk.show' => ['review' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 3 §3.3 (F-VIDEO): envelope real e ULID sintético de vídeo — flag desligada, 404.
+        'envelopes.identity_videos.index' => ['envelope' => $envelope->ulid],
+        'envelopes.identity_videos.file' => ['envelope' => $envelope->ulid, 'video' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 3 §3.1 (F-BULK): ULIDs sintéticos — flag `bulk_generation` desligada responde 404.
+        'bulk_generations.create', 'bulk_generations.sample' => ['template' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        'bulk_generations.show', 'bulk_generations.report' => ['bulkGeneration' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 3 §3.2 (F-ANCHOR): rascunho real e ULID sintético de modelo — flag desligada, 404.
+        'anchors.envelope.index' => ['envelope' => $draft->ulid],
+        'anchors.template.index' => ['template' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        // Fase 3 §3.3 (F-I18N): envelope em andamento do seeder — flag `multilingual` desligada, 404.
+        'envelopes.recipients.locales' => ['envelope' => $envelope->ulid],
         default => [],
     };
 }

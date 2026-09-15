@@ -1,6 +1,9 @@
 import { usePage } from '@inertiajs/react';
 import { Copy, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
+import { AnchorSuggestionLayer } from '@/components/anchors/anchor-suggestion-layer';
+import { AnchorSuggestionsPanel } from '@/components/anchors/anchor-suggestions-panel';
+import { useAnchorSuggestions } from '@/components/anchors/use-anchor-suggestions';
 import {
     FIELD_DRAG_MIME,
     FieldLayer,
@@ -169,6 +172,8 @@ export function WizardStepFields({
         branding: features?.branding === true,
         cpf_field: features?.cpf_field === true,
     });
+    // Fase 3 §3.2 (F-ANCHOR): sugestões por âncoras/OCR. Flag desligada = nada muda.
+    const anchors = useAnchorSuggestions(features?.field_anchors === true);
     const multi = multiDocument && documents.length > 1;
     const firstDocumentId = documents[0]?.id ?? document.id;
     const documentOf = (field: WizardField): string =>
@@ -446,6 +451,13 @@ export function WizardStepFields({
                                     grid={grid}
                                     readOnly={disabled}
                                 />
+                                <AnchorSuggestionLayer
+                                    anchors={anchors}
+                                    documentId={document.id}
+                                    firstDocumentId={firstDocumentId}
+                                    page={page}
+                                    size={size}
+                                />
                             </>
                         )}
                     />
@@ -613,6 +625,19 @@ export function WizardStepFields({
                             Mostrar grade de alinhamento
                         </label>
                     </div>
+
+                    <AnchorSuggestionsPanel
+                        anchors={anchors}
+                        document={document}
+                        firstDocumentId={firstDocumentId}
+                        multiDocument={multiDocument}
+                        recipients={recipients}
+                        onPageChange={onPageChange}
+                        onFieldsAdd={(added) =>
+                            onFieldsChange([...fields, ...added])
+                        }
+                        disabled={disabled}
+                    />
 
                     {selected && (
                         <FieldProperties

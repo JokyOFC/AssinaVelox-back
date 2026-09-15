@@ -119,9 +119,25 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
     // Fase 2, onda D — tokens da API v1 (D-API, docs/fase-2/api-v1.md §2). Só acréscimos (T7).
     $api = ['api_token.created', 'api_token.revoked'];
 
+    // Fase 3, parte 2, onda F — vídeo curto no aceite (F-VIDEO, docs/fase-3/captura-de-video.md §7).
+    // Só acréscimos (T7).
+    $identityVideo = ['identity_video.requirement_updated', 'identity_video.recorded', 'identity_video.accessed'];
+
+    // Fase 3, parte 2, onda F — etapas condicionais e delegação (F-FLOW,
+    // docs/fase-3/etapas-e-delegacao.md §6). Só acréscimos (T7).
+    $flow = [
+        'signing_steps.updated', 'envelope.step_started', 'envelope.step_skipped',
+        'delegation.policy_updated', 'delegation.requested', 'recipient.delegated', 'delegation.rejected',
+        // Revisão adversarial da onda F: pedido pendente fica "sem efeito" na própria transição.
+        'delegation.voided',
+    ];
+
+    // Fase 3, parte 2, onda F — multilíngue (F-I18N, docs/fase-3/multilingue.md §8). Só acréscimos (T7).
+    $i18n = ['recipient.locale_updated', 'recipient.display_locale_changed'];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api])
-        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api));
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api, ...$identityVideo, ...$flow, ...$i18n])
+        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api) + count($identityVideo) + count($flow) + count($i18n));
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

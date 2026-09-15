@@ -49,6 +49,7 @@ export function recipientTone(status: RecipientStatus): AvatarTone {
             return 'danger';
         case 'expired':
         case 'canceled':
+        case 'delegated':
             return 'neutral';
         default:
             return 'warning';

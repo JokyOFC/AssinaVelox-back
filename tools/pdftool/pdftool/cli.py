@@ -432,6 +432,10 @@ def build_parser() -> argparse.ArgumentParser:
     from pdftool.ltv import add_ltv_commands
 
     add_ltv_commands(sub, _path)
+    # F-ANCHOR (roadmap 3.2): find-anchors (markers, literal phrases, optional OCR). Additive.
+    from pdftool.anchors import add_anchor_commands
+
+    add_anchor_commands(sub, _path)
     return parser
 
 

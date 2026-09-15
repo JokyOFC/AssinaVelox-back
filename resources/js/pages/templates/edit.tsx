@@ -9,6 +9,10 @@ import {
     Upload,
 } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+    AnchorRulesTabContent,
+    AnchorRulesTabTrigger,
+} from '@/components/anchors/anchor-rules-editor';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { RoleEditor } from '@/components/templates/role-editor';
@@ -367,6 +371,7 @@ function TemplateEditor({
                             <ErrorDot show={hasError('fields')} />
                         </TabsTrigger>
                     )}
+                    <AnchorRulesTabTrigger />
                     <TabsTrigger value="versions">
                         Versões ({versions.length})
                     </TabsTrigger>
@@ -640,6 +645,11 @@ function TemplateEditor({
                         />
                     </TabsContent>
                 )}
+
+                <AnchorRulesTabContent
+                    templateId={template.id}
+                    disabled={readOnly}
+                />
 
                 <TabsContent value="versions">
                     <div className="border-border overflow-x-auto rounded-xl border bg-white">

@@ -69,6 +69,9 @@ class Recipient extends Model
         'refusal_reason',
         'notification_count',
         'last_notified_at',
+        // Fase 3 §3.3 (F-I18N): idioma (lista fechada, SignerLocale) e fuso opcional.
+        'locale',
+        'timezone',
     ];
 
     /** @var array<string, mixed> */

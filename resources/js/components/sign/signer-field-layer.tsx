@@ -2,6 +2,7 @@ import { Check } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { StampPreview } from '@/components/branding/stamp-preview';
 import type { SignerBrand } from '@/components/branding/types';
+import { useI18n } from '@/i18n';
 import { type PageSize, toPixels } from '@/lib/geometry';
 import { cn } from '@/lib/utils';
 import type { SigningFieldType } from '@/types/enums';
@@ -66,28 +67,6 @@ export interface SignerFieldLayerProps {
     className?: string;
 }
 
-const MINE_LABEL: Record<SigningFieldType, string> = {
-    signature: 'Assinatura',
-    initials: 'Rubrica',
-    name: 'Nome',
-    date: 'Data',
-    text: 'Texto',
-    checkbox: 'Marcar',
-    stamp: 'Carimbo visual',
-    cpf: 'CPF',
-};
-
-const EMPTY_HINT: Record<SigningFieldType, string> = {
-    signature: 'Clique para assinar aqui',
-    initials: 'Clique para rubricar',
-    name: 'Preenchido no aceite',
-    date: 'Data do aceite',
-    text: 'Clique para preencher',
-    checkbox: 'Clique para marcar',
-    stamp: 'Carimbo da organização',
-    cpf: 'Clique para informar o CPF',
-};
-
 /**
  * Camada de campos da página pública (DESIGN §4.19 "Campos sobrepostos",
  * variantes públicas).
@@ -113,10 +92,12 @@ export function SignerFieldLayer({
     stampOwner = null,
     className,
 }: SignerFieldLayerProps) {
+    const { t } = useI18n();
+
     return (
         <div
             className={cn('pointer-events-none absolute inset-0', className)}
-            aria-label={`Campos da página ${pageNumber}`}
+            aria-label={t('fields.page_aria', { page: pageNumber })}
         >
             {others
                 .filter((field) => field.page === pageNumber)
@@ -208,6 +189,7 @@ function MyFieldBox({
     active: boolean;
     onActivate: (field: SignerField) => void;
 }) {
+    const { t } = useI18n();
     const box = toPixels(field, page);
     const filled = filledContent(field, value, signatureImage, initialsImage);
 
@@ -225,15 +207,17 @@ function MyFieldBox({
     const tagColor = filled ? 'var(--success)' : 'var(--primary)';
     const tag = field.label?.trim()
         ? field.label
-        : `${MINE_LABEL[field.type]} · você`;
+        : t('fields.mine_tag', { label: t(`fields.mine.${field.type}`) });
 
     return (
         <button
             type="button"
             style={style}
             onClick={() => onActivate(field)}
-            aria-label={`${tag}${filled ? ' — preenchido' : ' — pendente'}. ${
-                field.required ? 'Obrigatório.' : 'Opcional.'
+            aria-label={`${tag}${filled ? t('fields.aria_filled') : t('fields.aria_pending')}. ${
+                field.required
+                    ? t('fields.aria_required')
+                    : t('fields.aria_optional')
             }`}
             className={cn(
                 'focus-ring pointer-events-auto absolute cursor-pointer rounded-md',
@@ -270,7 +254,7 @@ function MyFieldBox({
 
             {!filled && (
                 <span className="text-primary absolute inset-x-1.5 top-1/2 -translate-y-1/2 truncate text-left text-[10px] font-semibold">
-                    {field.placeholder ?? EMPTY_HINT[field.type]}
+                    {field.placeholder ?? t(`fields.hint.${field.type}`)}
                 </span>
             )}
         </button>
@@ -290,6 +274,7 @@ function StampBox({
     page: PageSize;
     owner: StampOwner | null;
 }) {
+    const { t } = useI18n();
     const box = toPixels(field, page);
     const brand = owner?.brand ?? null;
 
@@ -302,8 +287,8 @@ function StampBox({
                 height: box.height,
             }}
             role="img"
-            aria-label="Carimbo visual da organização — representação visual, não prova."
-            title="Carimbo visual da organização — representação visual, não prova."
+            aria-label={t('fields.stamp_aria')}
+            title={t('fields.stamp_aria')}
             className="absolute overflow-hidden rounded-sm"
         >
             {brand ? (
@@ -318,8 +303,10 @@ function StampBox({
             ) : (
                 <span className="border-input bg-background text-muted-foreground flex size-full items-center justify-center rounded-sm border border-dashed px-1.5 text-center text-[10px] font-semibold">
                     {owner?.organizationName
-                        ? `Carimbo · ${owner.organizationName}`
-                        : 'Carimbo da organização'}
+                        ? t('fields.stamp_of', {
+                              organization: owner.organizationName,
+                          })
+                        : t('fields.stamp_generic')}
                 </span>
             )}
         </div>
@@ -327,6 +314,7 @@ function StampBox({
 }
 
 function OtherFieldBox({ field, page }: { field: OtherField; page: PageSize }) {
+    const { t } = useI18n();
     const box = toPixels(field, page);
     const first = field.recipient_name.split(' ')[0] || field.recipient_name;
 
@@ -359,7 +347,7 @@ function OtherFieldBox({ field, page }: { field: OtherField; page: PageSize }) {
                 }}
                 className="absolute -top-[9px] left-2 max-w-[calc(100%-8px)] truncate px-1 text-[9px] font-bold tracking-[.1em] uppercase"
             >
-                {field.role ?? MINE_LABEL[field.type]}
+                {field.role ?? t(`fields.mine.${field.type}`)}
             </span>
 
             {field.signed ? (
@@ -368,12 +356,12 @@ function OtherFieldBox({ field, page }: { field: OtherField; page: PageSize }) {
                         {field.recipient_name}
                     </span>
                     <span className="text-success absolute inset-x-2 bottom-0.5 truncate text-[9px]">
-                        Aceite registrado
+                        {t('fields.other_signed')}
                     </span>
                 </>
             ) : (
                 <span className="text-muted-foreground absolute inset-x-1.5 top-1/2 -translate-y-1/2 truncate text-[10px]">
-                    {field.hint ?? `${first} · ainda não assinou`}
+                    {field.hint ?? t('fields.other_pending', { name: first })}
                 </span>
             )}
         </div>

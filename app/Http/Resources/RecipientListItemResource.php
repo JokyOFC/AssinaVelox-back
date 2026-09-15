@@ -90,6 +90,8 @@ class RecipientListItemResource extends JsonResource
                 : 'Recusou assinar',
             RecipientStatus::Expired => 'Prazo encerrado em '.($this->envelope->expires_at?->setTimezone($timezone)->format('d/m/Y') ?? '—'),
             RecipientStatus::Canceled => 'Documento cancelado',
+            // Fase 3 §3.3 (F-FLOW): só existe com a flag `delegation`.
+            RecipientStatus::Delegated => 'Delegou a outra pessoa',
             RecipientStatus::Viewed => 'Visualizou em '.(($this->viewedAt() ?? $this->last_notified_at)?->setTimezone($timezone)->format('d/m/Y H:i') ?? '—'),
             RecipientStatus::Notified => $this->notification_count > 1
                 ? 'Enviado · não visualizou · reenviado às '.($this->last_notified_at?->setTimezone($timezone)->format('H:i') ?? '—')

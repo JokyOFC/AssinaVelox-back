@@ -11,6 +11,7 @@ import {
 } from '@/components/pdf/use-pdf-document';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { useI18n } from '@/i18n';
 import { isRenderCancelled, renderPageToCanvas } from '@/lib/pdf';
 import type { RenderedPageSize } from '@/lib/pdf';
 import { cn } from '@/lib/utils';
@@ -59,6 +60,9 @@ export interface PdfViewerProps {
  * dimensões renderizadas em pixels CSS são devolvidas para a camada de campos,
  * que é quem converte para as coordenadas normalizadas do contrato
  * (ver `lib/geometry.ts`).
+ *
+ * Fase 3 §3.3 (F-I18N): textos pelo dicionário. Em PT-BR a mensagem de erro é a
+ * de `lib/pdf`, como sempre; nos demais idiomas, a traduzida pelo tipo do erro.
  */
 export function PdfViewer({
     url,
@@ -77,6 +81,7 @@ export function PdfViewer({
     className,
     minHeight = 320,
 }: PdfViewerProps) {
+    const { t, rich, isReference } = useI18n();
     const blocked =
         processing != null &&
         processing.status !== 'ready' &&
@@ -162,14 +167,21 @@ export function PdfViewer({
                     return;
                 }
 
-                setRenderError('Não foi possível desenhar esta página.');
+                setRenderError(t('pdf.render_failed'));
             });
 
         return () => {
             cancelled = true;
             cancelRender?.();
         };
-    }, [document, safePage, targetWidth, available]);
+    }, [document, safePage, targetWidth, available, t]);
+
+    const loadError =
+        source.error === null
+            ? null
+            : isReference
+              ? source.error
+              : t(`pdf.error.${source.errorKind ?? 'unknown'}`);
 
     const body = (() => {
         if (blocked && processing) {
@@ -183,7 +195,7 @@ export function PdfViewer({
                     style={{ minHeight }}
                 >
                     <Spinner className="size-5" />
-                    Carregando o documento…
+                    {t('pdf.loading')}
                 </div>
             );
         }
@@ -198,10 +210,10 @@ export function PdfViewer({
                         <FileWarning className="size-5" />
                     </span>
                     <p className="text-text-secondary max-w-[360px] text-[13px] leading-[1.5]">
-                        {source.error ?? renderError}
+                        {loadError ?? renderError}
                     </p>
                     <Button variant="outline" size="xs" onClick={source.reload}>
-                        Tentar de novo
+                        {t('pdf.retry')}
                     </Button>
                 </div>
             );
@@ -240,20 +252,26 @@ export function PdfViewer({
                         <Button
                             variant="outline"
                             size="icon-xs"
-                            aria-label="Página anterior"
+                            aria-label={t('pdf.previous')}
                             disabled={safePage <= 1 || pageCount === 0}
                             onClick={() => onPageChange?.(safePage - 1)}
                         >
                             <ChevronLeft className="size-3.5" />
                         </Button>
                         <span className="tabular">
-                            Página <b className="text-foreground">{safePage}</b>{' '}
-                            de {pageCount || '—'}
+                            {rich('pdf.page_of', {
+                                page: (
+                                    <b className="text-foreground">
+                                        {safePage}
+                                    </b>
+                                ),
+                                total: pageCount || '—',
+                            })}
                         </span>
                         <Button
                             variant="outline"
                             size="icon-xs"
-                            aria-label="Próxima página"
+                            aria-label={t('pdf.next')}
                             disabled={safePage >= pageCount || pageCount === 0}
                             onClick={() => onPageChange?.(safePage + 1)}
                         >
@@ -297,12 +315,14 @@ export function PdfViewer({
  * (protegido por senha ou já assinado) ou ter falhado no processamento.
  */
 function ProcessingState({ processing }: { processing: PdfProcessingState }) {
+    const { t } = useI18n();
+
     if (processing.status === 'converting') {
         return (
             <div className="text-text-secondary flex min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center text-[13px]">
                 <Spinner className="size-5" />
                 <p>
-                    Convertendo o arquivo para PDF
+                    {t('pdf.converting')}
                     {processing.progress_pct != null && (
                         <span className="tabular">
                             {' '}
@@ -311,7 +331,7 @@ function ProcessingState({ processing }: { processing: PdfProcessingState }) {
                     )}
                 </p>
                 <p className="text-muted-foreground text-[12.5px]">
-                    A pré-visualização aparece assim que a conversão terminar.
+                    {t('pdf.converting_hint')}
                 </p>
             </div>
         );
@@ -329,15 +349,11 @@ function ProcessingState({ processing }: { processing: PdfProcessingState }) {
                 )}
             </span>
             <p className="text-foreground text-[13.5px] font-semibold">
-                {isBlocked
-                    ? 'Arquivo bloqueado para preparação'
-                    : 'Falha ao processar o arquivo'}
+                {isBlocked ? t('pdf.blocked_title') : t('pdf.failed_title')}
             </p>
             <p className="text-text-secondary max-w-[380px] text-[13px] leading-[1.5]">
                 {processing.error ??
-                    (isBlocked
-                        ? 'PDFs protegidos por senha ou que já contêm assinatura digital não podem receber campos. Envie uma versão sem proteção.'
-                        : 'Não conseguimos preparar este arquivo. Remova-o e envie um PDF válido.')}
+                    (isBlocked ? t('pdf.blocked_body') : t('pdf.failed_body'))}
             </p>
         </div>
     );

@@ -10,6 +10,7 @@ use App\Models\Document;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\SigningField;
+use App\Services\Anchors\SuggestionGate;
 use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Documents\EnvelopeReadiness as DocumentReadiness;
 use Illuminate\Database\Eloquent\Collection;
@@ -39,6 +40,8 @@ final class EnvelopeReadiness
             self::documentIssues($envelope),
             self::recipientIssues($envelope),
             self::fieldIssues($envelope),
+            // Fase 3 §3.2 (F-ANCHOR): sugestões pendentes. Flag desligada = lista vazia.
+            SuggestionGate::issues($envelope),
         );
     }
 

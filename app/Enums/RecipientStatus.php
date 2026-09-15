@@ -11,9 +11,18 @@ enum RecipientStatus: string
     case Refused = 'refused';
     case Expired = 'expired';
     case Canceled = 'canceled';
+    /**
+     * Fase 3 §3.3 (F-FLOW): a pessoa DELEGOU a outra (docs/fase-3/etapas-e-delegacao.md §3).
+     * Terminal e nunca "assinado": quem registra o aceite é o delegado, um participante novo.
+     */
+    case Delegated = 'delegated';
 
     /**
      * pending → notified → viewed → signed | refused; qualquer não-terminal → canceled | expired.
+     *
+     * `delegated` NÃO é uma transição genérica desta tabela: o único caminho até ela é
+     * App\Services\Envelopes\Delegation\DelegationExecutor, que confere sob lock que a pessoa
+     * ainda está pendente (pending/notified/viewed) e sem aceite ({@see self::canBeDelegated()}).
      *
      * @return array<int, self>
      */
@@ -23,8 +32,16 @@ enum RecipientStatus: string
             self::Pending => [self::Notified, self::Canceled, self::Expired],
             self::Notified => [self::Viewed, self::Canceled, self::Expired],
             self::Viewed => [self::Signed, self::Refused, self::Canceled, self::Expired],
-            self::Signed, self::Refused, self::Expired, self::Canceled => [],
+            self::Signed, self::Refused, self::Expired, self::Canceled, self::Delegated => [],
         };
+    }
+
+    /**
+     * Fase 3 §3.3 (F-FLOW): estados a partir dos quais a delegação pode valer.
+     */
+    public function canBeDelegated(): bool
+    {
+        return $this->isPendingSignature();
     }
 
     public function canTransitionTo(self $to): bool
@@ -54,6 +71,7 @@ enum RecipientStatus: string
             self::Refused => 'Recusado',
             self::Expired => 'Expirado',
             self::Canceled => 'Cancelado',
+            self::Delegated => 'Delegado',
         };
     }
 
@@ -71,6 +89,7 @@ enum RecipientStatus: string
             self::Refused => 'Recusou',
             self::Expired => 'Prazo encerrado',
             self::Canceled => 'Documento cancelado',
+            self::Delegated => 'Delegou a outra pessoa',
         };
     }
 
@@ -83,7 +102,7 @@ enum RecipientStatus: string
             self::Pending, self::Notified, self::Viewed => 'warning',
             self::Signed => 'success',
             self::Refused => 'danger',
-            self::Expired, self::Canceled => 'neutral',
+            self::Expired, self::Canceled, self::Delegated => 'neutral',
         };
     }
 

@@ -171,11 +171,49 @@ enum AuditEventType: string
     case ApiTokenCreated = 'api_token.created';
     case ApiTokenRevoked = 'api_token.revoked';
 
+    // Fase 3 §3.3 (F-FLOW, docs/fase-3/etapas-e-delegacao.md §6) — etapas condicionais e
+    // delegação auditada. Gravados no envelope. Payload só com ULIDs, a regra avaliada, os
+    // valores comparados (dado do documento, nunca instrução), contagens e o e-mail MASCARADO
+    // do delegado — nunca o texto do motivo (que fica em `delegations.reason`).
+    case SigningStepsUpdated = 'signing_steps.updated';
+    case EnvelopeStepStarted = 'envelope.step_started';
+    case EnvelopeStepSkipped = 'envelope.step_skipped';
+    case DelegationPolicyUpdated = 'delegation.policy_updated';
+    case DelegationRequested = 'delegation.requested';
+    case RecipientDelegated = 'recipient.delegated';
+    case DelegationRejected = 'delegation.rejected';
+
+    // Fase 3 §3.3 (F-VIDEO, docs/fase-3/captura-de-video.md §7) — vídeo curto no aceite.
+    // Gravados no envelope. Payload só com ULIDs, SHA-256, contêiner, duração, tamanho, origem
+    // DECLARADA pelo navegador e versão do consentimento — nunca o vídeo nem o caminho no disco.
+    case IdentityVideoRequirementUpdated = 'identity_video.requirement_updated';
+    case IdentityVideoRecorded = 'identity_video.recorded';
+    case IdentityVideoAccessed = 'identity_video.accessed';
+
+    // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §8) — idioma do participante. Gravados no
+    // envelope. Payload só com o ULID do participante e os códigos de idioma (lista fechada).
+    // `recipient.locale_updated`: o remetente definiu o idioma dos e-mails e da página.
+    // `recipient.display_locale_changed`: o participante trocou o idioma de EXIBIÇÃO da página
+    // (vale para a sessão; o que o remetente registrou não muda).
+    case RecipientLocaleUpdated = 'recipient.locale_updated';
+    case RecipientDisplayLocaleChanged = 'recipient.display_locale_changed';
+
+    // Fase 3 §3.3 (F-FLOW), revisão adversarial da onda F — pedido de delegação que perdeu o
+    // objeto (coleta encerrada, participante respondeu, etapa não se aplicou) fica "sem efeito"
+    // já na transição, não só quando alguém tenta confirmá-lo. Payload só com ULIDs e o código.
+    case DelegationVoided = 'delegation.voided';
+
     public function label(): string
     {
         return match ($this) {
+            self::DelegationVoided => 'Pedido de delegação ficou sem efeito',
+            self::RecipientLocaleUpdated => 'Idioma do participante definido por quem enviou',
+            self::RecipientDisplayLocaleChanged => 'Participante trocou o idioma de exibição da página',
             self::ApiTokenCreated => 'Chave de API criada',
             self::ApiTokenRevoked => 'Chave de API revogada',
+            self::IdentityVideoRequirementUpdated => 'Exigência de vídeo curto do participante alterada',
+            self::IdentityVideoRecorded => 'Vídeo curto enviado pelo participante',
+            self::IdentityVideoAccessed => 'Vídeo curto do participante reproduzido ou baixado',
             self::ParticipantCertificateRequested => 'Participante optou por assinar com o próprio certificado',
             self::ParticipantCertificateWithdrawn => 'Participante desistiu de assinar com o próprio certificado',
             self::ParticipantCertificateSubmitted => 'Certificado do participante conferido e autorizado para uso',
@@ -291,6 +329,13 @@ enum AuditEventType: string
             self::EnvelopeScheduleCanceled => 'Agendamento de envio cancelado',
             self::ReminderSent => 'Lembrete automático enviado',
             self::ReminderSkipped => 'Lembrete automático não enviado',
+            self::SigningStepsUpdated => 'Etapas do fluxo alteradas',
+            self::EnvelopeStepStarted => 'Etapa do fluxo iniciada',
+            self::EnvelopeStepSkipped => 'Etapa do fluxo não aplicável (pulada)',
+            self::DelegationPolicyUpdated => 'Regras de delegação alteradas',
+            self::DelegationRequested => 'Pedido de delegação aguardando quem enviou',
+            self::RecipientDelegated => 'Participante delegou a outra pessoa',
+            self::DelegationRejected => 'Pedido de delegação recusado por quem enviou',
         };
     }
 

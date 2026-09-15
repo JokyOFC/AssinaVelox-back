@@ -375,6 +375,60 @@ Saida: `subject`, `issuer`, `serial_hex`, `cert_fingerprint_sha256`, `not_before
 
 Em um diretorio temporario: gera um PDF de 2 paginas (a segunda com `/Rotate 90`), compoe 5 campos (incluindo assinatura PNG), anexa uma pagina extra, roda `inspect` e `image2pdf`, gera certificado de teste, assina (carimbo visivel) e valida com e sem raiz de confianca. Saida `{"ok":true,"steps":[{"step":"compose","ok":true,"ms":42,...},...],"temp_dir":null}`. Com `--keep` o diretorio e mantido e informado em `temp_dir`.
 
+### `find-anchors --in <pdf> [--spec <spec.json>] [limites] [--ocr --tesseract <bin> ...]`
+
+Fase 3 §3.2 (F-ANCHOR, `docs/fase-3/ancoras-e-ocr.md`). Procura **ancoras** no texto do PDF (pdfplumber) e devolve **caixas normalizadas** no mesmo sistema de `compose`/`sign --visible` (fracoes do CropBox exibido, `/Rotate` aplicado, origem no canto superior esquerdo).
+
+- Marcadores de gramatica fechada: `{{assinatura:papel}}`, `{{rubrica:papel}}`, `{{data:papel}}`, `{{texto:nome}}` (espacos, maiusculas e acentos ignorados; um marcador quebrado em duas linhas continua valendo).
+- Textos literais do spec (`{"markers": true, "literals": [{"id": "r1", "text": "Assinatura do locatario"}], "max_matches": 500}`): busca de substring sobre texto normalizado (NFKD sem acentos, minusculas, espacos colapsados), com limite de palavra. **Nenhuma expressao regular do chamador e compilada.**
+- A caixa de cada glifo e levada de volta ao espaco do usuario desfazendo a CTM de pagina do pdfminer e depois ao CropBox exibido com o inverso exato de `geometry.displayed_to_user` (testado nas 4 rotacoes e com CropBox/MediaBox deslocados). Glifos fora do CropBox sao ignorados.
+- A saida **nunca** ecoa texto do documento: cada ocorrencia traz `kind` (`marker`/`literal`), `field_type`, `key` (slug `[a-z0-9_-]{1,40}` do papel) ou `literal_id`, `box`, `line_box`, `lines`, `source` (`text`/`ocr`) e `confidence` (OCR).
+- Limites: `--max-pages` (padrao 200), `--max-bytes` (50 MiB), `--time-budget` (45 s para a busca inteira), `max_matches` do spec (padrao 500; `truncated: true` ao atingir). PDF criptografado (qualquer senha) -> `encrypted_pdf` (4); corrompido -> `invalid_pdf` (4); limites -> `too_many_pages`/`pdf_too_large` (4) ou `time_budget_exceeded` (3); spec invalido -> `invalid_spec` (2).
+- Paginas com menos de `--min-text-chars` (8) caracteres entram em `pages_without_text`.
+- `--ocr --tesseract <caminho>`: essas paginas sao rasterizadas com pypdfium2 (CropBox exibido, `--ocr-dpi` 200, teto de 30 MP) e o binario `tesseract <png> stdout -l <--ocr-lang> --psm 3 tsv` roda por `subprocess` (lista de argumentos, sem shell, `--ocr-timeout` por pagina, ambiente minimo, sem rede). Falha numa pagina vira `ocr: "failed"` com `ocr_error` (`timeout`, `exit_code`, `render_failed`) — nunca derruba o comando. `--ocr-max-pages` (20) e `--ocr-page N` (repetivel) limitam o custo. Binario ausente -> `ocr_unavailable` (2).
+
+```json
+{
+    "ok": true,
+    "page_count": 2,
+    "pages": [
+        {
+            "index": 1,
+            "rotation": 90,
+            "width_pt": 841.89,
+            "height_pt": 595.28,
+            "text_chars": 63,
+            "has_text": true,
+            "ocr": "not_needed"
+        }
+    ],
+    "pages_without_text": [],
+    "matches": [
+        {
+            "page": 1,
+            "source": "text",
+            "kind": "marker",
+            "field_type": "signature",
+            "key": "comprador",
+            "literal_id": null,
+            "box": { "x": 0.12, "y": 0.113, "width": 0.2, "height": 0.015 },
+            "line_box": {
+                "x": 0.12,
+                "y": 0.113,
+                "width": 0.2,
+                "height": 0.015
+            },
+            "lines": 1,
+            "confidence": null
+        }
+    ],
+    "match_count": 1,
+    "truncated": false,
+    "ocr": null,
+    "elapsed_ms": 198
+}
+```
+
 ## Codigos de erro
 
 | `error.code`                                                                              | Saida | Comandos                                 | Situacao                                                           |

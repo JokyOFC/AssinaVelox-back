@@ -1,6 +1,7 @@
 import { ChevronDown, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { LegalText, Emphasis } from '@/components/sign/legal-text';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export interface PrivacyNoticeContent {
@@ -17,17 +18,25 @@ export interface PrivacyNoticeContent {
  * "Receber código", e na etapa "Assinar", junto da caixa de aceite. A
  * linha-resumo fica sempre visível; o texto completo abre num `details` — não
  * é escondido atrás de um link para outra página.
+ *
+ * Fase 3 §3.3 (F-I18N): em `en`/`es` o aviso é tradução de cortesia e
+ * `reference` traz o original em português, a um clique.
  */
 export function PrivacyNotice({
     notice,
     privacyUrl,
     className,
+    reference = null,
 }: {
     notice: PrivacyNoticeContent;
     privacyUrl: string;
     className?: string;
+    /** Original em PT-BR quando `notice` é tradução (F-I18N). */
+    reference?: PrivacyNoticeContent | null;
 }) {
+    const { t, isReference } = useI18n();
     const [open, setOpen] = useState(false);
+    const [showReference, setShowReference] = useState(false);
 
     return (
         <div
@@ -51,7 +60,7 @@ export function PrivacyNotice({
                         aria-expanded={open}
                         className="text-primary mt-2 inline-flex items-center gap-1 text-[12.5px] font-semibold"
                     >
-                        {open ? 'Ocultar aviso completo' : 'Ver aviso completo'}
+                        {open ? t('privacy.hide') : t('privacy.show')}
                         <ChevronDown
                             className={cn(
                                 'size-3.5 transition-transform',
@@ -72,8 +81,36 @@ export function PrivacyNotice({
                     rel="noopener noreferrer"
                     className="text-primary mt-2 inline-block text-[12.5px] font-semibold"
                 >
-                    Ver aviso completo
+                    {t('privacy.show')}
                 </a>
+            )}
+
+            {!isReference && reference && (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => setShowReference((value) => !value)}
+                        aria-expanded={showReference}
+                        className="text-muted-foreground mt-1.5 block text-[12px] font-semibold hover:underline"
+                    >
+                        {showReference
+                            ? t('privacy.hide_reference')
+                            : t('privacy.show_reference')}
+                    </button>
+                    {showReference && (
+                        <div
+                            lang="pt-BR"
+                            className="border-border mt-2 flex max-h-[280px] flex-col gap-2 overflow-y-auto border-t border-dashed pt-2.5"
+                        >
+                            <p className="text-text-secondary text-[12.5px] leading-[1.5]">
+                                <Emphasis text={reference.summary} />
+                            </p>
+                            {reference.body && (
+                                <LegalText text={reference.body} />
+                            )}
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

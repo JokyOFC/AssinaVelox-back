@@ -11,6 +11,8 @@ use App\Models\Document;
 use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\SigningField;
+use App\Services\Anchors\SuggestionGate;
+use App\Services\Envelopes\Steps\StepTurns;
 use Illuminate\Support\Collection;
 
 /**
@@ -111,7 +113,10 @@ class EnvelopeReadiness
             'recipients' => $hasSigner && $this->signingOrderIsCoherent($envelope),
             'fields' => $documentReady
                 && $participants->isNotEmpty()
-                && $this->fieldsSatisfyRoles($envelope, $documents, $recipients),
+                && $this->fieldsSatisfyRoles($envelope, $documents, $recipients)
+                // Fase 3 §3.2 (F-ANCHOR): sugestão de campo sem revisão impede o `ready`.
+                // Flag global desligada = nenhuma consulta (SuggestionGate::blocks volta cedo).
+                && ! SuggestionGate::blocks($envelope),
         ];
     }
 
@@ -132,6 +137,12 @@ class EnvelopeReadiness
      */
     public function signingOrderIsCoherent(Envelope $envelope): bool
     {
+        // Fase 3 §3.3 (F-FLOW): com etapas, a vez vem da etapa (no paralelo, a vez É a etapa).
+        // Sem etapas (o padrão e com a flag desligada) a regra abaixo é a de sempre.
+        if ($envelope->usesSigningSteps()) {
+            return StepTurns::isCoherent($envelope);
+        }
+
         $indexes = array_map(
             'intval',
             Recipient::withoutOrganizationScope()

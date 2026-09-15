@@ -6,6 +6,7 @@ use App\Enums\AcceptanceAction;
 use App\Enums\AuditEventType;
 use App\Enums\EnvelopeStatus;
 use App\Enums\FieldType;
+use App\Enums\RecipientRole;
 use App\Enums\RecipientStatus;
 use App\Enums\SignatureKind;
 use App\Events\EnvelopeReadyForFinalization;
@@ -20,10 +21,14 @@ use App\Models\SigningFieldValue;
 use App\Models\SigningSession;
 use App\Models\SigningSessionDocument;
 use App\Services\Branding\Stamp\StampImages;
+use App\Services\Envelopes\Delegation\DelegationVoider;
+use App\Services\Envelopes\Sending\CancelEnvelope;
+use App\Services\Envelopes\Steps\StepProgression;
 use App\Services\Identity\CpfLookup;
 use App\Services\Identity\CpfNumber;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Signing\Exceptions\SigningRejectedException;
+use App\Support\Locale\SignerLocales;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -332,6 +337,9 @@ final class RecordAcceptance
                     'user_agent' => SignerRequestFacts::userAgent($request),
                     'auth_method' => $recipient->auth_method,
                     'terms_version' => ConsentText::versionFor($envelope, $recipient, count($sent)),
+                    // Fase 3 §3.3 (F-I18N): idioma em que a página foi exibida (nulo com a flag
+                    // `multilingual` desligada). A declaração gravada é sempre a de referência.
+                    'display_locale' => SignerLocales::current($request)?->value,
                     'consent_statement' => $consentText,
                     'document_sha256' => $version->sha256,
                     // `identity_captures` só existe quando houve foto exigida (C-ID): sem ela o
@@ -472,7 +480,8 @@ final class RecordAcceptance
             throw SigningRejectedException::conflict('not_signable', 'Este documento não está mais disponível para assinatura.');
         }
 
-        if ($envelope->isSequential() && $recipient->order_index > $envelope->current_order) {
+        // Fase 3 §3.3 (F-FLOW): com etapas a vez vale também no paralelo (sem etapas = sequencial).
+        if ($envelope->hasTurns() && $recipient->order_index > $envelope->current_order) {
             throw SigningRejectedException::conflict('not_your_turn', 'Ainda não é a sua vez de assinar este documento.');
         }
 
@@ -708,6 +717,9 @@ final class RecordAcceptance
      */
     public const FONTS = ['caveat'];
 
+    /** Motivo gravado quando, com etapas, nenhuma etapa com signatário se aplicou. */
+    public const NO_SIGNATURE_REASON = 'Nenhuma etapa com signatário se aplicou: o documento foi encerrado sem assinatura.';
+
     /**
      * Valores como entram no `fields_snapshot`. Caminhos de arquivo entram; bytes, não.
      *
@@ -760,7 +772,7 @@ final class RecordAcceptance
      */
     private function advance(int $envelopeId, string $correlationId): void
     {
-        /** @var array{envelope: Envelope, invite: list<Recipient>, finalize: bool} $outcome */
+        /** @var array{envelope: Envelope, invite: list<Recipient>, finalize: bool, closed?: list<Recipient>, no_signature?: bool} $outcome */
         $outcome = DB::transaction(function () use ($envelopeId, $correlationId): array {
             /** @var Envelope $envelope */
             $envelope = Envelope::withoutOrganizationScope()->whereKey($envelopeId)->lockForUpdate()->firstOrFail();
@@ -772,13 +784,54 @@ final class RecordAcceptance
                 ->orderBy('id')
                 ->get();
 
+            // Fase 3 §3.3 (F-FLOW): com etapas, a próxima etapa é avaliada AQUI, sob este mesmo
+            // lock — condição falsa pula a etapa (participantes cancelados, nunca notificados) e o
+            // envelope conclui quando não resta etapa aplicável. Sem etapas devolve a mesma coleção.
+            $recipients = app(StepProgression::class)->prepare($envelope, $recipients, $correlationId);
+
+            // Recusa de aprovador que aguardava o fim da própria etapa: nenhuma etapa posterior se
+            // aplicou → a recusa encerra o envelope, como se tivesse sido a última decisão da etapa.
+            $deferredRefusal = app(StepProgression::class)->deferredRefusal($envelope, $recipients);
+
+            // Pedido de delegação de quem acabou de aceitar (ou cuja etapa não se aplicou) fica
+            // sem efeito já aqui. Sem pedido pendente: uma consulta e nada mais.
+            DelegationVoider::voidStale($envelope, $correlationId);
+
             $pending = $recipients->filter(fn (Recipient $r): bool => $r->isPendingParticipant());
 
             if ($pending->isEmpty()) {
+                if ($envelope->status === EnvelopeStatus::InProgress && $deferredRefusal !== null) {
+                    $canceled = app(RecordRefusal::class)->closeEnvelope(
+                        $envelope,
+                        $deferredRefusal,
+                        (string) $deferredRefusal->refusal_reason,
+                        Carbon::now(),
+                        $correlationId,
+                        ['deferred_until_step_end' => true],
+                    );
+
+                    DelegationVoider::voidStale($envelope, $correlationId);
+
+                    return ['envelope' => $envelope, 'invite' => [], 'finalize' => false, 'closed' => $canceled];
+                }
+
+                // Regra de produto (revisão adversarial da onda F, docs/fase-3/etapas-e-delegacao.md
+                // §2.4): com etapas, todas as etapas com signatário podem ter sido puladas. Um
+                // documento nunca é "concluído" sem nenhuma assinatura — o envio já exigia um
+                // signatário (EnvelopeReadiness). O envelope é encerrado sem assinatura (cancelado
+                // pelo sistema, com o motivo), fora desta transação.
+                if ($envelope->status === EnvelopeStatus::InProgress
+                    && $envelope->usesSigningSteps()
+                    && ! $recipients->contains(fn (Recipient $r): bool => $r->role === RecipientRole::Signer && $r->status === RecipientStatus::Signed)) {
+                    return ['envelope' => $envelope, 'invite' => [], 'finalize' => false, 'no_signature' => true];
+                }
+
                 if ($envelope->status === EnvelopeStatus::InProgress) {
                     $envelope->transitionTo(EnvelopeStatus::Finalizing);
                     $envelope->finalization_key ??= (string) Str::ulid();
                     $envelope->save();
+
+                    DelegationVoider::voidStale($envelope, $correlationId);
 
                     SignerAudit::system($envelope, AuditEventType::EnvelopeFinalizing, [
                         'acceptances' => $recipients->where('status', RecipientStatus::Signed)->count(),
@@ -790,7 +843,8 @@ final class RecordAcceptance
                 return ['envelope' => $envelope, 'invite' => [], 'finalize' => false];
             }
 
-            if (! $envelope->isSequential()) {
+            // Fase 3 §3.3 (F-FLOW): com etapas o paralelo também anda por vez (sem etapas = sequencial).
+            if (! $envelope->hasTurns()) {
                 return ['envelope' => $envelope, 'invite' => [], 'finalize' => false];
             }
 
@@ -815,6 +869,14 @@ final class RecordAcceptance
             // Emitir o link novo e escrever o convite é do módulo de envio; aqui só se avisa
             // que a vez mudou (contrato SignerNotifications).
             $this->notifier->inviteRecipients($outcome['envelope'], $outcome['invite']);
+        }
+
+        if (isset($outcome['closed'])) {
+            $this->notifier->notifyEnvelopeClosed($outcome['envelope'], $outcome['closed'], 'recipient_refused');
+        }
+
+        if (isset($outcome['no_signature'])) {
+            app(CancelEnvelope::class)->handle($outcome['envelope'], self::NO_SIGNATURE_REASON);
         }
 
         if ($outcome['finalize']) {

@@ -16,6 +16,10 @@ import { EmptyState } from '@/components/empty-state';
 import { SearchInput, SelectableChip } from '@/components/filter-bar';
 import { PageHeader } from '@/components/page-header';
 import { Phase2EmptyState } from '@/components/phase2-empty-state';
+import {
+    BulkGenerateButton,
+    BulkGenerationsLink,
+} from '@/components/bulk-generations/bulk-generate-button';
 import { CreateTemplateDialog } from '@/components/templates/create-template-dialog';
 import type {
     ConversionInfo,
@@ -179,12 +183,18 @@ function TemplateGallery({
                 title="Modelos de documentos"
                 subtitle="Documentos com campos e signatários pré-configurados. Use-os para enviar em segundos."
                 actions={
-                    can.create && (
-                        <Button onClick={() => openDialog('pdf')}>
-                            <Plus className="size-[15px]" strokeWidth={2.5} />
-                            Novo modelo
-                        </Button>
-                    )
+                    <>
+                        {can.use && <BulkGenerationsLink />}
+                        {can.create && (
+                            <Button onClick={() => openDialog('pdf')}>
+                                <Plus
+                                    className="size-[15px]"
+                                    strokeWidth={2.5}
+                                />
+                                Novo modelo
+                            </Button>
+                        )}
+                    </>
                 }
             />
 
@@ -372,6 +382,12 @@ function TemplateCard({
                     <Button size="sm" className="flex-1" disabled>
                         {archived ? 'Arquivado' : 'Usar modelo'}
                     </Button>
+                )}
+                {canUse && template.usable && (
+                    <BulkGenerateButton
+                        templateId={template.id}
+                        templateName={template.name}
+                    />
                 )}
                 {canManage && (
                     <>

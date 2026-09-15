@@ -117,7 +117,8 @@ class ResendInvitations
             // Visualizador nunca é pendência (Fase 2 §2.4); na Fase 1 todos são `signer`.
             ->whereIn('role', RecipientRole::participatingValues());
 
-        if ($envelope->isSequential()) {
+        // Fase 3 §3.3 (F-FLOW): com etapas, só a vez (etapa) corrente; sem etapas = sequencial.
+        if ($envelope->hasTurns()) {
             $query->where('order_index', (int) $envelope->current_order);
         }
 

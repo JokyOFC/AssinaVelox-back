@@ -10,6 +10,8 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
 use App\Models\SignatureAcceptance;
+use App\Services\Envelopes\Delegation\DelegationVoider;
+use App\Services\Envelopes\Steps\StepProgression;
 use App\Services\Signing\Contracts\SignerNotifications;
 use App\Services\Signing\Exceptions\SigningRejectedException;
 use Illuminate\Support\Carbon;
@@ -60,7 +62,7 @@ final class RecordRefusal
         $reason = trim($reason);
         $correlationId = SignerTokens::correlationId();
 
-        /** @var array{recipient: Recipient, envelope: Envelope, canceled: list<Recipient>, closed: bool} $outcome */
+        /** @var array{recipient: Recipient, envelope: Envelope, canceled: list<Recipient>, closed: bool, invite: list<Recipient>} $outcome */
         $outcome = DB::transaction(function () use ($context, $reason, $correlationId): array {
             /** @var Envelope|null $envelope */
             $envelope = Envelope::withoutOrganizationScope()
@@ -118,9 +120,23 @@ final class RecordRefusal
             SignerAudit::record($envelope, $recipient, AuditEventType::RecipientRefused, $refusalPayload, $correlationId);
 
             $closed = $this->closesEnvelope($context);
+
+            // Fase 3 §3.3 (F-FLOW): recusa de APROVADOR cuja decisão uma etapa posterior lê não
+            // encerra o envelope — o fluxo é recalculado sob este mesmo lock. Sem etapas: null
+            // e a política é exatamente a de antes.
+            $flow = $closed ? app(StepProgression::class)->afterRefusal($envelope, $recipient, $correlationId) : null;
+
+            if ($flow !== null && ! $flow['close']) {
+                $closed = false;
+            }
+
             $canceled = $closed ? $this->closeEnvelope($envelope, $recipient, $reason, $now, $correlationId) : [];
 
-            return ['recipient' => $recipient, 'envelope' => $envelope, 'canceled' => $canceled, 'closed' => $closed];
+            // Pedido de delegação de quem recusou (ou de qualquer um, se a coleta encerrou) fica
+            // sem efeito agora, não só quando alguém tentar confirmá-lo.
+            DelegationVoider::voidStale($envelope, $correlationId);
+
+            return ['recipient' => $recipient, 'envelope' => $envelope, 'canceled' => $canceled, 'closed' => $closed, 'invite' => $flow['invite'] ?? []];
         });
 
         $this->sessions->revokeAllFor($outcome['recipient']);
@@ -130,6 +146,11 @@ final class RecordRefusal
         }
 
         $this->notifier->notifySenderRefused($outcome['envelope'], $outcome['recipient']);
+
+        // Fase 3 §3.3 (F-FLOW): a recusa do aprovador levou o fluxo à próxima etapa aplicável.
+        if ($outcome['invite'] !== []) {
+            $this->notifier->inviteRecipients($outcome['envelope'], $outcome['invite']);
+        }
 
         if ($outcome['closed']) {
             $this->notifier->notifyEnvelopeClosed($outcome['envelope'], $outcome['canceled'], 'recipient_refused');
@@ -144,9 +165,14 @@ final class RecordRefusal
      * Os demais viram `canceled`, não `refused`: eles não recusaram nada, e registrar o
      * contrário seria falsear a trilha e a página de evidências.
      *
+     * Também chamado por RecordAcceptance::advance (sob o mesmo tipo de lock) quando a recusa de
+     * um aprovador ficou em suspenso até o fim da própria etapa e nenhuma etapa posterior se
+     * aplicou (Fase 3 §3.3, StepProgression::deferredRefusal) — `$extra` vai para a trilha.
+     *
+     * @param  array<string, mixed>  $extra
      * @return list<Recipient>
      */
-    private function closeEnvelope(Envelope $envelope, Recipient $refusedBy, string $reason, Carbon $now, string $correlationId): array
+    public function closeEnvelope(Envelope $envelope, Recipient $refusedBy, string $reason, Carbon $now, string $correlationId, array $extra = []): array
     {
         $envelope->transitionTo(EnvelopeStatus::Refused);
         $envelope->refused_at = $now;
@@ -214,7 +240,7 @@ final class RecordRefusal
             'has_reason' => $reason !== '',
             'canceled_recipients' => $pending->count(),
             'policy' => 'close_envelope',
-        ], $refusedBy, $correlationId);
+        ] + $extra, $refusedBy, $correlationId);
 
         /** @var list<Recipient> */
         return $pending->values()->all();

@@ -13,6 +13,7 @@ export function CopyButton({
     variant = 'ghost',
     className,
     toastMessage = 'Copiado',
+    errorMessage = 'Não foi possível copiar',
 }: {
     value: string;
     label?: string;
@@ -20,6 +21,8 @@ export function CopyButton({
     variant?: 'ghost' | 'outline' | 'outline-sm';
     className?: string;
     toastMessage?: string | null;
+    /** Aviso quando a cópia falha (a página pública passa o texto no idioma dela). */
+    errorMessage?: string;
 }) {
     const [, copy] = useClipboard();
     const [copied, setCopied] = useState(false);
@@ -44,7 +47,7 @@ export function CopyButton({
                 toast.success(toastMessage);
             }
         } else {
-            toast.error('Não foi possível copiar');
+            toast.error(errorMessage);
         }
     };
 

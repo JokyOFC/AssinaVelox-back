@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Sign;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\ApplySignerLocale;
 use App\Http\Middleware\ResolveSignerToken;
 use App\Services\Signing\InvitationOpens;
 use App\Services\Signing\SignerPageProps;
 use App\Services\Signing\SignerSessions;
+use App\Support\Locale\SignerLocales;
+use App\Support\Locale\SignerPropsLocalizer;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,6 +46,18 @@ class SignerPageController extends Controller
 
         $session = $context->isActive() ? $this->sessions->current($context, $request) : null;
 
-        return Inertia::render('sign/show', $this->props->build($context, $request, $session));
+        $props = $this->props->build($context, $request, $session);
+
+        // Fase 3 §3.3 (F-I18N): só com a flag `multilingual` ligada e idioma diferente do PT-BR
+        // os textos escritos pelo servidor são traduzidos; senão as props saem intactas.
+        $locale = SignerLocales::current($request);
+
+        if ($locale !== null) {
+            $props = app(SignerPropsLocalizer::class)->localize($props, $context, $locale);
+            // Idioma, lista, URL da troca e fuso (ApplySignerLocale::props) — só com a flag.
+            $props['i18n'] = ApplySignerLocale::props($context, $locale);
+        }
+
+        return Inertia::render('sign/show', $props);
     }
 }

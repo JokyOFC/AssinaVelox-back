@@ -140,14 +140,36 @@ final class IdentityCaptures
     // -- Participante --------------------------------------------------------------------
 
     /**
-     * A captura vale para este participante agora? Flag da organização ligada, papel que
-     * registra aceite e exigência gravada.
+     * Alguma captura (foto OU vídeo) vale para este participante agora? Usado por quem precisa
+     * saber se há etapa de captura: câmera na página pública, exclusão do lote, aceite.
+     * Sem a flag `identity_video`, é exatamente a regra das fotos.
      */
     public function isRequiredFor(SignerContext $context): bool
+    {
+        return $this->photoRequiredFor($context) || $this->videoRequiredFor($context);
+    }
+
+    /**
+     * Fotos (Fase 2 §2.10): flag `identity_capture` da organização ligada, papel que registra
+     * aceite e exigência gravada.
+     */
+    public function photoRequiredFor(SignerContext $context): bool
     {
         return $context->action() !== null
             && IdentityFeatures::identityCapture($context->organization)
             && $this->requiredKinds($context->recipient) !== [];
+    }
+
+    /**
+     * Vídeo curto (Fase 3 §3.3, F-VIDEO): flag `identity_video` ligada, papel que registra
+     * aceite e exigência gravada em `identity_video_requirements`. A flag é conferida antes da
+     * consulta: desligada, nenhuma consulta a mais.
+     */
+    public function videoRequiredFor(SignerContext $context): bool
+    {
+        return $context->action() !== null
+            && IdentityFeatures::identityVideo($context->organization)
+            && app(IdentityVideos::class)->requirement($context->recipient) !== null;
     }
 
     /**
@@ -181,16 +203,23 @@ final class IdentityCaptures
      */
     public function missingKinds(SignerContext $context, SigningSession $session): array
     {
-        if (! $this->isRequiredFor($context)) {
-            return [];
+        $missing = [];
+
+        if ($this->photoRequiredFor($context)) {
+            $current = $this->currentFor($session);
+
+            $missing = array_values(array_filter(
+                $this->requiredKinds($context->recipient),
+                static fn (CaptureKind $kind): bool => ! $current->has($kind->value),
+            ));
         }
 
-        $current = $this->currentFor($session);
+        // F-VIDEO: o vídeo exigido entra por último na lista ("Vídeo curto").
+        if ($this->videoRequiredFor($context) && app(IdentityVideos::class)->currentFor($session) === null) {
+            $missing[] = CaptureKind::Video;
+        }
 
-        return array_values(array_filter(
-            $this->requiredKinds($context->recipient),
-            static fn (CaptureKind $kind): bool => ! $current->has($kind->value),
-        ));
+        return $missing;
     }
 
     /**
@@ -220,16 +249,23 @@ final class IdentityCaptures
      * Sem imagem nem caminho: tipo, resumo SHA-256, dimensões, momento e a origem informada
      * pelo navegador (`camera` | `upload` | null — declarada, não verificada).
      *
-     * @return list<array{capture_ulid: string, kind: string, sha256: string, width: int, height: int, captured_at: string, source: string|null}>
+     * F-VIDEO: o item de vídeo (último) traz também contêiner, MIME, tamanho, durações e a versão
+     * do consentimento — chaves opcionais, ausentes nas fotos.
+     *
+     * @return list<array{capture_ulid: string, kind: string, sha256: string, width: int, height: int, captured_at: string, source: string|null, container?: string|null, mime_type?: string, size_bytes?: int, duration_ms?: int|null, declared_duration_ms?: int|null, consent_version?: string|null}>
      */
     public function snapshotFor(SignerContext $context, SigningSession $session): array
     {
-        if (! $this->isRequiredFor($context)) {
-            return [];
+        $items = [];
+
+        // F-VIDEO: o vídeo exigido entra depois das fotos, com contêiner e duração (sem arquivo).
+        $video = $this->videoRequiredFor($context) ? app(IdentityVideos::class)->currentFor($session) : null;
+
+        if (! $this->photoRequiredFor($context)) {
+            return $video === null ? [] : [self::videoSnapshot($video)];
         }
 
         $current = $this->currentFor($session);
-        $items = [];
 
         foreach ($this->requiredKinds($context->recipient) as $kind) {
             $capture = $current->get($kind->value);
@@ -249,7 +285,36 @@ final class IdentityCaptures
             ];
         }
 
+        if ($video !== null) {
+            $items[] = self::videoSnapshot($video);
+        }
+
         return $items;
+    }
+
+    /**
+     * Resumo do vídeo no `fields_snapshot`: tipo, SHA-256, contêiner, duração (a lida do arquivo
+     * e a informada pelo navegador), tamanho, momento, origem declarada e versão do consentimento.
+     *
+     * @return array{capture_ulid: string, kind: string, sha256: string, width: int, height: int, captured_at: string, source: string|null, container: string|null, mime_type: string, size_bytes: int, duration_ms: int|null, declared_duration_ms: int|null, consent_version: string|null}
+     */
+    private static function videoSnapshot(IdentityCapture $capture): array
+    {
+        return [
+            'capture_ulid' => $capture->ulid,
+            'kind' => CaptureKind::Video->value,
+            'sha256' => $capture->sha256,
+            'width' => $capture->width,
+            'height' => $capture->height,
+            'captured_at' => $capture->captured_at->toIso8601String(),
+            'source' => $capture->source,
+            'container' => $capture->container,
+            'mime_type' => $capture->mime_type,
+            'size_bytes' => $capture->size_bytes,
+            'duration_ms' => $capture->duration_ms,
+            'declared_duration_ms' => $capture->declared_duration_ms,
+            'consent_version' => $capture->consent_version,
+        ];
     }
 
     /**
@@ -400,8 +465,9 @@ final class IdentityCaptures
     {
         $wanted = array_map(static fn ($kind): string => is_string($kind) ? $kind : '', $kinds ?? []);
 
+        // Só fotos: o vídeo (F-VIDEO) tem exigência própria e nunca entra nesta lista.
         return array_values(array_filter(
-            CaptureKind::cases(),
+            CaptureKind::photoCases(),
             static fn (CaptureKind $kind): bool => in_array($kind->value, $wanted, true),
         ));
     }

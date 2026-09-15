@@ -10,6 +10,7 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Models\RecipientAccessLink;
 use App\Services\Envelopes\Contracts\RotatesInvitations;
+use App\Services\Envelopes\Steps\StepTurns;
 use App\Services\Signing\Channels\RecipientChannels;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -154,6 +155,10 @@ final class RecipientSync
                 'current_order' => 1,
             ])->save();
 
+            // Fase 3 §3.3 (F-FLOW): com etapas, a vez vem da etapa de cada participante. Sem
+            // etapas não faz nada.
+            StepTurns::apply($envelope);
+
             return ['created' => $created, 'updated' => $updated, 'removed' => $removed->count()];
         });
 
@@ -221,6 +226,9 @@ final class RecipientSync
                     $changed++;
                 }
             }
+
+            // Fase 3 §3.3 (F-FLOW): com etapas, a vez vem da etapa (sem etapas não faz nada).
+            $changed += StepTurns::apply($locked);
 
             // O envelope ainda está em preparo: a vez corrente é sempre a primeira.
             if ((int) $locked->current_order !== 1) {

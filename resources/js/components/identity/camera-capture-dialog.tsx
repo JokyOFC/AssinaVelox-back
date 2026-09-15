@@ -9,6 +9,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { type I18n, useI18n } from '@/i18n';
 import type { IdentityCaptureItem } from '@/types/models';
 
 /** Lado máximo da imagem gerada pela câmera (o servidor reduz de novo a 1600 px). */
@@ -21,20 +22,20 @@ export interface CapturedImage {
     source: 'camera' | 'upload';
 }
 
-function cameraErrorMessage(error: unknown): string {
+function cameraErrorMessage(error: unknown, t: I18n['t']): string {
     const name = error instanceof DOMException ? error.name : '';
 
     switch (name) {
         case 'NotAllowedError':
         case 'SecurityError':
-            return 'A permissão da câmera foi negada. Você pode liberar o acesso nas configurações do navegador ou enviar uma foto do seu aparelho.';
+            return t('camera.error.denied');
         case 'NotFoundError':
         case 'OverconstrainedError':
-            return 'Nenhuma câmera foi encontrada neste aparelho. Envie uma foto do seu aparelho.';
+            return t('camera.error.not_found');
         case 'NotReadableError':
-            return 'A câmera está em uso por outro aplicativo. Feche-o e tente de novo, ou envie uma foto.';
+            return t('camera.error.busy');
         default:
-            return 'Não foi possível abrir a câmera. Envie uma foto do seu aparelho.';
+            return t('camera.error.generic');
     }
 }
 
@@ -66,6 +67,7 @@ export function CameraCaptureDialog({
     uploadError: string | null;
     onConfirm: (image: CapturedImage) => void;
 }) {
+    const { t, rich } = useI18n();
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const fileRef = useRef<HTMLInputElement | null>(null);
@@ -152,7 +154,7 @@ export function CameraCaptureDialog({
             });
         } catch (exception) {
             stopCamera();
-            setError(cameraErrorMessage(exception));
+            setError(cameraErrorMessage(exception, t));
             setStage('intro');
         }
     };
@@ -161,7 +163,7 @@ export function CameraCaptureDialog({
         const video = videoRef.current;
 
         if (!video || video.videoWidth === 0) {
-            setError('A câmera ainda está abrindo. Aguarde um instante.');
+            setError(t('camera.still_opening'));
 
             return;
         }
@@ -180,7 +182,7 @@ export function CameraCaptureDialog({
         canvas.toBlob(
             (blob) => {
                 if (!blob) {
-                    setError('Não foi possível gerar a foto. Tente de novo.');
+                    setError(t('camera.failed'));
 
                     return;
                 }
@@ -200,14 +202,16 @@ export function CameraCaptureDialog({
         }
 
         if (!accept.includes(file.type)) {
-            setError('Envie uma foto em JPEG ou PNG.');
+            setError(t('camera.format'));
 
             return;
         }
 
         if (file.size > maxUploadKb * 1024) {
             setError(
-                `A foto é maior que ${Math.max(1, Math.floor(maxUploadKb / 1024))} MB.`,
+                t('camera.too_large', {
+                    size: Math.max(1, Math.floor(maxUploadKb / 1024)),
+                }),
             );
 
             return;
@@ -237,11 +241,9 @@ export function CameraCaptureDialog({
                         <p className="border-border bg-sidebar text-text-secondary flex items-start gap-2 rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
                             <ShieldCheck className="text-primary mt-0.5 size-4 shrink-0" />
                             <span>
-                                Ao tocar em <b>Abrir câmera</b>, o navegador
-                                pede permissão para usar a câmera deste
-                                aparelho. A câmera só fica ligada nesta janela e
-                                a foto só é enviada depois que você conferir e
-                                confirmar.
+                                {rich('camera.intro', {
+                                    open: <b>{t('camera.open')}</b>,
+                                })}
                             </span>
                         </p>
                         <div className="flex flex-col gap-2 sm:flex-row">
@@ -253,7 +255,7 @@ export function CameraCaptureDialog({
                                     onClick={() => void startCamera()}
                                 >
                                     <Camera className="size-4" />
-                                    Abrir câmera
+                                    {t('camera.open')}
                                 </Button>
                             )}
                             <Button
@@ -264,13 +266,12 @@ export function CameraCaptureDialog({
                                 onClick={() => fileRef.current?.click()}
                             >
                                 <ImageUp className="size-4" />
-                                Escolher foto do aparelho
+                                {t('camera.choose')}
                             </Button>
                         </div>
                         {!cameraSupported && (
                             <p className="text-muted-foreground text-[12px]">
-                                Este navegador não permite usar a câmera nesta
-                                página. Escolha uma foto do seu aparelho.
+                                {t('camera.unsupported')}
                             </p>
                         )}
                     </div>
@@ -279,7 +280,7 @@ export function CameraCaptureDialog({
                 {stage === 'starting' && (
                     <div className="text-text-secondary flex items-center justify-center gap-2 py-10 text-[13px]">
                         <Spinner className="size-4" />
-                        Aguardando a permissão da câmera…
+                        {t('camera.waiting')}
                     </div>
                 )}
 
@@ -291,7 +292,7 @@ export function CameraCaptureDialog({
                                 playsInline
                                 muted
                                 autoPlay
-                                aria-label="Imagem da câmera"
+                                aria-label={t('camera.video_aria')}
                                 className="aspect-[4/3] w-full object-contain"
                                 style={
                                     item.facing_mode === 'user'
@@ -308,7 +309,7 @@ export function CameraCaptureDialog({
                                 onClick={takePhoto}
                             >
                                 <Camera className="size-4" />
-                                Tirar foto
+                                {t('camera.take')}
                             </Button>
                             <Button
                                 type="button"
@@ -316,7 +317,7 @@ export function CameraCaptureDialog({
                                 variant="outline"
                                 onClick={reset}
                             >
-                                Cancelar
+                                {t('common.cancel')}
                             </Button>
                         </div>
                     </div>
@@ -327,12 +328,13 @@ export function CameraCaptureDialog({
                         <div className="flex flex-col gap-3">
                             <img
                                 src={previewUrl}
-                                alt={`Pré-visualização: ${item.label}`}
+                                alt={t('camera.preview_alt', {
+                                    label: item.label,
+                                })}
                                 className="border-border max-h-[50svh] w-full rounded-xl border bg-black object-contain"
                             />
                             <p className="text-muted-foreground text-[12px] leading-[1.5]">
-                                Confira se a foto está nítida e sem cortes antes
-                                de enviar.
+                                {t('camera.check')}
                             </p>
                             <div className="flex flex-col gap-2 sm:flex-row">
                                 <Button
@@ -347,7 +349,7 @@ export function CameraCaptureDialog({
                                     ) : (
                                         <Upload className="size-4" />
                                     )}
-                                    Usar esta foto
+                                    {t('camera.use')}
                                 </Button>
                                 <Button
                                     type="button"
@@ -357,7 +359,7 @@ export function CameraCaptureDialog({
                                     onClick={reset}
                                 >
                                     <RotateCcw className="size-4" />
-                                    Refazer
+                                    {t('capture.redo')}
                                 </Button>
                             </div>
                         </div>

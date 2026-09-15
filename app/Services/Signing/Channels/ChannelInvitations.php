@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\Recipient;
 use App\Rules\PhoneE164;
 use App\Services\Signing\Exceptions\SigningRejectedException;
+use App\Support\Locale\SignerLocales;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -93,7 +94,8 @@ final class ChannelInvitations
                 'title' => ChannelMessages::plain($envelope->title, 40),
                 'url' => $url,
             ],
-            text: ChannelMessages::invitationText($organizationName, $envelope->title, $url, $isReminder),
+            // F-I18N: convite/lembrete por SMS/WhatsApp no idioma do participante (flag desligada: PT-BR).
+            text: ChannelMessages::invitationText($organizationName, $envelope->title, $url, $isReminder, SignerLocales::forRecipient($recipient, $organization)),
             sensitive: ['url'],
             correlationId: $correlationId,
             meta: ['envelope' => $envelope->display_code],

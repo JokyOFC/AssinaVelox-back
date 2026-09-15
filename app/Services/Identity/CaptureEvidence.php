@@ -68,6 +68,8 @@ final class CaptureEvidence
             ->where('envelope_id', $envelope->getKey())
             ->where('organization_id', $envelope->organization_id)
             ->whereNotNull('signature_acceptance_id')
+            // Só fotos: o vídeo curto (F-VIDEO) tem bloco próprio (`VideoEvidence`), sem miniatura.
+            ->where('kind', '!=', CaptureKind::Video->value)
             ->orderBy('id')
             ->get();
 

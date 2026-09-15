@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { CaptureRequirementControl } from '@/components/envelopes/capture-requirement-control';
+import { VideoRequirementControl } from '@/components/identity/video-requirement-control';
+import { RecipientLocaleControl } from '@/components/envelopes/recipient-locale-control';
 import {
     RecipientChannelFields,
     RecipientPinControl,
@@ -604,6 +606,25 @@ export function WizardStepRecipients({
                                     }
                                 />
                             </div>
+                        )}
+
+                        {/* Fase 3 §3.3 (F-VIDEO): sem a flag `identity_video`, não renderiza nada. */}
+                        {envelopeId && !viewer && (
+                            <VideoRequirementControl
+                                envelopeId={envelopeId}
+                                recipientId={recipient.id}
+                                recipientName={recipient.name}
+                                disabled={disabled}
+                            />
+                        )}
+
+                        {/* Fase 3 §3.3 (F-I18N): sem a flag `multilingual`, não renderiza nada. */}
+                        {envelopeId && (
+                            <RecipientLocaleControl
+                                envelopeId={envelopeId}
+                                recipientId={recipient.id}
+                                disabled={disabled}
+                            />
                         )}
                     </div>
                 );

@@ -70,6 +70,8 @@ class SignatureAcceptance extends Model
         'typed_font',
         // Fase 2 §2.4: sign | witness | approve (default sign).
         'action',
+        // Fase 3 §3.3 (F-I18N): idioma exibido (nulo = flag desligada). O texto gravado é o de referência.
+        'display_locale',
     ];
 
     /** @var array<string, mixed> */

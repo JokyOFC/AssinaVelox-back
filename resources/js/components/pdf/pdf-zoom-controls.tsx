@@ -1,5 +1,6 @@
 import { Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 /** Níveis de zoom. `1` = a página ocupa toda a largura disponível. */
@@ -39,6 +40,7 @@ export function PdfZoomControls({
     disabled?: boolean;
     className?: string;
 }) {
+    const { t } = useI18n();
     const percent = Math.round(zoom * 100);
 
     return (
@@ -48,7 +50,7 @@ export function PdfZoomControls({
                 size="icon-sm"
                 disabled={disabled || zoom <= ZOOM_LEVELS[0]}
                 onClick={() => onZoomChange(neighbour(zoom, -1))}
-                aria-label="Diminuir zoom"
+                aria-label={t('pdf.zoom_out')}
             >
                 <Minus className="size-3.5" />
             </Button>
@@ -56,7 +58,7 @@ export function PdfZoomControls({
                 type="button"
                 disabled={disabled}
                 onClick={() => onZoomChange(DEFAULT_ZOOM)}
-                title="Ajustar à largura"
+                title={t('pdf.zoom_fit')}
                 className="text-text-secondary hover:text-foreground tabular min-w-10 rounded-md px-1 text-center text-[13px] disabled:opacity-60"
             >
                 {percent}%
@@ -68,7 +70,7 @@ export function PdfZoomControls({
                     disabled || zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]
                 }
                 onClick={() => onZoomChange(neighbour(zoom, 1))}
-                aria-label="Aumentar zoom"
+                aria-label={t('pdf.zoom_in')}
             >
                 <Plus className="size-3.5" />
             </Button>

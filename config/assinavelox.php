@@ -55,6 +55,10 @@ return [
         'cnpj_lookup' => filter_var(env('ASSINAVELOX_FEATURE_CNPJ_LOOKUP', false), FILTER_VALIDATE_BOOLEAN),
         // Desligada até a decisão jurídica da viabilidade §4.4 item 20 (LGPD art. 11, RIPD).
         'identity_capture' => filter_var(env('ASSINAVELOX_FEATURE_IDENTITY_CAPTURE', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.3 — F-VIDEO (docs/fase-3/captura-de-video.md). Organização (esta chave E
+        // plano). Aceite complementado por vídeo curto, sem som. Desligada até a decisão
+        // jurídica da viabilidade §4.4 item 20 (LGPD art. 11, RIPD). Parâmetros em `capture_video`.
+        'identity_video' => filter_var(env('ASSINAVELOX_FEATURE_IDENTITY_VIDEO', false), FILTER_VALIDATE_BOOLEAN),
         // Fase 2, onda B — presencial em tablet e assinatura em lote (C-PRES,
         // docs/fase-2/presencial-e-lote.md).
         'in_person' => filter_var(env('ASSINAVELOX_FEATURE_IN_PERSON', false), FILTER_VALIDATE_BOOLEAN),
@@ -107,6 +111,106 @@ return [
         // é da operadora, não de um plano. Desligada: link, portal e painel dão 404, o cadastro não
         // lê o cookie e nenhuma comissão é calculada. Parâmetros na seção `affiliates` abaixo.
         'affiliates' => filter_var(env('ASSINAVELOX_FEATURE_AFFILIATES', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.2 — F-ANCHOR (docs/fase-3/ancoras-e-ocr.md). Organização (esta chave E plano).
+        // Âncoras em PDF nativo e regras por modelo: só SUGEREM campos, que o remetente revisa no
+        // editor antes de o envelope ficar pronto. Desligada: rotas 404 e nada muda no preparo.
+        'field_anchors' => filter_var(env('ASSINAVELOX_FEATURE_FIELD_ANCHORS', false), FILTER_VALIDATE_BOOLEAN),
+        // OCR de páginas escaneadas (classe B): exige também `field_anchors` e o Tesseract no
+        // servidor (seção `ocr`). Sem o binário a tela diz "OCR indisponível neste servidor".
+        'ocr' => filter_var(env('ASSINAVELOX_FEATURE_OCR', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.1 — F-BULK (docs/fase-3/geracao-em-lote.md). Organização (esta chave E plano;
+        // exige `templates`). Desligada: rotas do lote 404 e nenhum job gera nada. Limites na
+        // seção `bulk_generation` abaixo.
+        'bulk_generation' => filter_var(env('ASSINAVELOX_FEATURE_BULK_GENERATION', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.3 — F-FLOW (docs/fase-3/etapas-e-delegacao.md). Organização (esta chave E
+        // plano). Desligadas: `current_order` funciona exatamente como antes, as rotas novas dão
+        // 404 e o participante não vê "Delegar". Limites nas seções `flow` e `delegation` abaixo.
+        'conditional_steps' => filter_var(env('ASSINAVELOX_FEATURE_CONDITIONAL_STEPS', false), FILTER_VALIDATE_BOOLEAN),
+        'delegation' => filter_var(env('ASSINAVELOX_FEATURE_DELEGATION', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.3 — F-I18N (docs/fase-3/multilingue.md). Organização (esta chave E plano).
+        // Página pública e e-mails ao participante em pt_BR, en e es. Desligada: tudo continua em
+        // PT-BR, idêntico ao de hoje, e as rotas novas dão 404. Parâmetros em `multilingual`.
+        'multilingual' => filter_var(env('ASSINAVELOX_FEATURE_MULTILINGUAL', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    // Fase 3 §3.3 — etapas condicionais (F-FLOW). Motor declarativo fechado: estes são só os tetos.
+    'flow' => [
+        'max_steps' => (int) env('ASSINAVELOX_FLOW_MAX_STEPS', 10),
+        'max_rules_per_step' => (int) env('ASSINAVELOX_FLOW_MAX_RULES', 10),
+        // Tamanho máximo do texto literal comparado numa regra de campo.
+        'max_literal_length' => (int) env('ASSINAVELOX_FLOW_MAX_LITERAL', 200),
+    ],
+
+    // Fase 3 §3.3 — delegação auditada (F-FLOW). A política (permitir, exigir confirmação,
+    // participantes pessoais) é do remetente, por envelope; aqui ficam os limites da instalação.
+    'delegation' => [
+        // 1 = quem recebeu por delegação não delega de novo.
+        'max_chain_depth' => (int) env('ASSINAVELOX_DELEGATION_MAX_CHAIN_DEPTH', 1),
+        // Pedidos (de qualquer desfecho) por participante, e delegações por organização em 24 h:
+        // o pedido dispara e-mail a um endereço escolhido pelo público.
+        'max_requests_per_recipient' => (int) env('ASSINAVELOX_DELEGATION_MAX_PER_RECIPIENT', 3),
+        'max_per_organization_per_day' => (int) env('ASSINAVELOX_DELEGATION_MAX_PER_ORG_DAY', 50),
+        // Tentativas RECUSADAS ("para si mesmo", "já participa") por participante em 24 h: a
+        // resposta "já participa" não pode virar consulta de e-mails de coparticipantes.
+        'max_refused_attempts_per_recipient' => (int) env('ASSINAVELOX_DELEGATION_MAX_REFUSED_ATTEMPTS', 6),
+        'reason_min' => 10,
+        'reason_max' => 500,
+    ],
+
+    // Fase 3 §3.3 — multilíngue (F-I18N, docs/fase-3/multilingue.md). A lista de idiomas é
+    // FECHADA (App\Support\Locale\SignerLocale): um valor fora dela nunca vira caminho de arquivo.
+    // O texto jurídico em `en`/`es` é tradução de cortesia; a versão de referência é a PT-BR até
+    // a revisão profissional por idioma. `reviewed` lista os idiomas cuja tradução jurídica já
+    // foi revisada (vazio até lá: o aviso "tradução de cortesia" continua na tela).
+    'multilingual' => [
+        'reference_locale' => 'pt_BR',
+        'reviewed_legal_locales' => array_values(array_filter(explode(',', (string) env('ASSINAVELOX_MULTILINGUAL_REVIEWED', '')))),
+    ],
+
+    /*
+    | Fase 3 §3.2 — âncoras (F-ANCHOR, docs/fase-3/ancoras-e-ocr.md). Valem com
+    | `features.field_anchors` ligada (global E plano). Fila própria: a busca roda o pdftool.
+    */
+    'field_anchors' => [
+        'queue' => env('ASSINAVELOX_ANCHORS_QUEUE', 'anchors'),
+        // Tempo do processo do pdftool (o pdftool também tem um orçamento interno menor).
+        'process_timeout_seconds' => (int) env('ASSINAVELOX_ANCHORS_TIMEOUT', 90),
+        'time_budget_seconds' => (int) env('ASSINAVELOX_ANCHORS_TIME_BUDGET', 60),
+        // "Testar regras" do modelo roda DENTRO da requisição HTTP: orçamento curto (o processo
+        // morre em orçamento + 30 s, sem o piso de `process_timeout_seconds`).
+        'test_time_budget_seconds' => (int) env('ASSINAVELOX_ANCHORS_TEST_TIME_BUDGET', 15),
+        'max_pages' => (int) env('ASSINAVELOX_ANCHORS_MAX_PAGES', 200),
+        'max_file_mb' => (int) env('ASSINAVELOX_ANCHORS_MAX_FILE_MB', 50),
+        'max_matches' => (int) env('ASSINAVELOX_ANCHORS_MAX_MATCHES', 300),
+        // Textos literais por busca manual e regras por modelo.
+        'max_literals' => (int) env('ASSINAVELOX_ANCHORS_MAX_LITERALS', 10),
+        'max_rules_per_template' => (int) env('ASSINAVELOX_ANCHORS_MAX_RULES', 30),
+        // Busca parada há mais que isso deixa de bloquear o preparo (worker caiu, por exemplo).
+        'stale_minutes' => (int) env('ASSINAVELOX_ANCHORS_STALE_MINUTES', 15),
+        // Documento de modelo HTML/DOCX ainda convertendo: a busca espera por até N × S segundos.
+        'wait_attempts' => (int) env('ASSINAVELOX_ANCHORS_WAIT_ATTEMPTS', 40),
+        'wait_seconds' => (int) env('ASSINAVELOX_ANCHORS_WAIT_SECONDS', 15),
+    ],
+
+    /*
+    | Fase 3 §3.2 — OCR de escaneados (classe B). `driver`: tesseract | disabled | fake (o fake só
+    | é aceito nos ambientes local e testing; em produção vira "indisponível"). Sem
+    | `tesseract_path` apontando para um binário que responde `--list-langs` com o idioma, o OCR
+    | fica indisponível — a verificação é real, nunca presumida.
+    */
+    'ocr' => [
+        'driver' => env('ASSINAVELOX_OCR_DRIVER', 'tesseract'),
+        'queue' => env('ASSINAVELOX_OCR_QUEUE', 'ocr'),
+        'tesseract_path' => env('ASSINAVELOX_OCR_TESSERACT_PATH'),
+        // Opcional: pasta dos .traineddata (TESSDATA_PREFIX do processo filho). Nunca segredo.
+        'tessdata_prefix' => env('ASSINAVELOX_OCR_TESSDATA_PREFIX'),
+        'language' => env('ASSINAVELOX_OCR_LANGUAGE', 'por'),
+        'dpi' => (int) env('ASSINAVELOX_OCR_DPI', 200),
+        'page_timeout_seconds' => (int) env('ASSINAVELOX_OCR_PAGE_TIMEOUT', 60),
+        // Limite de páginas por passagem (custo de CPU). Páginas além disso ficam "puladas".
+        'max_pages' => (int) env('ASSINAVELOX_OCR_MAX_PAGES', 20),
+        'probe_timeout_seconds' => (int) env('ASSINAVELOX_OCR_PROBE_TIMEOUT', 10),
+        'probe_cache_minutes' => (int) env('ASSINAVELOX_OCR_PROBE_CACHE_MINUTES', 10),
     ],
 
     // Fase 2 §2.15 — API REST v1 (D-API, docs/fase-2/api-v1.md). Só vale com
@@ -145,6 +249,28 @@ return [
     'rest_hooks' => [
         // Assinaturas ativas por token (cada Zap/cenário/fluxo costuma criar uma).
         'max_subscriptions_per_token' => (int) env('ASSINAVELOX_REST_HOOKS_MAX_PER_TOKEN', 10),
+    ],
+
+    /*
+    | Fase 3 §3.1 — geração documental em lote (F-BULK, docs/fase-3/geracao-em-lote.md). Vale
+    | com `features.bulk_generation` ligada. O plano pode APERTAR os quatro primeiros limites em
+    | `plans.features.bulk_generation_limits` ({max_rows, max_file_bytes, max_concurrent_batches,
+    | concurrency}); vale o menor. `queue` vazio = fila padrão (os workers precisam ouvi-la).
+    */
+    'bulk_generation' => [
+        'max_rows' => (int) env('ASSINAVELOX_BULK_MAX_ROWS', 1000),
+        'max_file_bytes' => (int) env('ASSINAVELOX_BULK_MAX_FILE_BYTES', 5 * 1024 * 1024),
+        'max_concurrent_batches' => (int) env('ASSINAVELOX_BULK_MAX_CONCURRENT_BATCHES', 2),
+        // Linhas da mesma organização gerando ao mesmo tempo (somando todos os lotes).
+        'concurrency_per_organization' => (int) env('ASSINAVELOX_BULK_CONCURRENCY', 3),
+        'max_columns' => (int) env('ASSINAVELOX_BULK_MAX_COLUMNS', 100),
+        'max_cell_chars' => (int) env('ASSINAVELOX_BULK_MAX_CELL_CHARS', 5000),
+        // XLSX descompactado (zip bomb), medido em streaming antes de abrir a planilha.
+        'max_uncompressed_bytes' => (int) env('ASSINAVELOX_BULK_MAX_UNCOMPRESSED_BYTES', 50 * 1024 * 1024),
+        'queue' => env('ASSINAVELOX_BULK_QUEUE') ?: 'default',
+        // Lote em rascunho ou validado e NUNCA confirmado: planilha e linhas (com dados pessoais)
+        // são descartadas depois deste prazo sem alteração (`bulk-generations:prune-unconfirmed`).
+        'unconfirmed_retention_days' => (int) env('ASSINAVELOX_BULK_UNCONFIRMED_RETENTION_DAYS', 7),
     ],
 
     // Fase 2 §2.3 — teto de arquivos por envelope com `features.multi_document` ligada
@@ -241,6 +367,25 @@ return [
         'orphan_retention_hours' => (int) env('ASSINAVELOX_CAPTURE_ORPHAN_RETENTION_HOURS', 48),
         // Envios por participante por hora (refazer a foto conta).
         'max_uploads_per_hour' => (int) env('ASSINAVELOX_CAPTURE_MAX_UPLOADS_PER_HOUR', 30),
+    ],
+
+    /*
+    | Fase 3 §3.3 — vídeo curto do aceite (F-VIDEO, docs/fase-3/captura-de-video.md). Não é
+    | biometria nem verificação. Guardado como veio (sem transcodificar), cifrado, com a mesma
+    | retenção das fotos (`capture.retention_days` / `orphan_retention_hours`).
+    */
+    'capture_video' => [
+        // Duração máxima padrão e o teto que o remetente pode escolher (segundos).
+        'max_seconds' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_MAX_SECONDS', 10),
+        'max_seconds_ceiling' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_MAX_SECONDS_CEILING', 30),
+        // Folga sobre a duração pedida (o gravador para com atraso de milissegundos).
+        'duration_tolerance_ms' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_DURATION_TOLERANCE_MS', 1500),
+        'max_upload_kb' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_MAX_UPLOAD_KB', 8192),
+        // Taxa pedida ao MediaRecorder (~1 Mbps ≈ 1,3 MB em 10 s).
+        'video_bits_per_second' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_BITS_PER_SECOND', 1_000_000),
+        'max_uploads_per_hour' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_MAX_UPLOADS_PER_HOUR', 10),
+        // Validade das URLs assinadas de reprodução e download no detalhe do envelope.
+        'playback_url_ttl_seconds' => (int) env('ASSINAVELOX_CAPTURE_VIDEO_PLAYBACK_URL_TTL', 120),
     ],
 
     /*

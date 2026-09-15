@@ -8,12 +8,14 @@ use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\PlanConsumption;
 use App\Models\Recipient;
+use App\Services\BulkGeneration\BulkGenerationQuota;
 use App\Services\Documents\EnvelopeReadiness as DocumentReadiness;
 use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Envelopes\EnvelopeReadiness;
 use App\Services\Envelopes\Reminders\ReminderSettings;
 use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Envelopes\Sending\Exceptions\SendingException;
+use App\Services\Envelopes\Steps\SigningStepsOnSend;
 use App\Services\Plans\Exceptions\SendingBlockedException;
 use App\Services\Plans\PlanLedger;
 use App\Services\Risk\SendingRestriction;
@@ -162,7 +164,11 @@ class SendEnvelope
                 throw SendingBlockedException::noSubscription();
             }
 
-            $this->ledger->assertCanSend($subscription);
+            // Fase 3 §3.1 (F-BULK): linha de lote confirmada no modo "enviar ao gerar" já tem a
+            // unidade reservada desde a confirmação — ela é trocada pela reserva do envio aqui,
+            // sob este lock, sem nova checagem de cota (situação da assinatura continua valendo).
+            $handedOver = BulkGenerationQuota::handedOverTo($locked);
+            $this->ledger->assertCanSend($subscription, $handedOver !== null ? 0 : 1);
 
             $now = Carbon::now();
 
@@ -183,7 +189,15 @@ class SendEnvelope
             // agendado). No disparo agendado a coluna já foi limpa pela reivindicação.
             ScheduledSend::clearWithinLock($locked, 'sent_now');
 
+            // Fase 3 §3.3 (F-FLOW): com etapas, revalida a definição sob este lock e abre a etapa 1
+            // (inválida: SendingException e a transação inteira é desfeita). Sem etapas, nada.
+            app(SigningStepsOnSend::class)->handle($locked);
+
             $consumption = $this->ledger->reserve($locked, $subscription);
+
+            if ($handedOver !== null) {
+                $this->ledger->release($handedOver, null, 'bulk_row_handed_over');
+            }
 
             EnvelopeAudit::record($locked, AuditEventType::EnvelopeSent, array_merge([
                 'signing_order' => $locked->signing_order->value,
@@ -225,6 +239,9 @@ class SendEnvelope
             }
 
             $this->links->revokeForEnvelope($locked);
+
+            // Fase 3 §3.3 (F-FLOW): etapas voltam a "não alcançadas" (sem etapas, nada).
+            app(SigningStepsOnSend::class)->revert($locked);
 
             Recipient::withoutOrganizationScope()
                 ->where('envelope_id', $locked->getKey())

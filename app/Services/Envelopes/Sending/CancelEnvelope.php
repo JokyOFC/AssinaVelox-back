@@ -8,6 +8,7 @@ use App\Enums\PlanConsumptionStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Envelope;
 use App\Models\Recipient;
+use App\Services\Envelopes\Delegation\DelegationVoider;
 use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Plans\PlanLedger;
 use Illuminate\Support\Facades\DB;
@@ -101,6 +102,9 @@ class CancelEnvelope
             // expiração (ExpireEnvelopes) — e manter o link não reabre nada, porque o
             // resolver recusa assinar fora de `in_progress`.
             $this->links->revokeForEnvelope($locked, exceptRecipientIds: $signedIds);
+
+            // Fase 3 §3.3 (F-FLOW): pedido de delegação pendente fica sem efeito no encerramento.
+            DelegationVoider::voidStale($locked, $correlationId);
 
             EnvelopeAudit::record($locked, AuditEventType::EnvelopeCanceled, [
                 'has_reason' => filled($reason),

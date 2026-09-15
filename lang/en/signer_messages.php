@@ -1,0 +1,175 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Participant messages — English catalog (Phase 3 §3.3, F-I18N)
+|--------------------------------------------------------------------------
+|
+| KEY = the exact Brazilian Portuguese text written by the services of the
+| public flow (code, PIN, acceptance, refusal, photos, video, delegation) and
+| by SignerPageProps. `{name}` marks a variable part: the value captured from
+| the Portuguese message is inserted as text in the translation (it is never
+| evaluated). Read by App\Support\Locale\SignerMessageCatalog, only with the
+| `multilingual` flag on. A message missing here is shown in Portuguese.
+|
+| lang/es/signer_messages.php must have exactly the same keys (I18n key test).
+|
+*/
+
+return [
+    // -- Code and PIN ------------------------------------------------------------------
+    'Enviamos um código para {destination}.' => 'We sent a code to {destination}.',
+    'Código confirmado. Agora informe o PIN que quem enviou o documento combinou com você.' => 'Code confirmed. Now enter the PIN that the sender agreed with you.',
+    'Código confirmado. Agora você pode enviar o seu certificado digital.' => 'Code confirmed. You can now send your digital certificate.',
+    'Código confirmado. Revise o documento e registre seu aceite.' => 'Code confirmed. Review the document and record your acceptance.',
+    'PIN confirmado. Revise o documento e registre seu aceite.' => 'PIN confirmed. Review the document and record your acceptance.',
+    'PIN confirmado. Agora você pode enviar o seu certificado digital.' => 'PIN confirmed. You can now send your digital certificate.',
+    'Sua sessão expirou. Confirme o código enviado por e-mail para continuar.' => 'Your session has expired. Confirm the code sent by email to continue.',
+    'Informe o código enviado para o seu e-mail.' => 'Enter the code sent to your email address.',
+    'O código tem {digits} dígitos.' => 'The code has {digits} digits.',
+    'Informe o PIN combinado com quem enviou o documento.' => 'Enter the PIN agreed with the sender.',
+    'O PIN tem de {min} a {max} dígitos.' => 'The PIN has {min} to {max} digits.',
+    'O envio do código por {channel} está indisponível no momento. Fale com quem enviou o documento.' => 'Sending the code by {channel} is unavailable right now. Contact the sender.',
+    'Não há um celular válido cadastrado para você receber o código. Fale com quem enviou o documento.' => 'There is no valid mobile number on file for you to receive the code. Contact the sender.',
+    'Aguarde {seconds}s para reenviar o código.' => 'Wait {seconds}s to resend the code.',
+    'Você pediu o código muitas vezes. Tente novamente daqui a pouco ou fale com quem enviou o documento.' => 'You requested the code too many times. Try again shortly or contact the sender.',
+    'Muitos pedidos de código a partir desta conexão. Tente novamente daqui a pouco.' => 'Too many code requests from this connection. Try again shortly.',
+    'O código expirou ou já foi usado. Peça um novo código.' => 'The code has expired or was already used. Request a new code.',
+    'Código inválido. As tentativas acabaram — peça um novo código.' => 'Invalid code. No attempts left — request a new code.',
+    'Código inválido ou expirado ({count} tentativa restantes).' => 'Invalid or expired code ({count} attempt left).',
+    'Código inválido ou expirado ({count} tentativas restantes).' => 'Invalid or expired code ({count} attempts left).',
+    'O limite diário de mensagens por SMS e WhatsApp de quem enviou o documento foi atingido. Tente de novo amanhã ou fale com quem enviou.' => 'The sender\'s daily limit of SMS and WhatsApp messages has been reached. Try again tomorrow or contact the sender.',
+    'Este documento não pede PIN.' => 'This document does not require a PIN.',
+    'O PIN foi bloqueado depois de tentativas demais. Fale com quem enviou o documento.' => 'The PIN was blocked after too many attempts. Contact the sender.',
+    'Muitas tentativas de PIN. Aguarde {minutes} min e peça um novo código.' => 'Too many PIN attempts. Wait {minutes} min and request a new code.',
+    'Confirme primeiro o código enviado a você e, em seguida, informe o PIN.' => 'First confirm the code sent to you, then enter the PIN.',
+    'PIN incorreto ({count} tentativa restantes).' => 'Incorrect PIN ({count} attempt left).',
+    'PIN incorreto ({count} tentativas restantes).' => 'Incorrect PIN ({count} attempts left).',
+    'PIN incorreto. O PIN foi bloqueado depois de tentativas demais — fale com quem enviou o documento.' => 'Incorrect PIN. The PIN was blocked after too many attempts — contact the sender.',
+    'PIN incorreto. Por segurança, novas tentativas ficam bloqueadas por {minutes} min; depois disso, peça um novo código.' => 'Incorrect PIN. For security, new attempts are blocked for {minutes} min; after that, request a new code.',
+
+    // -- Channel of the code (props `signer_auth`) --------------------------------------
+    'Código por e-mail' => 'Code by email',
+    'Código por SMS' => 'Code by SMS',
+    'Código por WhatsApp' => 'Code by WhatsApp',
+    'E-mail' => 'Email',
+    'O envio por SMS e WhatsApp não está habilitado para esta organização.' => 'Sending by SMS and WhatsApp is not enabled for this organization.',
+    'O envio por {channel} está desativado nesta instalação: o serviço próprio de {service} ainda não foi integrado (faltam documentação e credenciais).' => 'Sending by {channel} is disabled in this installation: the {service} service has not been integrated yet (documentation and credentials are missing).',
+    'Ambiente de testes: as mensagens por {channel} são simuladas e não chegam ao celular.' => 'Test environment: {channel} messages are simulated and do not reach the phone.',
+
+    // -- Acceptance and refusal ---------------------------------------------------------
+    'Aceite registrado.' => 'Acceptance recorded.',
+    'Recusa registrada. O remetente foi avisado.' => 'Refusal recorded. The sender has been notified.',
+    'A tela expirou. Recarregue a página antes de assinar.' => 'The screen has expired. Reload the page before signing.',
+    'Marque a declaração de aceite para assinar.' => 'Tick the acceptance statement to sign.',
+    'Escolha como quer assinar: desenhar, digitar ou enviar uma imagem.' => 'Choose how you want to sign: draw, type or upload an image.',
+    'A imagem da assinatura é grande demais.' => 'The signature image is too large.',
+    'O nome digitado deve ter no máximo 80 caracteres.' => 'The typed name must have at most 80 characters.',
+    'Digite seu nome com 2 a 80 caracteres para assinar.' => 'Type your name with 2 to 80 characters to sign.',
+    'Informe o motivo da recusa.' => 'Enter the reason for the refusal.',
+    'Explique o motivo com pelo menos {min} caracteres.' => 'Explain the reason with at least {min} characters.',
+    'O motivo deve ter no máximo {max} caracteres.' => 'The reason must have at most {max} characters.',
+    'Este documento não está mais disponível para assinatura.' => 'This document is no longer available for signing.',
+    'Este documento não está disponível para assinatura.' => 'This document is not available for signing.',
+    'Você recebeu este documento apenas para acompanhar: não há aceite a registrar.' => 'You received this document only to follow it: there is no acceptance to record.',
+    'Você recebeu este documento apenas para acompanhar: não há recusa a registrar.' => 'You received this document only to follow it: there is no refusal to record.',
+    'O documento ainda não foi carregado nesta sessão. Recarregue a página, confira o documento e assine em seguida.' => 'The document has not been loaded in this session yet. Reload the page, check the document and then sign.',
+    'O documento foi atualizado. Recarregue a página para ver a versão atual antes de assinar.' => 'The document was updated. Reload the page to see the current version before signing.',
+    'A tela mudou desde que foi carregada (documento, campos ou prazo). Recarregue a página e confira antes de assinar.' => 'The screen changed since it was loaded (document, fields or deadline). Reload the page and check before signing.',
+    'Abra e confira todos os arquivos antes de assinar: o arquivo "{file}" ainda não foi carregado nesta sessão.' => 'Open and check all files before signing: the file "{file}" has not been loaded in this session yet.',
+    'Seu aceite já foi registrado para este documento.' => 'Your acceptance has already been recorded for this document.',
+    'Seu aceite já foi registrado: não é possível recusar depois de assinar.' => 'Your acceptance has already been recorded: you cannot refuse after signing.',
+    'O prazo para assinar este documento terminou.' => 'The deadline to sign this document has passed.',
+    'Ainda não é a sua vez de assinar este documento.' => 'It is not your turn to sign this document yet.',
+    'Marque a caixa "{label}" para continuar.' => 'Tick the box "{label}" to continue.',
+    'Preencha o campo "{label}" para continuar.' => 'Fill in the field "{label}" to continue.',
+    'O campo "{label}" aceita no máximo {max} caracteres.' => 'The field "{label}" accepts at most {max} characters.',
+    'O CPF informado em "{label}" não é válido. Confira os números digitados.' => 'The CPF entered in "{label}" is not valid. Check the digits you typed.',
+    'Antes de concluir, envie: {list}.' => 'Before finishing, send: {list}.',
+    'Escolha um dos idiomas disponíveis.' => 'Choose one of the available languages.',
+
+    // -- Copy for follow-up and receipt ------------------------------------------------
+    'Você recebeu uma cópia deste documento para acompanhamento. Os participantes concluíram o processo.' => 'You received a copy of this document for follow-up. The participants have completed the process.',
+    'Você recebeu este documento para acompanhamento. Não é necessário assinar nem aprovar; você receberá a cópia final quando os participantes concluírem.' => 'You received this document for follow-up. You do not need to sign or approve; you will receive the final copy when the participants finish.',
+    'A coleta foi encerrada por recusa de um participante. Não existe arquivo final e nenhuma assinatura criptográfica foi aplicada.' => 'Collection was closed because a participant refused. There is no final file and no cryptographic signature was applied.',
+    'O prazo para assinatura terminou antes de todos os aceites. Não existe arquivo final e nenhuma assinatura criptográfica foi aplicada.' => 'The signing deadline ended before all acceptances. There is no final file and no cryptographic signature was applied.',
+    'O remetente cancelou a solicitação. Não existe arquivo final e nenhuma assinatura criptográfica foi aplicada.' => 'The sender canceled the request. There is no final file and no cryptographic signature was applied.',
+    'A coleta de aceites ainda está em andamento. O arquivo final e o resumo SHA-256 dele só existem depois que todos os participantes concluírem.' => 'Collection of acceptances is still in progress. The final file and its SHA-256 digest only exist after all participants finish.',
+    'Concluído como aceite eletrônico com evidências, sem assinatura criptográfica. Nenhum certificado foi aplicado ao arquivo, e leitores de PDF não devem indicar nenhuma assinatura nele. A manifestação de vontade de cada participante está registrada no relatório de evidências anexado ao arquivo; a integridade do arquivo pode ser conferida comparando o resumo SHA-256 dele com o resumo final publicado nesta página.' => 'Completed as an electronic acceptance with evidence, without a cryptographic signature. No certificate was applied to the file, and PDF readers should not show any signature in it. Each participant\'s expression of will is recorded in the evidence report attached to the file; the integrity of the file can be checked by comparing its SHA-256 digest with the final digest published on this page.',
+    'O arquivo final recebeu uma assinatura criptográfica no perfil {profile}, aplicada pela operadora {operator} com certificado digital de titularidade da própria operadora. Ela identifica quem consolidou e lacrou o arquivo e permite detectar alterações feitas depois do lacre. Não é a assinatura pessoal de nenhum participante nem um certificado emitido em nome deles: a manifestação de vontade de cada um é o aceite eletrônico registrado no relatório de evidências.' => 'The final file received a cryptographic signature in the {profile} profile, applied by the operator {operator} with a digital certificate held by the operator itself. It identifies who consolidated and sealed the file and makes it possible to detect changes made after the seal. It is not the personal signature of any participant, nor a certificate issued in their name: each participant\'s expression of will is the electronic acceptance recorded in the evidence report.',
+    'O arquivo final recebeu uma assinatura criptográfica no perfil {profile}, aplicada pela operadora {operator} com certificado digital de titularidade da própria operadora. Ela identifica quem consolidou e lacrou o arquivo e permite detectar alterações feitas depois do lacre. Não é a assinatura pessoal de nenhum participante nem um certificado emitido em nome deles: a manifestação de vontade de cada um é o aceite eletrônico registrado no relatório de evidências. Atenção: a assinatura foi aplicada com um certificado de AMBIENTE DE TESTE, sem valor para uso real. Este certificado não é ICP-Brasil.' => 'The final file received a cryptographic signature in the {profile} profile, applied by the operator {operator} with a digital certificate held by the operator itself. It identifies who consolidated and sealed the file and makes it possible to detect changes made after the seal. It is not the personal signature of any participant, nor a certificate issued in their name: each participant\'s expression of will is the electronic acceptance recorded in the evidence report. Warning: the signature was applied with a TEST ENVIRONMENT certificate, with no value for real use. This certificate is not ICP-Brasil.',
+
+    // -- Photos (props `identity_capture` and responses) --------------------------------
+    'Fotos para o registro do aceite' => 'Photos for the acceptance record',
+    'Estas fotos ficam anexadas ao registro do seu aceite como imagens enviadas por você. Elas não são usadas para verificar sua identidade: não há comparação entre rostos, análise da imagem nem leitura automática do documento.' => 'These photos are attached to the record of your acceptance as images sent by you. They are not used to verify your identity: there is no face comparison, no image analysis and no automatic reading of the document.',
+    'Foto do rosto' => 'Face photo',
+    'Foto do documento (frente)' => 'Photo of the document (front)',
+    'Foto do documento (verso)' => 'Photo of the document (back)',
+    'Vídeo curto' => 'Short video',
+    'Tire uma foto do seu rosto, de frente e com boa iluminação.' => 'Take a photo of your face, facing the camera and with good lighting.',
+    'Fotografe a frente do seu documento com foto, sem cortar as bordas.' => 'Photograph the front of your photo ID, without cutting off the edges.',
+    'Fotografe o verso do mesmo documento.' => 'Photograph the back of the same document.',
+    'Tire ou escolha uma foto para enviar.' => 'Take or choose a photo to send.',
+    'A foto não pôde ser recebida. Tente de novo.' => 'The photo could not be received. Try again.',
+    'A foto é maior que {size} MB.' => 'The photo is larger than {size} MB.',
+    'Nenhuma imagem foi recebida. Tire a foto novamente.' => 'No image was received. Take the photo again.',
+    'A foto é maior que {size} MB. Tire a foto novamente ou envie uma imagem menor.' => 'The photo is larger than {size} MB. Take the photo again or send a smaller image.',
+    'Imagens SVG não são aceitas. Envie uma foto em JPEG ou PNG.' => 'SVG images are not accepted. Send a JPEG or PNG photo.',
+    'O arquivo enviado não é uma foto em JPEG ou PNG.' => 'The file sent is not a JPEG or PNG photo.',
+    'A foto está corrompida ou não pôde ser lida.' => 'The photo is corrupted or could not be read.',
+    'A foto tem {width}×{height} pixels; o limite é {limit} megapixels.' => 'The photo has {width}×{height} pixels; the limit is {limit} megapixels.',
+    'Não foi possível processar a foto nesta instalação.' => 'The photo could not be processed in this installation.',
+    'Não foi possível processar a foto.' => 'The photo could not be processed.',
+    'Não foi possível redimensionar a foto.' => 'The photo could not be resized.',
+    'Não foi possível verificar o tipo da foto nesta instalação.' => 'The photo type could not be checked in this installation.',
+    'A foto é grande demais para ser processada. Envie uma imagem com resolução menor.' => 'The photo is too large to be processed. Send an image with a lower resolution.',
+    'Muitas fotos enviadas em pouco tempo. Aguarde alguns minutos e tente de novo.' => 'Too many photos sent in a short time. Wait a few minutes and try again.',
+
+    // -- Short video (props `identity_video` and responses) -----------------------------
+    'Vídeo curto para o registro do aceite' => 'Short video for the acceptance record',
+    'Grave um vídeo curto do seu rosto, de frente e com boa iluminação. O vídeo é gravado sem som.' => 'Record a short video of your face, facing the camera and with good lighting. The video is recorded without sound.',
+    'Quem enviou o documento pediu um vídeo curto do seu rosto para anexar ao registro do seu aceite, junto com a data, a hora e os demais dados da assinatura.' => 'The sender asked for a short video of your face to attach to the record of your acceptance, together with the date, time and other signing data.',
+    'O vídeo fica guardado de forma cifrada e só pode ser assistido por quem enviou o documento e pelas pessoas da conta dessa pessoa que têm acesso a este documento. Ele não aparece no PDF assinado nem na página pública de verificação.' => 'The video is stored encrypted and can only be watched by the sender and by the people in the sender\'s account who have access to this document. It does not appear in the signed PDF or on the public verification page.',
+    'O vídeo não é usado para verificar sua identidade: a plataforma não compara rostos, não analisa o vídeo e não confere quem aparece nele. É só um registro que você mesmo enviou.' => 'The video is not used to verify your identity: the platform does not compare faces, does not analyze the video and does not check who appears in it. It is only a record that you sent yourself.',
+    'Autorizo gravar e enviar um vídeo curto do meu rosto, sem som, para ficar guardado junto com o registro do meu aceite pelo prazo informado, visível só para quem enviou o documento e para quem tem acesso a ele na conta dessa pessoa.' => 'I authorize recording and sending a short video of my face, without sound, to be kept with the record of my acceptance for the period stated, visible only to the sender and to those who have access to it in the sender\'s account.',
+    'Se o navegador não gravar vídeo ou a câmera for negada, você pode enviar um vídeo curto gravado pela câmera do aparelho (WebM ou MP4) ou abrir o link em outro aparelho. Sem o vídeo não é possível concluir, porque quem enviou o documento o exigiu; se preferir não enviar, fale com essa pessoa ou recuse o documento.' => 'If the browser does not record video or the camera is denied, you can send a short video recorded with your device\'s camera (WebM or MP4) or open the link on another device. Without the video you cannot finish, because the sender required it; if you prefer not to send it, contact the sender or refuse the document.',
+    'Grave ou escolha um vídeo para enviar.' => 'Record or choose a video to send.',
+    'O vídeo não pôde ser recebido. Tente de novo.' => 'The video could not be received. Try again.',
+    'O vídeo é maior que {size} MB. Grave de novo, mais curto.' => 'The video is larger than {size} MB. Record it again, shorter.',
+    'Para enviar o vídeo, marque a autorização de gravação.' => 'To send the video, tick the recording authorization.',
+    'Vídeo curto registrado.' => 'Short video recorded.',
+    'Muitos vídeos enviados em pouco tempo. Aguarde alguns minutos e tente de novo.' => 'Too many videos sent in a short time. Wait a few minutes and try again.',
+    'O vídeo passa de {seconds} segundos. Grave de novo, mais curto.' => 'The video is longer than {seconds} seconds. Record it again, shorter.',
+    'O arquivo enviado não é um vídeo WebM ou MP4 válido. Grave de novo pela câmera desta página.' => 'The file sent is not a valid WebM or MP4 video. Record it again with this page\'s camera.',
+
+    // -- Delegation --------------------------------------------------------------------
+    'O campo nome é obrigatório.' => 'The name field is required.',
+    'O campo e-mail é obrigatório.' => 'The email field is required.',
+    'O campo motivo é obrigatório.' => 'The reason field is required.',
+    'O campo nome deve ter pelo menos {min} caracteres.' => 'The name must have at least {min} characters.',
+    'O campo nome não pode ter mais de {max} caracteres.' => 'The name may not have more than {max} characters.',
+    'O campo e-mail não pode ter mais de {max} caracteres.' => 'The email may not have more than {max} characters.',
+    'O campo motivo não pode ter mais de {max} caracteres.' => 'The reason may not have more than {max} characters.',
+    'O campo e-mail deve ser um endereço de e-mail válido.' => 'The email must be a valid email address.',
+    'Sua sessão expirou. Confirme o código de novo antes de delegar.' => 'Your session has expired. Confirm the code again before delegating.',
+    'Informe o e-mail de outra pessoa: não é possível delegar para você mesmo.' => 'Enter someone else\'s email: you cannot delegate to yourself.',
+    'Pedido enviado a quem enviou o documento. Até a confirmação, a participação continua sendo sua.' => 'Request sent to the sender. Until it is confirmed, the participation remains yours.',
+    'Pronto: o convite foi enviado para {email}. Este link deixou de valer para você.' => 'Done: the invitation was sent to {email}. This link is no longer valid for you.',
+    'Este documento não permite delegação.' => 'This document does not allow delegation.',
+    'Quem enviou marcou a sua participação como pessoal: ela não pode ser delegada.' => 'The sender marked your participation as personal: it cannot be delegated.',
+    'Este documento chegou a você por delegação e não pode ser repassado de novo.' => 'This document reached you by delegation and cannot be passed on again.',
+    'Sua resposta já foi registrada: não é possível delegar depois de aceitar ou recusar.' => 'Your response has already been recorded: you cannot delegate after accepting or refusing.',
+    'Esta pessoa já participa deste documento. Indique alguém que ainda não esteja nele.' => 'This person already takes part in this document. Choose someone who is not in it yet.',
+    'Você já pediu para delegar este documento. Aguarde a resposta de quem enviou.' => 'You have already asked to delegate this document. Wait for the sender\'s response.',
+    'O limite de pedidos de delegação para este documento foi atingido.' => 'The limit of delegation requests for this document has been reached.',
+    'O limite diário de delegações foi atingido. Tente mais tarde ou fale com quem enviou.' => 'The daily limit of delegations has been reached. Try later or contact the sender.',
+    'Este documento não está disponível para delegação agora.' => 'This document is not available for delegation right now.',
+
+    // -- Field box hints (SignerPresentation::placeholder; I-3F integration) -------------
+    'Clique para assinar aqui' => 'Click to sign here',
+    'Clique para assinar como testemunha' => 'Click to sign as a witness',
+    'Rubrique aqui' => 'Initial here',
+    'Seu nome completo' => 'Your full name',
+    'Preencha este campo' => 'Fill in this field',
+    'Testemunha' => 'Witness',
+];

@@ -51,7 +51,12 @@ use App\Models\User;
 use App\Models\VerificationRecord;
 use App\Models\WebhookEndpoint;
 use App\Services\Affiliates\CommissionLedger;
+use App\Services\Anchors\TemplateAnchorRules;
 use App\Services\Branding\BrandingManager;
+use App\Services\Envelopes\Delegation\DelegationPolicy;
+use App\Services\Envelopes\Steps\SigningStepPlan;
+use App\Services\Identity\IdentityVideos;
+use App\Services\Identity\Models\IdentityVideoRequirement;
 use App\Services\PublicForms\PublicFormManager;
 use App\Services\PublicForms\PublicFormSchema;
 use App\Services\Retention\LegalHolds;
@@ -120,6 +125,14 @@ class DemoOrganizationSeeder extends Seeder
      */
     private const PHASE3_PART1_PLAN_FEATURES = ['a3_signing', 'govbr_return'];
 
+    /**
+     * Fase 3, parte 2 — onda F (docs/fase-3/onda-f-relatorio.md §5): itens de PLANO — ligados na
+     * Horizonte, desligados na Vega. A interface só aparece com os interruptores globais ligados.
+     */
+    private const PHASE3_WAVE_F_PLAN_FEATURES = [
+        'bulk_generation', 'field_anchors', 'ocr', 'conditional_steps', 'delegation', 'identity_video', 'multilingual',
+    ];
+
     /** Diretório (em storage/app/private) do PKCS#12 de TESTE do simulador de componente local. */
     public const DEMO_PHASE3_DIR = 'demo/fase-3';
 
@@ -164,8 +177,8 @@ class DemoOrganizationSeeder extends Seeder
         // os itens da onda A; o da Vega (Grátis) não. O recurso só aparece quando o
         // interruptor GLOBAL também está ligado (`ASSINAVELOX_FEATURE_*` no .env) — desligado,
         // que é o padrão e o que os testes usam, a demonstração é exatamente a da Fase 1.
-        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true))])->save();
-        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false))])->save();
+        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, true))])->save();
+        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, false))])->save();
 
         DB::transaction(function () use ($free, $professional): void {
             $hasPlatformCertificate = CertificateReference::query()
@@ -386,6 +399,99 @@ class DemoOrganizationSeeder extends Seeder
         $this->seedHorizonteWaveC($org, $owner);
         $this->seedHorizonteWaveD($org, $owner, $subscription, $approvedPayment);
         $this->seedHorizontePhase3PartOne($org, $approvedPayment);
+        $this->seedHorizonteWaveF($org, $owner);
+    }
+
+    /**
+     * Fase 3, parte 2 — onda F (docs/fase-3/onda-f-relatorio.md §5) na Horizonte, pelos serviços
+     * REAIS (nenhum segredo, nenhum arquivo, nenhuma chamada ao pdftool):
+     *  - regra de âncora no modelo "Contrato de locação residencial": SUGERE a data do locatário
+     *    abaixo do texto "Locatário" — só sugestão, revisada no editor;
+     *  - "Termo de vistoria de entrada — Sala 302" (pronto): duas etapas, delegação permitida com
+     *    confirmação (o primeiro participante é pessoal) e vídeo curto exigido do segundo;
+     *  - "Aditivo de reajuste — Contrato 2024/118" (em andamento): primeiro participante em inglês
+     *    (fuso de Nova York), com vídeo exigido e delegação permitida com confirmação; o segundo
+     *    em espanhol. A exigência e a política são gravadas direto, como teriam ficado no preparo.
+     * As flags de plano ficam ligadas na Horizonte e desligadas na Vega; os interruptores globais
+     * são ligados só durante a semeadura e voltam ao valor do .env.
+     */
+    private function seedHorizonteWaveF(Organization $org, User $owner): void
+    {
+        $previous = [];
+
+        foreach (self::PHASE3_WAVE_F_PLAN_FEATURES as $flag) {
+            $previous[$flag] = config("assinavelox.features.{$flag}");
+            config()->set("assinavelox.features.{$flag}", true);
+        }
+
+        $ownerMembership = Membership::query()->where('organization_id', $org->id)->where('user_id', $owner->id)->firstOrFail();
+
+        try {
+            CurrentOrganization::instance()->runAs($org, function () use ($org, $owner): void {
+                $template = Template::query()->where('organization_id', $org->id)->where('name', 'Contrato de locação residencial')->first();
+
+                if ($template !== null) {
+                    app(TemplateAnchorRules::class)->replace($template, $owner, [[
+                        'pattern' => 'Locatário',
+                        'field_type' => 'date',
+                        'role_position' => 2,
+                        'placement' => 'below',
+                        'offset_x_pt' => 0,
+                        'offset_y_pt' => 4,
+                        'width_pt' => 100,
+                        'height_pt' => 18,
+                        'required' => true,
+                        'occurrence' => 'first',
+                    ]]);
+                }
+
+                $ready = Envelope::query()->where('organization_id', $org->id)->where('title', 'Termo de vistoria de entrada — Sala 302')->first();
+                $readySigners = $ready !== null
+                    ? Recipient::query()->where('envelope_id', $ready->id)->orderBy('order_index')->orderBy('id')->get()->values()
+                    : collect();
+
+                if ($ready !== null && $readySigners->count() >= 2) {
+                    app(SigningStepPlan::class)->update($ready, true, [
+                        ['name' => 'Vistoriador', 'recipients' => [$readySigners[0]->ulid]],
+                        ['name' => 'Locatário', 'recipients' => [$readySigners[1]->ulid]],
+                    ]);
+                    DelegationPolicy::update($ready, ['allow' => true, 'requires_confirmation' => true, 'personal' => [$readySigners[0]->ulid]]);
+                    app(IdentityVideos::class)->setRequirement($ready, $readySigners[1], true, 10, $owner);
+                }
+
+                $running = Envelope::query()->where('organization_id', $org->id)->where('title', 'Aditivo de reajuste — Contrato 2024/118')->first();
+
+                if ($running !== null) {
+                    $people = Recipient::query()->where('envelope_id', $running->id)->orderBy('order_index')->orderBy('id')->get()->values();
+                    $first = $people->get(0);
+                    $second = $people->get(1);
+
+                    $first?->forceFill(['locale' => 'en', 'timezone' => 'America/New_York'])->save();
+                    $second?->forceFill(['locale' => 'es', 'timezone' => 'America/Argentina/Buenos_Aires'])->save();
+
+                    if ($first !== null) {
+                        $requirement = new IdentityVideoRequirement;
+                        $requirement->forceFill([
+                            'organization_id' => $org->id,
+                            'envelope_id' => $running->id,
+                            'recipient_id' => $first->id,
+                            'max_seconds' => 10,
+                            'updated_by_user_id' => $owner->id,
+                        ])->save();
+                    }
+
+                    $running->forceFill(['settings' => array_replace((array) ($running->settings ?? []), [
+                        DelegationPolicy::SETTING_ALLOW => true,
+                        DelegationPolicy::SETTING_CONFIRM => true,
+                        DelegationPolicy::SETTING_PERSONAL => [],
+                    ])])->save();
+                }
+            }, $ownerMembership);
+        } finally {
+            foreach ($previous as $flag => $value) {
+                config()->set("assinavelox.features.{$flag}", $value);
+            }
+        }
     }
 
     /**

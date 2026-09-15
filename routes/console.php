@@ -180,6 +180,14 @@ Schedule::command('public-forms:purge-submissions')
     ->runInBackground()
     ->onOneServer();
 
+// Fase 3, onda F (revisão adversarial) — lote de geração em lote nunca confirmado: planilha e
+// linhas saem depois de `bulk_generation.unconfirmed_retention_days` (docs/fase-3/geracao-em-lote.md
+// §8). Idempotente; inerte sem lote antigo (sempre, com a flag `bulk_generation` desligada).
+Schedule::command('bulk-generations:prune-unconfirmed')
+    ->dailyAt('04:50')
+    ->withoutOverlapping(30)
+    ->onOneServer();
+
 /*
 | Fase 2, onda C (K-RET) — retenção configurável e preservação (docs/fase-2/retencao-e-preservacao.md).
 |

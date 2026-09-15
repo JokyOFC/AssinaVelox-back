@@ -16,11 +16,14 @@ use App\Models\SignatureAcceptance;
 use App\Services\Branding\BrandingPresenter;
 use App\Services\Branding\Stamp\StampEvidence;
 use App\Services\Envelopes\Finalization\Support\QrCode;
+use App\Services\Envelopes\Steps\FlowEvidence;
+use App\Services\Identity\VideoEvidence;
 use App\Services\InPerson\InPersonEvidence;
 use App\Services\Signing\Channels\SenderPins;
 use App\Services\Signing\Channels\SimulatedChannelEvidence;
 use App\Services\Signing\ConsentText;
 use App\Support\IpDisplay;
+use App\Support\Locale\SignerLocale;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
@@ -144,6 +147,8 @@ class EvidenceData
             // `branding` + logo salvo) e a linha do carimbo visual. Null = página da Fase 1.
             'branding' => app(BrandingPresenter::class)->forEvidence($organization),
             'stamp' => StampEvidence::forEnvelope($envelope, (int) $sentVersion->getKey()),
+            // Fase 3 §3.3 (F-FLOW): a chave só existe com etapas ou delegações no envelope.
+            ...(($flow = FlowEvidence::forEnvelope($envelope, $timezone)) !== null ? ['flow' => $flow] : []),
         ];
     }
 
@@ -233,6 +238,10 @@ class EvidenceData
         $organization = $envelope->organization;
         $pins = app(SenderPins::class);
         $inPerson = collect(InPersonEvidence::forEnvelope($envelope))->keyBy('recipient_id')->all();
+        // Fase 3 §3.3 (F-VIDEO): o vídeo curto é só CITADO (tipo, SHA-256, origem declarada); nunca embutido.
+        $videos = app(VideoEvidence::class)->pdfLines($envelope);
+        // Fase 3 §3.3 (F-FLOW): delegação e etapa pulada por participante (sem elas, vazio).
+        $flowNotes = FlowEvidence::participantNotes($envelope, $timezone);
 
         $rows = [];
 
@@ -263,6 +272,12 @@ class EvidenceData
                     .($pins->requiredFor($recipient) ? ' + PIN do remetente' : ''),
                 // Fase 2 §2.6 (C-PRES): aceite registrado no dispositivo presencial.
                 'in_person_label' => $inPerson[$recipient->ulid]['label'] ?? null,
+                // F-VIDEO: a chave só existe para quem enviou vídeo (sem vídeo, dados idênticos).
+                ...(isset($videos[$recipient->ulid]) ? ['identity_video_label' => $videos[$recipient->ulid]] : []),
+                // F-I18N: a chave só existe quando o aceite registrou o idioma exibido (flag ligada).
+                ...($acceptance?->display_locale !== null ? ['display_locale_label' => SignerLocale::evidenceLabel($acceptance->display_locale)] : []),
+                // F-FLOW: a chave só existe para quem delegou, recebeu por delegação ou ficou numa etapa pulada.
+                ...($flowNotes[(int) $recipient->getKey()] ?? []),
                 'signed_at' => $this->local($acceptance->accepted_at ?? $recipient->signed_at, $timezone),
                 'signed_at_utc' => $acceptance?->accepted_at->copy()->utc()->format('d/m/Y H:i:s'),
                 'refused_at' => $this->local($recipient->refused_at, $timezone),
@@ -293,6 +308,13 @@ class EvidenceData
         // sempre que a lista configurada incluir o aceite.
         if (in_array(AuditEventType::AcceptanceRecorded->value, $types, true)) {
             $types[] = AuditEventType::ApprovalRecorded->value;
+            // Fase 3 §3.3 (F-FLOW): delegação e etapas também são evidência. Só existem com as
+            // flags `delegation`/`conditional_steps`; sem elas a linha do tempo é a de antes.
+            $types[] = AuditEventType::DelegationRequested->value;
+            $types[] = AuditEventType::RecipientDelegated->value;
+            $types[] = AuditEventType::DelegationRejected->value;
+            $types[] = AuditEventType::EnvelopeStepStarted->value;
+            $types[] = AuditEventType::EnvelopeStepSkipped->value;
         }
         $limit = max(10, (int) $this->config->get('assinavelox.evidence.timeline_limit', 200));
 

@@ -19,7 +19,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { plural } from '@/lib/format';
+import { useI18n } from '@/i18n';
 
 export interface SignerDocumentProps {
     /** Rota autorizada que transmite o PDF apresentado (`sign.document`). */
@@ -81,6 +81,7 @@ export function SignerDocument({
     onStatusChange,
     stampOwner = null,
 }: SignerDocumentProps) {
+    const { t, tp } = useI18n();
     const pdf = usePdfDocument(pdfUrl);
     const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
@@ -110,6 +111,13 @@ export function SignerDocument({
             );
         };
 
+    const stamp = (current: number) =>
+        t('document.stamp', {
+            code: displayCode,
+            page: current,
+            pages: pages || 1,
+        });
+
     return (
         <div className="flex min-w-0 flex-col gap-3">
             <div className="border-border bg-card text-text-secondary flex flex-wrap items-center justify-between gap-3 rounded-[10px] border px-3.5 py-2.5 text-[13px]">
@@ -117,14 +125,14 @@ export function SignerDocument({
                     <FileText className="text-primary size-4 shrink-0" />
                     <b className="text-foreground truncate">{title}</b>
                     <span className="whitespace-nowrap">
-                        · {plural(pages, 'página')}
+                        · {tp('common.pages', pages)}
                     </span>
                 </span>
                 <span className="flex gap-1.5">
                     <Button asChild variant="outline" size="xs">
                         <a href={pdfUrl} download>
                             <Download className="size-3.5" />
-                            Baixar PDF
+                            {t('document.download')}
                         </a>
                     </Button>
                     <Button
@@ -136,7 +144,7 @@ export function SignerDocument({
                         }}
                     >
                         <Maximize2 className="size-3.5" />
-                        Ampliar
+                        {t('document.expand')}
                     </Button>
                 </span>
             </div>
@@ -148,7 +156,7 @@ export function SignerDocument({
                 zoom={zoom}
                 onZoomChange={setZoom}
                 maxPageWidth={680}
-                stamp={`${displayCode} · pág. ${page}/${pages || 1}`}
+                stamp={stamp(page)}
                 overlay={overlay(page)}
                 toolbarEnd={
                     nextPending && onGoToNextPending ? (
@@ -157,7 +165,7 @@ export function SignerDocument({
                             size="xxs"
                             onClick={onGoToNextPending}
                         >
-                            Próximo campo
+                            {t('document.next_field')}
                             <ChevronRight className="size-3" />
                         </Button>
                     ) : undefined
@@ -179,7 +187,7 @@ export function SignerDocument({
                             zoom={zoom}
                             onZoomChange={setZoom}
                             maxPageWidth={1000}
-                            stamp={`${displayCode} · pág. ${expandedPage}/${pages || 1}`}
+                            stamp={stamp(expandedPage)}
                             overlay={overlay(expandedPage)}
                         />
                     </div>

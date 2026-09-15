@@ -7,7 +7,7 @@ import {
 } from '@/components/identity/camera-capture-dialog';
 import { postJson } from '@/components/identity/http';
 import { Button } from '@/components/ui/button';
-import { formatDateTime, plural } from '@/lib/format';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import type { IdentityCaptureItem, IdentityCaptureStep } from '@/types/models';
 
@@ -18,7 +18,10 @@ interface UploadResponse {
     code?: string;
 }
 
-/** Texto próprio da tela, somado ao `notice` do servidor. */
+/**
+ * Texto próprio da tela, somado ao `notice` do servidor (PT-BR, referência). A tela usa a
+ * chave `capture.evidence_note` do dicionário, no idioma da página (F-I18N).
+ */
 export const CAPTURE_EVIDENCE_NOTE =
     'A imagem é guardada como evidência do seu aceite e não é verificação de identidade.';
 
@@ -38,6 +41,8 @@ export function CaptureStepCard({
     onChange: (next: IdentityCaptureStep) => void;
     className?: string;
 }) {
+    const i18n = useI18n();
+    const { t, tp } = i18n;
     const [active, setActive] = useState<IdentityCaptureItem | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
@@ -46,7 +51,7 @@ export function CaptureStepCard({
 
     const upload = async (item: IdentityCaptureItem, image: CapturedImage) => {
         if (!item.upload_url) {
-            setUploadError('Confirme o código antes de enviar fotos.');
+            setUploadError(t('capture.confirm_code_first'));
 
             return;
         }
@@ -68,32 +73,26 @@ export function CaptureStepCard({
         if (response.ok && response.body?.identity_capture) {
             onChange(response.body.identity_capture);
             setActive(null);
-            toast.success(`${item.label} registrada.`);
+            toast.success(t('capture.saved', { label: item.label }));
 
             return;
         }
 
         if (response.status === 0) {
             // Tempo esgotado ou rede: não sabemos se chegou (T5). Reenviar substitui a anterior.
-            setUploadError(
-                'Não recebemos a confirmação do envio. Verifique a conexão e toque em “Usar esta foto” de novo — se a foto anterior tiver chegado, ela é substituída.',
-            );
+            setUploadError(t('capture.error.unknown_delivery'));
 
             return;
         }
 
         if (response.status === 404) {
-            setUploadError(
-                'Esta foto não é mais pedida para você. Recarregue a página.',
-            );
+            setUploadError(t('capture.error.not_required'));
 
             return;
         }
 
         if (response.status === 419 || response.status === 401) {
-            setUploadError(
-                'Sua sessão expirou. Recarregue a página e confirme o código de novo.',
-            );
+            setUploadError(t('common.session_expired'));
 
             return;
         }
@@ -101,7 +100,7 @@ export function CaptureStepCard({
         setUploadError(
             response.body?.errors?.image?.[0] ??
                 response.body?.message ??
-                'Não foi possível enviar a foto. Tente de novo.',
+                t('capture.error.generic'),
         );
     };
 
@@ -119,17 +118,20 @@ export function CaptureStepCard({
                     {step.title}
                 </h2>
                 <span className="text-muted-foreground tabular text-[12px]">
-                    {done} de {step.items.length}
+                    {t('common.progress', {
+                        done,
+                        total: step.items.length,
+                    })}
                 </span>
             </div>
 
             <p className="border-border bg-sidebar text-text-secondary flex items-start gap-2 rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
                 <Info className="text-primary mt-0.5 size-3.5 shrink-0" />
                 <span>
-                    {CAPTURE_EVIDENCE_NOTE} {step.notice}
+                    {t('capture.evidence_note')} {step.notice}
                     {step.retention_days > 0
-                        ? ` As fotos ficam guardadas por até ${plural(step.retention_days, 'dia')}.`
-                        : ' As fotos ficam guardadas enquanto o documento existir na conta de quem enviou.'}
+                        ? tp('capture.retention', step.retention_days)
+                        : t('capture.retention_kept')}
                 </span>
             </p>
 
@@ -155,7 +157,9 @@ export function CaptureStepCard({
                             </span>
                             <span className="text-muted-foreground block text-[12px] leading-[1.45]">
                                 {item.captured
-                                    ? `Enviada ${formatDateTime(item.captured_at)}${
+                                    ? `${t('capture.sent', {
+                                          date: i18n.dateTime(item.captured_at),
+                                      })}${
                                           item.width && item.height
                                               ? ` · ${item.width}×${item.height}`
                                               : ''
@@ -173,7 +177,9 @@ export function CaptureStepCard({
                                 setActive(item);
                             }}
                         >
-                            {item.captured ? 'Refazer' : 'Tirar ou enviar foto'}
+                            {item.captured
+                                ? t('capture.redo')
+                                : t('capture.take')}
                         </Button>
                     </li>
                 ))}
@@ -205,15 +211,20 @@ export function CaptureStepCard({
  * há como enviar (`upload_url` nulo), então só a lista e o mesmo aviso.
  */
 export function CaptureStepPreview({ step }: { step: IdentityCaptureStep }) {
+    const { t, rich } = useI18n();
+
     return (
         <div className="border-border bg-sidebar flex items-start gap-2.5 rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
             <Camera className="text-primary mt-0.5 size-4 shrink-0" />
             <span className="text-text-secondary">
-                Depois do código, você vai enviar:{' '}
-                <b className="text-foreground">
-                    {step.items.map((item) => item.label).join(', ')}
-                </b>
-                . {CAPTURE_EVIDENCE_NOTE}
+                {rich('capture.preview', {
+                    items: (
+                        <b className="text-foreground">
+                            {step.items.map((item) => item.label).join(', ')}
+                        </b>
+                    ),
+                    note: t('capture.evidence_note'),
+                })}
             </span>
         </div>
     );

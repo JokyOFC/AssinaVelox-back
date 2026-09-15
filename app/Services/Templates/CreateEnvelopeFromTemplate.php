@@ -18,6 +18,7 @@ use App\Models\TemplateField;
 use App\Models\TemplateRole;
 use App\Models\TemplateVersion;
 use App\Models\User;
+use App\Services\Anchors\TemplateAnchorRules;
 use App\Services\Documents\DocumentAuditTrail;
 use App\Services\Documents\DocumentIntake;
 use App\Services\Documents\DocumentStorage;
@@ -73,12 +74,20 @@ final class CreateEnvelopeFromTemplate
 
     /**
      * @param  array{title?: string|null, values?: array<string, mixed>|null, participants?: array<string, mixed>|null}  $input
+     * @param  TemplateVersion|null  $pinnedVersion  Fase 3 §3.1 (geração em lote): versão FIXADA no lote em vez da atual
+     * @param  array<string, scalar>  $auditContext  Fase 3 §3.1: acrescentado ao payload de `envelope.created` e `template.used`
      *
      * @throws ValidationException
      */
-    public function handle(Template $template, User $user, array $input, ?Request $request = null): Envelope
+    public function handle(Template $template, User $user, array $input, ?Request $request = null, ?TemplateVersion $pinnedVersion = null, array $auditContext = []): Envelope
     {
-        $version = $template->currentVersion()->with(['variables', 'roles', 'fields.role'])->first();
+        if ($pinnedVersion !== null && (int) $pinnedVersion->template_id !== (int) $template->getKey()) {
+            throw ValidationException::withMessages(['template' => 'Esta versão não pertence ao modelo.']);
+        }
+
+        $version = $pinnedVersion !== null
+            ? $pinnedVersion->loadMissing(['variables', 'roles', 'fields.role'])
+            : $template->currentVersion()->with(['variables', 'roles', 'fields.role'])->first();
 
         if (! $template->isUsable() || ! $version instanceof TemplateVersion) {
             throw ValidationException::withMessages(['template' => 'Este modelo não está disponível para uso.']);
@@ -105,13 +114,13 @@ final class CreateEnvelopeFromTemplate
         $envelope = null;
 
         try {
-            return DB::transaction(function () use ($template, $version, $user, $title, $participants, $formatted, $request, &$envelope): Envelope {
+            return DB::transaction(function () use ($template, $version, $user, $title, $participants, $formatted, $request, $auditContext, &$envelope): Envelope {
                 $envelope = $this->newEnvelope($template, $user, $title);
 
                 EnvelopeAudit::record($envelope, AuditEventType::EnvelopeCreated, [
                     'template' => $template->ulid,
                     'template_version' => $version->ulid,
-                ]);
+                ] + $auditContext);
 
                 $this->document($envelope, $version, $user, $title, $formatted, $request);
 
@@ -135,7 +144,11 @@ final class CreateEnvelopeFromTemplate
                     'template_version' => $version->ulid,
                     'variables' => count($formatted),
                     'participants' => count($participants),
-                ], $envelope);
+                ] + $auditContext, $envelope);
+
+                // Fase 3 §3.2 (F-ANCHOR): regras de âncora do modelo → busca agendada após o
+                // commit; o resultado são SUGESTÕES revisadas no editor. Flag desligada: nada.
+                app(TemplateAnchorRules::class)->onTemplateUsed($template, $version, $envelope, $user);
 
                 EnvelopeReadiness::refresh($envelope);
 
@@ -169,7 +182,7 @@ final class CreateEnvelopeFromTemplate
      * Um participante (nome + e-mail) por papel, com as mesmas regras do passo 2 do wizard.
      *
      * @param  array<string, mixed>  $input  por ULID do papel
-     * @return array<string, array{name: string, email: string}>
+     * @return array<string, array{name: string, email: string, phone?: string}>
      *
      * @throws ValidationException
      */
@@ -185,6 +198,12 @@ final class CreateEnvelopeFromTemplate
                 'name' => is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '',
                 'email' => is_scalar($row['email'] ?? null) ? mb_strtolower(trim((string) $row['email'])) : '',
             ];
+
+            // Fase 3 §3.1: celular opcional (geração em lote com o canal SMS/WhatsApp ligado). O
+            // RecipientChannels do RecipientSync valida o E.164; sem a chave, nada muda.
+            if (is_scalar($row['phone'] ?? null) && trim((string) $row['phone']) !== '') {
+                $data[$role->ulid]['phone'] = trim((string) $row['phone']);
+            }
 
             $rules["participants.{$role->ulid}.name"] = ['required', 'string', 'min:2', 'max:120'];
             $rules["participants.{$role->ulid}.email"] = ['required', 'string', 'email:rfc', 'max:255'];
@@ -331,7 +350,7 @@ final class CreateEnvelopeFromTemplate
     }
 
     /**
-     * @param  array<string, array{name: string, email: string}>  $participants
+     * @param  array<string, array{name: string, email: string, phone?: string}>  $participants
      * @return array<int, Recipient> destinatário por id do papel do modelo
      */
     private function recipients(Envelope $envelope, TemplateVersion $version, array $participants): array
@@ -345,7 +364,7 @@ final class CreateEnvelopeFromTemplate
                 'role' => $role->name,
                 'participant_role' => $role->participant_role->value,
                 'order' => $position + 1,
-            ];
+            ] + (isset($participants[$role->ulid]['phone']) ? ['phone' => $participants[$role->ulid]['phone']] : []);
         }
 
         app(RecipientSync::class)->handle($envelope, [

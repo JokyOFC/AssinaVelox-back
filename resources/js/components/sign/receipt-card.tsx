@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { CopyButton } from '@/components/copy-button';
 import { Button } from '@/components/ui/button';
-import { formatDateTime, formatVerificationCode, plural } from '@/lib/format';
+import { type I18n, useI18n } from '@/i18n';
+import { formatVerificationCode } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { show as verifyShow } from '@/routes/verify';
 import type { AcceptanceAction } from '@/types/enums';
@@ -61,17 +62,28 @@ export interface SignerReceipt {
     }[];
 }
 
-/** Data e hora em UTC — o carimbo que a declaração de aceite referencia. */
-function formatUtc(value: string): string {
+/**
+ * Data e hora em UTC — o carimbo que a declaração de aceite referencia. Em PT-BR,
+ * exatamente o formato de sempre; nos demais idiomas, o estilo médio do idioma.
+ */
+function formatUtc(value: string, i18n: I18n): string {
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
         return value;
     }
 
-    const pad = (n: number) => String(n).padStart(2, '0');
+    if (i18n.isReference) {
+        const pad = (n: number) => String(n).padStart(2, '0');
 
-    return `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+        return `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+    }
+
+    return new Intl.DateTimeFormat(i18n.bcp47, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'UTC',
+    }).format(date);
 }
 
 export interface ReceiptCardProps {
@@ -98,6 +110,8 @@ export function ReceiptCard({
     finalizing = false,
     className,
 }: ReceiptCardProps) {
+    const i18n = useI18n();
+    const { t, tp, rich } = i18n;
     const code = formatVerificationCode(receipt.verification_code);
     const shortHash = (value: string) =>
         `${value.slice(0, 8)}…${value.slice(-4)}`;
@@ -120,17 +134,20 @@ export function ReceiptCard({
         !completed && !closed && (finalizing || receipt.pending_others === 0);
     const closedLine =
         closed === 'expired'
-            ? 'O prazo para assinatura terminou antes de todos os aceites, então a coleta foi encerrada e não haverá arquivo final. Seu aceite continua registrado e este comprovante segue válido como prova do que você fez.'
+            ? t('receipt.closed.expired')
             : closed === 'canceled'
-              ? 'O remetente cancelou esta solicitação, então a coleta foi encerrada e não haverá arquivo final. Seu aceite continua registrado e este comprovante segue válido como prova do que você fez.'
-              : 'Um participante recusou, então a coleta foi encerrada e não haverá arquivo final. Seu aceite continua registrado e este comprovante segue válido como prova do que você fez.';
+              ? t('receipt.closed.canceled')
+              : t('receipt.closed.refused');
     const closingLine = completed
-        ? 'O arquivo final já está disponível.'
+        ? t('receipt.closing.completed')
         : closed
           ? closedLine
           : lastSigner
-            ? 'Você foi o último a assinar: todos os aceites exigidos foram registrados e o arquivo final está sendo preparado. Assim que ficar pronto, ele aparece aqui e é enviado por e-mail a quem participou.'
-            : 'Você receberá o arquivo final quando todos os participantes concluírem.';
+            ? t('receipt.closing.last_signer')
+            : t('receipt.closing.waiting');
+
+    const fileName = (file: { position: number; name: string | null }) =>
+        file.name ?? t('sign.file_fallback', { position: file.position });
 
     return (
         <div className={cn('flex flex-col gap-4', className)}>
@@ -152,38 +169,40 @@ export function ReceiptCard({
             <div>
                 <h1 className="text-[20px] leading-[1.25] font-bold tracking-[-.01em]">
                     {completed
-                        ? 'Documento concluído'
+                        ? t('receipt.title.completed')
                         : closed
-                          ? 'Coleta encerrada'
+                          ? t('receipt.title.closed')
                           : lastSigner
-                            ? 'Aceites concluídos'
+                            ? t('receipt.title.last_signer')
                             : approval
-                              ? 'Você já aprovou'
-                              : 'Você já assinou'}
+                              ? t('receipt.title.approved')
+                              : t('receipt.title.signed')}
                 </h1>
                 <p className="text-text-secondary mt-2 text-[13.5px] leading-[1.55]">
                     <b className="text-foreground">
                         {approval
-                            ? 'Aprovação registrada.'
-                            : 'Aceite registrado.'}
+                            ? t('receipt.recorded_approval')
+                            : t('receipt.recorded_acceptance')}
                     </b>{' '}
-                    Sua manifestação foi gravada em{' '}
-                    {formatDateTime(receipt.signed_at)} (
-                    {formatUtc(receipt.signed_at)} UTC), autenticada por código
-                    enviado ao e-mail {emailMasked}. Código de verificação:{' '}
-                    <b className="text-foreground tabular">{code}</b>.{' '}
-                    {closingLine}
+                    {rich('receipt.statement', {
+                        local: i18n.dateTime(receipt.signed_at),
+                        utc: formatUtc(receipt.signed_at, i18n),
+                        email: emailMasked,
+                        code: <b className="text-foreground tabular">{code}</b>,
+                        closing: closingLine,
+                    })}
                 </p>
                 {stillWaiting && (
                     <p className="text-text-secondary mt-1.5 text-[13px]">
-                        Aguardando{' '}
-                        {plural(
-                            receipt.pending_others,
-                            receipt.action && receipt.action !== 'sign'
-                                ? 'participante'
-                                : 'signatário',
-                        )}
-                        .
+                        {receipt.action && receipt.action !== 'sign'
+                            ? tp(
+                                  'receipt.waiting_participants',
+                                  receipt.pending_others,
+                              )
+                            : tp(
+                                  'receipt.waiting_signers',
+                                  receipt.pending_others,
+                              )}
                     </p>
                 )}
             </div>
@@ -195,34 +214,54 @@ export function ReceiptCard({
             )}
 
             <dl className="border-border bg-sidebar grid grid-cols-[104px_1fr] gap-x-3 gap-y-1.5 rounded-[10px] border p-3.5 text-[12px]">
-                <dt className="text-muted-foreground">Comprovante</dt>
+                <dt className="text-muted-foreground">
+                    {t('receipt.dt.receipt')}
+                </dt>
                 <dd className="text-foreground font-semibold">
-                    {receipt.action_label ?? 'Aceite eletrônico'}
+                    {receipt.action_label ?? t('receipt.action_fallback')}
                 </dd>
-                <dt className="text-muted-foreground">Data e hora</dt>
-                <dd className="tabular">{formatDateTime(receipt.signed_at)}</dd>
-                <dt className="text-muted-foreground">Autenticação</dt>
+                <dt className="text-muted-foreground">
+                    {t('receipt.dt.datetime')}
+                </dt>
+                <dd className="tabular">{i18n.dateTime(receipt.signed_at)}</dd>
+                <dt className="text-muted-foreground">
+                    {t('receipt.dt.auth')}
+                </dt>
                 <dd>{receipt.auth_label}</dd>
-                <dt className="text-muted-foreground">Código</dt>
+                <dt className="text-muted-foreground">
+                    {t('receipt.dt.code')}
+                </dt>
                 <dd className="tabular flex items-center gap-1 font-mono font-semibold">
                     {code}
-                    <CopyButton value={code} className="size-5" />
+                    <CopyButton
+                        value={code}
+                        className="size-5"
+                        label={t('common.copy')}
+                        toastMessage={t('common.copied')}
+                        errorMessage={t('common.copy_failed')}
+                    />
                 </dd>
                 {receipt.ip && (
                     <>
-                        <dt className="text-muted-foreground">IP registrado</dt>
+                        <dt className="text-muted-foreground">
+                            {t('receipt.dt.ip')}
+                        </dt>
                         <dd className="tabular">{receipt.ip}</dd>
                     </>
                 )}
                 {receipt.terms_version && (
                     <>
-                        <dt className="text-muted-foreground">Texto aceito</dt>
+                        <dt className="text-muted-foreground">
+                            {t('receipt.dt.terms')}
+                        </dt>
                         <dd className="tabular">{receipt.terms_version}</dd>
                     </>
                 )}
                 {multi && (
                     <>
-                        <dt className="text-muted-foreground">Arquivos</dt>
+                        <dt className="text-muted-foreground">
+                            {t('receipt.dt.files')}
+                        </dt>
                         <dd className="flex min-w-0 flex-col gap-1">
                             {files.map((file) => (
                                 <span
@@ -230,9 +269,10 @@ export function ReceiptCard({
                                     className="flex min-w-0 flex-col"
                                 >
                                     <span className="truncate font-semibold">
-                                        {file.position}.{' '}
-                                        {file.name ??
-                                            `Arquivo ${file.position}`}
+                                        {t('sign.file_label', {
+                                            position: file.position,
+                                            name: fileName(file),
+                                        })}
                                     </span>
                                     {file.sha256 && (
                                         <span className="flex items-center gap-1 font-mono">
@@ -240,6 +280,13 @@ export function ReceiptCard({
                                             <CopyButton
                                                 value={file.sha256}
                                                 className="size-5"
+                                                label={t('common.copy')}
+                                                toastMessage={t(
+                                                    'common.copied',
+                                                )}
+                                                errorMessage={t(
+                                                    'common.copy_failed',
+                                                )}
                                             />
                                         </span>
                                     )}
@@ -251,25 +298,33 @@ export function ReceiptCard({
                 {!multi && receipt.document_sha256 && (
                     <>
                         <dt className="text-muted-foreground">
-                            SHA-256 do documento
+                            {t('receipt.dt.document_sha')}
                         </dt>
                         <dd className="flex items-center gap-1 font-mono break-all">
                             {shortHash(receipt.document_sha256)}
                             <CopyButton
                                 value={receipt.document_sha256}
                                 className="size-5"
+                                label={t('common.copy')}
+                                toastMessage={t('common.copied')}
+                                errorMessage={t('common.copy_failed')}
                             />
                         </dd>
                     </>
                 )}
                 {receipt.signed_sha256 && (
                     <>
-                        <dt className="text-muted-foreground">SHA-256 final</dt>
+                        <dt className="text-muted-foreground">
+                            {t('receipt.dt.final_sha')}
+                        </dt>
                         <dd className="flex items-center gap-1 font-mono break-all">
                             {shortHash(receipt.signed_sha256)}
                             <CopyButton
                                 value={receipt.signed_sha256}
                                 className="size-5"
+                                label={t('common.copy')}
+                                toastMessage={t('common.copied')}
+                                errorMessage={t('common.copy_failed')}
                             />
                         </dd>
                     </>
@@ -278,11 +333,7 @@ export function ReceiptCard({
 
             {!receipt.can_download && (
                 <p className="border-border bg-sidebar text-text-secondary rounded-[10px] border p-3 text-[12.5px] leading-[1.5]">
-                    A janela de download desta sessão terminou. Por segurança, o
-                    comprovante e o arquivo final só são entregues a quem acabou
-                    de confirmar o código enviado por e-mail — a posse do link
-                    do convite não basta. Quando o documento for concluído, você
-                    receberá por e-mail um link próprio para baixar o arquivo.
+                    {t('receipt.window_closed')}
                 </p>
             )}
 
@@ -293,18 +344,19 @@ export function ReceiptCard({
              */}
             {receipt.verification_code !== '' && (
                 <p className="text-muted-foreground text-[12px] leading-[1.5]">
-                    Este comprovante pode ser conferido a qualquer momento na
-                    página pública de verificação, sem login e sem expor dados
-                    pessoais:{' '}
-                    <a
-                        href={verifyShow(receipt.verification_code).url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary inline-flex items-center gap-1 font-semibold hover:underline"
-                    >
-                        verificar com o código {code}
-                        <ExternalLink className="size-3" />
-                    </a>
+                    {rich('receipt.verify_note', {
+                        link: (
+                            <a
+                                href={verifyShow(receipt.verification_code).url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary inline-flex items-center gap-1 font-semibold hover:underline"
+                            >
+                                {t('receipt.verify_link', { code })}
+                                <ExternalLink className="size-3" />
+                            </a>
+                        ),
+                    })}
                 </p>
             )}
 
@@ -326,9 +378,18 @@ export function ReceiptCard({
                                         <a href={file.final_pdf_url}>
                                             <Download className="size-4" />
                                             <span className="truncate">
-                                                Baixar {file.position}.{' '}
-                                                {file.name ??
-                                                    `arquivo ${file.position}`}
+                                                {t('receipt.download_file', {
+                                                    position: file.position,
+                                                    name:
+                                                        file.name ??
+                                                        t(
+                                                            'receipt.file_fallback_lower',
+                                                            {
+                                                                position:
+                                                                    file.position,
+                                                            },
+                                                        ),
+                                                })}
                                             </span>
                                         </a>
                                     </Button>
@@ -353,7 +414,7 @@ export function ReceiptCard({
                     >
                         <a href={receipt.final_pdf_url}>
                             <Download className="size-4" />
-                            Baixar cópia
+                            {t('receipt.download_copy')}
                         </a>
                     </Button>
                 ) : (
@@ -365,8 +426,8 @@ export function ReceiptCard({
                     >
                         <Download className="size-4" />
                         {closed
-                            ? 'Sem arquivo final'
-                            : 'Disponível quando todos assinarem'}
+                            ? t('receipt.no_final')
+                            : t('receipt.available_when_signed')}
                     </Button>
                 )}
                 {/*
@@ -385,7 +446,7 @@ export function ReceiptCard({
                     >
                         <a href={receipt.download_url}>
                             <FileText className="size-4" />
-                            Relatório de evidências
+                            {t('receipt.evidence_report')}
                         </a>
                     </Button>
                 )}

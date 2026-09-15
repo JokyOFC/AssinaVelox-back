@@ -74,7 +74,7 @@
 {{-- Footer --}}
 <x-slot:footer>
 <x-mail::footer>
-{{ $brand['display_name'] }} · enviado via {{ $brand['operator'] }}
+{{ $brand['display_name'] }} · {{ __('enviado via') }} {{ $brand['operator'] }}
 
 © {{ date('Y') }} {{ config('app.name') }}. {{ __('All rights reserved.') }}
 </x-mail::footer>

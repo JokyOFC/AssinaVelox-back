@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { type I18n, type MessageKey, useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import type { SignatureKind } from '@/types/enums';
 
@@ -65,30 +66,73 @@ const MODE_ICON = {
     uploaded: ImageUp,
 } as const;
 
-const COPY = {
+const SIZE = {
     signature: {
-        drawLabel: 'Desenhe sua assinatura',
-        typeLabel: 'Digite seu nome',
-        uploadLabel: 'Envie uma imagem da sua assinatura',
-        hint: 'Desenhe com o dedo ou o mouse',
-        previewLabel: 'Sua assinatura',
-        aria: 'Quadro para desenhar a assinatura',
         maxWidth: SIGNATURE_MAX_WIDTH,
         maxHeight: SIGNATURE_MAX_HEIGHT,
         padHeight: 170,
     },
     initials: {
-        drawLabel: 'Desenhe sua rubrica',
-        typeLabel: 'Digite suas iniciais',
-        uploadLabel: 'Envie uma imagem da sua rubrica',
-        hint: 'Trace as iniciais com o dedo ou o mouse',
-        previewLabel: 'Sua rubrica',
-        aria: 'Quadro para desenhar a rubrica',
         maxWidth: INITIALS_MAX_WIDTH,
         maxHeight: INITIALS_MAX_HEIGHT,
         padHeight: 130,
     },
 } as const;
+
+/** Textos do quadro por variante (F-I18N: chaves do dicionário). */
+function copyFor(variant: 'signature' | 'initials', t: I18n['t']) {
+    return {
+        typeLabel: t(`signature.${variant}.type_label`),
+        uploadLabel: t(`signature.${variant}.upload_label`),
+        hint: t(`signature.${variant}.hint`),
+        previewLabel: t(`signature.${variant}.preview`),
+        aria: t(`signature.${variant}.aria`),
+        ...SIZE[variant],
+    };
+}
+
+/**
+ * As mensagens de `signature-image.ts` são escritas em PT-BR. Fora do PT-BR, as
+ * conhecidas são trocadas pela tradução; uma desconhecida sai como veio.
+ */
+const IMAGE_ERRORS: Record<string, MessageKey> = {
+    'Este navegador não suporta a captura de assinatura.':
+        'signature.error.unsupported_browser',
+    'Não foi possível abrir esta imagem. Envie um PNG ou JPG.':
+        'signature.error.open',
+    'Formato não aceito. Envie uma imagem PNG ou JPG.':
+        'signature.error.format',
+    'A imagem enviada está vazia.': 'signature.error.empty',
+    'A imagem ficou vazia depois de remover o fundo. Desligue "Remover fundo claro" e tente de novo.':
+        'signature.error.empty_after_background',
+};
+
+function localizeImageError(message: string, i18n: I18n): string {
+    if (i18n.isReference) {
+        return message;
+    }
+
+    const known = IMAGE_ERRORS[message];
+
+    if (known) {
+        return i18n.t(known);
+    }
+
+    const tooLarge = /^A imagem tem (.+) e o limite é (.+)\.$/.exec(message);
+
+    return tooLarge
+        ? i18n.t('signature.error.too_large', {
+              size: tooLarge[1],
+              limit: tooLarge[2],
+          })
+        : message;
+}
+
+function styleLabel(style: SignatureStyle, t: I18n['t']): string {
+    return style.key === 'caveat' || style.key === 'caveat_slanted'
+        ? t(`signature.style.${style.key}`)
+        : style.label;
+}
 
 function availableStyles(fonts?: string[]): readonly SignatureStyle[] {
     if (!fonts || fonts.length === 0) {
@@ -123,15 +167,24 @@ export function SignatureCapture({
     maxUploadBytes = UPLOAD_MAX_BYTES,
     className,
 }: SignatureCaptureProps) {
-    const copy = COPY[variant];
+    const i18n = useI18n();
+    const { t } = i18n;
+    const copy = copyFor(variant, t);
     const styles = availableStyles(options.fonts);
     const fieldId = useId();
 
     const modes = [
-        options.draw ? { value: 'drawn' as const, label: 'Desenhar' } : null,
-        options.type ? { value: 'typed' as const, label: 'Digitar' } : null,
+        options.draw
+            ? { value: 'drawn' as const, label: t('signature.mode.drawn') }
+            : null,
+        options.type
+            ? { value: 'typed' as const, label: t('signature.mode.typed') }
+            : null,
         options.upload
-            ? { value: 'uploaded' as const, label: 'Enviar imagem' }
+            ? {
+                  value: 'uploaded' as const,
+                  label: t('signature.mode.uploaded'),
+              }
             : null,
     ].filter((mode) => mode !== null);
 
@@ -239,7 +292,7 @@ export function SignatureCapture({
         const invalid = validateSignatureFile(file, maxUploadBytes);
 
         if (invalid) {
-            setError(invalid);
+            setError(localizeImageError(invalid, i18n));
             setFileName(null);
             emit(null);
 
@@ -266,8 +319,8 @@ export function SignatureCapture({
             .catch((cause: unknown) => {
                 setError(
                     cause instanceof SignatureImageError
-                        ? cause.message
-                        : 'Não foi possível preparar esta imagem. Tente outra.',
+                        ? localizeImageError(cause.message, i18n)
+                        : t('signature.prepare_failed'),
                 );
                 emit(null);
             })
@@ -280,7 +333,7 @@ export function SignatureCapture({
                 <SegmentedControl
                     value={mode}
                     onChange={changeMode}
-                    ariaLabel="Como você quer assinar"
+                    ariaLabel={t('signature.mode_aria')}
                     className="w-full"
                     options={modes.map((item) => {
                         const Icon = MODE_ICON[item.value];
@@ -335,7 +388,7 @@ export function SignatureCapture({
                                             : 'border-input text-text-secondary hover:border-primary',
                                     )}
                                 >
-                                    {item.label}
+                                    {styleLabel(item, t)}
                                 </button>
                             ))}
                         </div>
@@ -385,8 +438,9 @@ export function SignatureCapture({
                             {fileName ?? copy.uploadLabel}
                         </span>
                         <span className="text-muted-foreground text-[11.5px] font-normal">
-                            PNG ou JPG, até{' '}
-                            {Math.round(maxUploadBytes / (1024 * 1024))} MB
+                            {t('signature.upload_hint', {
+                                mb: Math.round(maxUploadBytes / (1024 * 1024)),
+                            })}
                         </span>
                     </Button>
                     <label className="text-text-secondary flex items-center gap-2 text-[12.5px]">
@@ -402,7 +456,7 @@ export function SignatureCapture({
                             }}
                             className="accent-primary size-4"
                         />
-                        Remover o fundo claro da foto
+                        {t('signature.remove_background')}
                     </label>
                 </div>
             )}
@@ -410,7 +464,7 @@ export function SignatureCapture({
             {busy && (
                 <p className="text-muted-foreground flex items-center gap-2 text-[12.5px]">
                     <Spinner className="size-3.5" />
-                    Preparando a imagem…
+                    {t('signature.preparing')}
                 </p>
             )}
 
@@ -429,7 +483,7 @@ export function SignatureCapture({
                         className="max-h-12 max-w-[60%] object-contain"
                     />
                     <span className="text-success ml-auto text-[12px] font-semibold">
-                        Pronta
+                        {t('signature.ready')}
                     </span>
                 </div>
             )}

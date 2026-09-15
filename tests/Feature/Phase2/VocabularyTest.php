@@ -61,6 +61,9 @@ const VOCAB_ALLOWED_BEFORE = [
     // 2. Comentários de código que nomeiam o termo proibido como regra ("never", "not").
     //    Sem "no": em português é preposição ("no celular"), não negação.
     'negação em inglês (comentário de código)' => '/\b(?:never|not)\b/iu',
+    // 2b. F-I18N: negações de inglês e espanhol que não são palavras do português — a regra
+    //     em português (ex.: "biométrico") também vale no texto traduzido.
+    'negação em inglês/espanhol (texto traduzido)' => '/\b(?:without|neither|nor|sin|ni|tampoco)\b/iu',
     // 3. Citação da própria regra: "vocabulário proibido", "termos proibidos", "Proibido:".
     'citação da regra (proibido/proibida)' => '/proibid[oa]s?/iu',
 ];
@@ -69,7 +72,37 @@ const VOCAB_ALLOWED_BEFORE = [
 const VOCAB_NEGATIONS = [
     'negação (não/nem/sem/nunca/jamais)',
     'negação em inglês (comentário de código)',
+    'negação em inglês/espanhol (texto traduzido)',
 ];
+
+/*
+| Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §7): a página pública, os e-mails e os textos
+| jurídicos de cortesia também existem em inglês e espanhol. Os mesmos termos são proibidos
+| nesses idiomas, nos MESMOS contextos permitidos (negação na mesma oração, só depois do último
+| ":"; citação da regra), com as palavras de cada idioma. Aqui "no" é negação (em português é
+| preposição, por isso fica fora da lista das regras em português).
+*/
+const VOCAB_FORBIDDEN_TRANSLATED = [
+    'advanced (electronic) signature' => '/\badvanced\s+(?:electronic\s+)?signatures?\b/iu',
+    'qualified (electronic) signature' => '/\bqualified\s+(?:electronic\s+)?signatures?\b/iu',
+    'notarized' => '/\bnotari[sz](?:ed|ation)\b/iu',
+    'biometric' => '/\bbiometrics?\b/iu',
+    'verified identity' => '/\bverified\s+identity\b|\bidentity\s+(?:is\s+)?verified\b/iu',
+    'firma avanzada' => '/\bfirma(?:\s+electr[óo]nica)?\s+avanzada\b/iu',
+    'firma cualificada' => '/\bfirma(?:\s+electr[óo]nica)?\s+cualificada\b/iu',
+    'notarial' => '/\bnotarial(?:es)?\b/iu',
+    // Só a grafia espanhola (com acento): "biometria" e "biométrico" já estão na regra em português.
+    'biometría' => '/\bbiometrías?\b/iu',
+    'identidad verificada' => '/\bidentidad\s+verificada\b/iu',
+];
+
+const VOCAB_ALLOWED_BEFORE_TRANSLATED = [
+    // Inclui as negações do português: "notarial" também é palavra do português ("não é ato notarial").
+    'negação em inglês/espanhol' => '/(?:^|[^\p{L}])(?:not|no|never|without|neither|nor|sin|nunca|jam[áa]s|ni|tampoco|n[ãa]o|nem|sem)(?:[^\p{L}]|$)/iu',
+    'citação da regra (forbidden/prohibido)' => '/\b(?:forbidden|prohibited|prohibid[oa]s?)\b/iu',
+];
+
+const VOCAB_NEGATIONS_TRANSLATED = ['negação em inglês/espanhol'];
 
 /*
 | Exceções por arquivo — frases legítimas que o critério acima não cobre. Chave: caminho
@@ -107,17 +140,25 @@ function vocabularyViolations(string $source, string $text): array
             $checks['ICP-Brasil associado a TSA/carimbo do tempo'] = VOCAB_ICP;
         }
 
-        foreach ($checks as $label => $pattern) {
-            if (preg_match_all($pattern, $line, $matches, PREG_OFFSET_CAPTURE) === 0) {
-                continue;
-            }
+        // F-I18N: cada conjunto de termos é conferido com as exceções do seu idioma.
+        $sets = [
+            [$checks, VOCAB_ALLOWED_BEFORE, VOCAB_NEGATIONS],
+            [VOCAB_FORBIDDEN_TRANSLATED, VOCAB_ALLOWED_BEFORE_TRANSLATED, VOCAB_NEGATIONS_TRANSLATED],
+        ];
 
-            foreach ($matches[0] as [$found, $offset]) {
-                if (vocabularyAllowed($source, $line, (int) $offset)) {
+        foreach ($sets as [$terms, $allowed, $negations]) {
+            foreach ($terms as $label => $pattern) {
+                if (preg_match_all($pattern, $line, $matches, PREG_OFFSET_CAPTURE) === 0) {
                     continue;
                 }
 
-                $violations[] = sprintf('%s:%d: %s — "%s"', $source, $index + 1, $label, mb_substr(trim($line), 0, 160));
+                foreach ($matches[0] as [$found, $offset]) {
+                    if (vocabularyAllowed($source, $line, (int) $offset, $allowed, $negations)) {
+                        continue;
+                    }
+
+                    $violations[] = sprintf('%s:%d: %s — "%s"', $source, $index + 1, $label, mb_substr(trim($line), 0, 160));
+                }
             }
         }
     }
@@ -125,7 +166,11 @@ function vocabularyViolations(string $source, string $text): array
     return $violations;
 }
 
-function vocabularyAllowed(string $source, string $line, int $byteOffset): bool
+/**
+ * @param  array<string, string>  $allowedBefore
+ * @param  list<string>  $negations
+ */
+function vocabularyAllowed(string $source, string $line, int $byteOffset, array $allowedBefore = VOCAB_ALLOWED_BEFORE, array $negations = VOCAB_NEGATIONS): bool
 {
     foreach (VOCAB_FILE_EXCEPTIONS[$source] ?? [] as $pattern => $reason) {
         if (preg_match($pattern, $line) === 1) {
@@ -140,8 +185,8 @@ function vocabularyAllowed(string $source, string $line, int $byteOffset): bool
     // Para negações: só o trecho depois do último ":" da oração.
     $narrow = (string) preg_replace('/^.*:/su', '', $clause);
 
-    foreach (VOCAB_ALLOWED_BEFORE as $label => $pattern) {
-        if (preg_match($pattern, in_array($label, VOCAB_NEGATIONS, true) ? $narrow : $clause) === 1) {
+    foreach ($allowedBefore as $label => $pattern) {
+        if (preg_match($pattern, in_array($label, $negations, true) ? $narrow : $clause) === 1) {
             return true;
         }
     }
@@ -167,6 +212,21 @@ test('o detector pega afirmações e deixa passar negações', function () {
         ->and(vocabularyViolations('x', 'Proibido: assinatura avançada'))->toBe([])
         ->and(vocabularyViolations('x', 'Identidade confirmada pelo código enviado por SMS'))->toHaveCount(1)
         ->and(vocabularyViolations('x', 'Foto simples, sem prova de vida e sem reconhecimento facial.'))->toBe([]);
+});
+
+test('o detector pega os equivalentes em inglês e espanhol, nos mesmos contextos', function () {
+    expect(vocabularyViolations('x', 'Advanced electronic signature with verified identity'))->toHaveCount(2)
+        ->and(vocabularyViolations('x', 'Notarized document with qualified signature'))->toHaveCount(2)
+        ->and(vocabularyViolations('x', 'This is not a qualified electronic signature and there is no biometric check.'))->toBe([])
+        ->and(vocabularyViolations('x', 'Documento notarial con firma avanzada'))->toHaveCount(2)
+        ->and(vocabularyViolations('x', 'Firma cualificada con identidad verificada'))->toHaveCount(2)
+        ->and(vocabularyViolations('x', 'Sin biometría y sin identidad verificada.'))->toBe([])
+        ->and(vocabularyViolations('x', 'No es una firma avanzada ni cualificada.'))->toBe([])
+        ->and(vocabularyViolations('x', 'Forbidden: notarized'))->toBe([])
+        // A negação antes de ":" nega outra coisa, também em inglês.
+        ->and(vocabularyViolations('x', 'No paper: advanced signature in minutes'))->toHaveCount(1)
+        // A negação de uma frase não protege a frase seguinte.
+        ->and(vocabularyViolations('x', 'We do not use cookies. Biometric check included.'))->toHaveCount(2);
 });
 
 test('UI, views, traduções, notificações e textos legais não usam vocabulário proibido', function () {

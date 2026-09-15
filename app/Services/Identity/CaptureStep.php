@@ -28,7 +28,8 @@ final class CaptureStep
      */
     public function props(SignerContext $context, ?SigningSession $session): ?array
     {
-        if (! $this->captures->isRequiredFor($context)) {
+        // Só fotos: o vídeo curto (F-VIDEO) tem etapa própria, `VideoStep`.
+        if (! $this->captures->photoRequiredFor($context)) {
             return null;
         }
 

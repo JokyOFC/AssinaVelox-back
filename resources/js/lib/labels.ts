@@ -110,6 +110,7 @@ export const recipientStatusLabels: Record<RecipientStatus, string> = {
     refused: 'Recusado',
     expired: 'Expirado',
     canceled: 'Cancelado',
+    delegated: 'Delegado',
 };
 
 export const recipientStatusTones: Record<RecipientStatus, BadgeTone> = {
@@ -120,6 +121,7 @@ export const recipientStatusTones: Record<RecipientStatus, BadgeTone> = {
     refused: 'danger',
     expired: 'neutral',
     canceled: 'neutral',
+    delegated: 'neutral',
 };
 
 /** Nota curta padrão por status (o backend pode enviar `note` mais rica). */
@@ -131,6 +133,7 @@ export const recipientStatusNotes: Record<RecipientStatus, string> = {
     refused: 'Recusou',
     expired: 'Prazo encerrado',
     canceled: 'Documento cancelado',
+    delegated: 'Delegou a outra pessoa',
 };
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ use App\Models\SigningSessionDocument;
 use App\Models\User;
 use App\Services\Branding\BrandingPresenter;
 use App\Services\Identity\CaptureStep;
+use App\Services\Identity\VideoStep;
 use App\Services\Signing\Certificates\ParticipantCertificateService;
 use App\Services\Signing\Channels\SignerAuthProps;
 use App\Services\Verification\SignatureNarrative;
@@ -169,6 +170,16 @@ final class SignerPageProps
                 ? $this->captureStep->props($context, $screen === 'sign' ? $session : null)
                 : null,
         ];
+
+        // Fase 3 §3.3 (F-VIDEO): etapa de vídeo curto. A chave só existe quando o vídeo foi
+        // exigido desta pessoa com a flag `identity_video` ligada — sem ela, props idênticas.
+        $video = in_array($screen, ['identify', 'sign'], true)
+            ? app(VideoStep::class)->props($context, $screen === 'sign' ? $session : null)
+            : null;
+
+        if ($video !== null) {
+            $props['identity_video'] = $video;
+        }
 
         if ($screen === 'sign' && $session !== null && $version !== null) {
             $props = array_replace($props, $this->signingProps($context, $session, $version));

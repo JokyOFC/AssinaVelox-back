@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { plural } from '@/lib/format';
+import { useI18n } from '@/i18n';
 import { verify as pinVerify } from '@/routes/sign/pin';
 import type { SignerAuth } from '@/types/models';
 
@@ -28,6 +28,7 @@ export function PinCard({
     senderName: string;
     error?: string;
 }) {
+    const { t, tp, rich } = useI18n();
     const [value, setValue] = useState('');
     const [processing, setProcessing] = useState(false);
 
@@ -68,15 +69,19 @@ export function PinCard({
             <div className="flex items-start gap-2.5 text-[13px]">
                 <KeyRound className="text-primary mt-0.5 size-4 shrink-0" />
                 <span>
-                    Código confirmado. Agora informe o <b>PIN</b> que{' '}
-                    {senderName} combinou com você. O AssinaVelox não envia esse
-                    PIN.
+                    {rich('pin.intro', {
+                        pin: <b>PIN</b>,
+                        sender: senderName,
+                    })}
                 </span>
             </div>
 
             <div className="grid gap-1.5">
                 <Label htmlFor="sender-pin" className="text-[12.5px]">
-                    PIN ({pin.min_length} a {pin.max_length} dígitos)
+                    {t('pin.label', {
+                        min: pin.min_length,
+                        max: pin.max_length,
+                    })}
                 </Label>
                 <Input
                     id="sender-pin"
@@ -109,12 +114,7 @@ export function PinCard({
             )}
             {!error && pin.attempts_left < 3 && (
                 <p className="text-warning text-[12.5px]">
-                    {plural(
-                        pin.attempts_left,
-                        'tentativa restante',
-                        'tentativas restantes',
-                    )}{' '}
-                    antes de o PIN ser bloqueado por um tempo.
+                    {tp('pin.attempts_left', pin.attempts_left)}
                 </p>
             )}
 
@@ -125,11 +125,10 @@ export function PinCard({
                 disabled={value.length < pin.min_length || processing}
             >
                 {processing && <Spinner className="size-4" />}
-                Confirmar PIN e continuar
+                {t('pin.confirm')}
             </Button>
             <p className="text-muted-foreground text-[12px] leading-[1.5]">
-                Não recebeu um PIN? Fale com {senderName}: só quem enviou o
-                documento pode informá-lo.
+                {t('pin.help', { sender: senderName })}
             </p>
         </form>
     );

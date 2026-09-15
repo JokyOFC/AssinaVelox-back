@@ -4,6 +4,7 @@ namespace App\Services\Signing\Channels;
 
 use App\Enums\DeliveryChannel;
 use App\Enums\DeliveryPurpose;
+use App\Support\Locale\SignerLocale;
 use Illuminate\Support\Str;
 
 /**
@@ -26,8 +27,22 @@ final class ChannelMessages
         return 'sms_'.$purpose->value;
     }
 
-    public static function otpText(string $code, string $title, int $ttlMinutes): string
+    /**
+     * `$locale`: idioma do participante (SignerLocales::forRecipient — já considera a flag
+     * `multilingual`). Nulo ou PT-BR = exatamente o texto de sempre; `en`/`es` saem de
+     * `lang/{locale}/signer_mail.php` (`channel.*`), com os valores inseridos como texto.
+     */
+    public static function otpText(string $code, string $title, int $ttlMinutes, ?SignerLocale $locale = null): string
     {
+        if ($locale !== null && ! $locale->isReference()) {
+            return self::translated('signer_mail.channel.otp', [
+                'app' => self::plain((string) config('app.name', 'AssinaVelox'), 40),
+                'title' => self::plain($title, 40),
+                'code' => $code,
+                'minutes' => (string) $ttlMinutes,
+            ], $locale);
+        }
+
         return sprintf(
             '%s: seu código de confirmação para o documento "%s" é %s. Vale %d min. Não compartilhe este código.',
             self::plain((string) config('app.name', 'AssinaVelox'), 40),
@@ -37,8 +52,17 @@ final class ChannelMessages
         );
     }
 
-    public static function invitationText(string $organization, string $title, string $url, bool $isReminder): string
+    public static function invitationText(string $organization, string $title, string $url, bool $isReminder, ?SignerLocale $locale = null): string
     {
+        if ($locale !== null && ! $locale->isReference()) {
+            return self::translated($isReminder ? 'signer_mail.channel.reminder' : 'signer_mail.channel.invitation', [
+                'organization' => self::plain($organization, 40),
+                'title' => self::plain($title, 40),
+                'app' => self::plain((string) config('app.name', 'AssinaVelox'), 40),
+                'url' => $url,
+            ], $locale);
+        }
+
         return sprintf(
             $isReminder ? 'Lembrete: %s aguarda você no documento "%s" pelo %s. Acesse: %s' : '%s enviou o documento "%s" para você pelo %s. Acesse: %s',
             self::plain($organization, 40),
@@ -46,6 +70,29 @@ final class ChannelMessages
             self::plain((string) config('app.name', 'AssinaVelox'), 40),
             $url,
         );
+    }
+
+    /**
+     * Substituição de marcadores sem reinterpretar o valor (um título com ":code" continua texto).
+     *
+     * @param  array<string, string>  $values
+     */
+    private static function translated(string $key, array $values, SignerLocale $locale): string
+    {
+        $template = trans($key, [], $locale->value);
+
+        if (! is_string($template) || $template === $key) {
+            $template = (string) trans($key, [], SignerLocale::reference()->value);
+        }
+
+        $pairs = [];
+
+        foreach ($values as $name => $value) {
+            $pairs[':'.$name] = $value;
+        }
+
+        // Marcadores mais longos primeiro; strtr não substitui de novo o que já substituiu.
+        return strtr($template, $pairs);
     }
 
     /**

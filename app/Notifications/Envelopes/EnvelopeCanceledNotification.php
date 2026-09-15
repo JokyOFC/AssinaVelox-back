@@ -9,6 +9,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\Locale\LocalizesRecipientMail;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,10 +20,13 @@ use Illuminate\Notifications\Notification;
  * Aviso ao signatário de que a solicitação foi encerrada pelo remetente ou por recusa de
  * outro participante. O link já foi revogado quando esta mensagem sai — o texto diz isso
  * em vez de oferecer um botão que devolveria "link inválido".
+ *
+ * Fase 3 §3.3 (F-I18N): textos de `lang/{idioma}/signer_mail.php`, no idioma do participante
+ * quando a flag `multilingual` está ligada.
  */
 class EnvelopeCanceledNotification extends Notification implements ShouldQueue, TracksDelivery
 {
-    use AppliesOrganizationBranding, Queueable;
+    use AppliesOrganizationBranding, LocalizesRecipientMail, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -32,6 +36,7 @@ class EnvelopeCanceledNotification extends Notification implements ShouldQueue, 
         public readonly bool $refusedByAnother = false,
     ) {
         $this->onQueue((string) config('assinavelox.queues.notifications', 'notifications'));
+        $this->localizeFor($recipient, $envelope->organization);
     }
 
     /**
@@ -55,25 +60,28 @@ class EnvelopeCanceledNotification extends Notification implements ShouldQueue, 
     public function toMail(object $notifiable): MailMessage
     {
         $organization = $this->envelope->organization;
+        $body = [
+            'title' => MailText::escape($this->envelope->title),
+            'code' => $this->envelope->display_code,
+            'organization' => MailText::escape($organization->name),
+        ];
 
         $message = (new MailMessage)
-            ->subject('Documento encerrado: '.$this->envelope->title)
-            ->greeting('Olá!');
+            ->subject($this->mailText('canceled.subject', ['title' => $this->envelope->title]))
+            ->greeting($this->mailText('greeting'));
 
-        if ($this->refusedByAnother) {
-            $message->line('A solicitação de assinatura do documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') foi encerrada porque um dos signatários recusou assinar.');
-        } else {
-            $message->line('**'.MailText::escape($organization->name).'** cancelou a solicitação de assinatura do documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.').');
-        }
+        $message->line($this->refusedByAnother
+            ? $this->mailText('canceled.refused_line', $body)
+            : $this->mailText('canceled.canceled_line', $body));
 
         if (filled($this->reason)) {
-            $message->line('Motivo informado: "'.MailText::escape($this->reason).'"');
+            $message->line($this->mailText('canceled.reason', ['reason' => MailText::escape($this->reason)]));
         }
 
         $message
-            ->line('O link que você recebeu não é mais válido e nenhuma ação é necessária da sua parte.')
-            ->line('Em caso de dúvida, fale com '.MailText::escape($organization->name).'.')
-            ->salutation('Atenciosamente, AssinaVelox');
+            ->line($this->mailText('canceled.no_action'))
+            ->line($this->mailText('canceled.contact', ['organization' => MailText::escape($organization->name)]))
+            ->salutation($this->mailText('salutation'));
 
         return $this->applyOrganizationBranding($message, $organization);
     }

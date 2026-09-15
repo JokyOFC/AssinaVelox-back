@@ -172,8 +172,9 @@ final class SignerLinkResolver
             // Só `in_progress` e `finalizing` sobram; em `finalizing` já não há o que assinar.
             $envelope->status !== EnvelopeStatus::InProgress => null,
 
-            // Fora da vez no sequencial: 404 genérico, igual a token desconhecido.
-            $envelope->isSequential() && $recipient->order_index > $envelope->current_order => null,
+            // Fora da vez no sequencial: 404 genérico, igual a token desconhecido. Fase 3 §3.3
+            // (F-FLOW): com etapas, a vez é a etapa também no paralelo (sem etapas = sequencial).
+            $envelope->hasTurns() && $recipient->order_index > $envelope->current_order => null,
 
             $recipient->status->isPendingSignature() => SignerContext::STATE_ACTIVE,
 

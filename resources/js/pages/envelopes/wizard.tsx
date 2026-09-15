@@ -18,6 +18,7 @@ import {
 } from '@/components/envelopes/recipient-channel-fields';
 import { checkPhone } from '@/components/identity/phone';
 import { ScheduleSendCard } from '@/components/envelopes/schedule-send-card';
+import { SigningFlowEditor } from '@/components/envelopes/steps/flow-editor';
 import { useWizardAutosave } from '@/components/envelopes/use-wizard-autosave';
 import {
     WizardStepDocument,
@@ -1248,6 +1249,9 @@ export default function EnvelopeWizard({
                         }
                     />
                 )}
+
+                {/* Fase 3 §3.3 (F-FLOW): 404 (flags desligadas) = o editor não aparece. */}
+                {step === 4 && <SigningFlowEditor envelopeId={envelope.id} />}
 
                 <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4 pb-2">
                     <Button

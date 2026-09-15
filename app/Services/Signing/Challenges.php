@@ -16,6 +16,7 @@ use App\Services\Signing\Channels\ChannelDelivery;
 use App\Services\Signing\Channels\ChannelMessages;
 use App\Services\Signing\Channels\SenderPins;
 use App\Services\Signing\Exceptions\SigningRejectedException;
+use App\Support\Locale\SignerLocales;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -142,7 +143,9 @@ final class Challenges
                     'ttl_minutes' => (string) $ttl,
                     'title' => ChannelMessages::plain($context->envelope->title, 40),
                 ],
-                text: ChannelMessages::otpText($code, $context->envelope->title, $ttl),
+                // F-I18N (revisão adversarial da onda F): o SMS/WhatsApp do código sai no idioma
+                // do participante, como o e-mail. Flag `multilingual` desligada: PT-BR de sempre.
+                text: ChannelMessages::otpText($code, $context->envelope->title, $ttl, SignerLocales::forRecipient($context->recipient, $context->organization)),
                 sensitive: ['code'],
                 correlationId: $correlationId,
                 meta: ['envelope' => $context->envelope->display_code, 'ttl_minutes' => $ttl],

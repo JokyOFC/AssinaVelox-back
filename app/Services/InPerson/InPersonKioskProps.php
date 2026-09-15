@@ -262,12 +262,18 @@ final class InPersonKioskProps
             return ['closed', 'Recusou'];
         }
 
+        // Fase 3 §3.3 (F-FLOW): quem delegou sai da fila; o delegado entra com vez própria.
+        if ($recipient->status === RecipientStatus::Delegated) {
+            return ['closed', 'Delegou'];
+        }
+
         if (in_array($recipient->status, [RecipientStatus::Canceled, RecipientStatus::Expired], true)
             || $envelope->status !== EnvelopeStatus::InProgress) {
             return ['closed', 'Encerrado'];
         }
 
-        if ($envelope->isSequential() && $recipient->order_index > $envelope->current_order) {
+        // Fase 3 §3.3 (F-FLOW): com etapas a vez vale também no paralelo (sem etapas = sequencial).
+        if ($envelope->hasTurns() && $recipient->order_index > $envelope->current_order) {
             return ['waiting', 'Aguardando a vez'];
         }
 

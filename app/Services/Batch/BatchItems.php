@@ -132,6 +132,11 @@ final class BatchItems
             return $result('refused', 'Você recusou este documento');
         }
 
+        // Fase 3 §3.3 (F-FLOW): quem delegou não responde mais; o delegado tem o próprio convite.
+        if ($recipient->status === RecipientStatus::Delegated) {
+            return $result('closed', 'Delegado a outra pessoa');
+        }
+
         if ($recipient->status === RecipientStatus::Expired || $envelope->status === EnvelopeStatus::Expired) {
             return $result('expired', 'Prazo encerrado');
         }
@@ -144,7 +149,8 @@ final class BatchItems
             return $result('closed', 'Coleta encerrada');
         }
 
-        if ($envelope->isSequential() && $recipient->order_index > $envelope->current_order) {
+        // Fase 3 §3.3 (F-FLOW): com etapas a vez vale também no paralelo (sem etapas = sequencial).
+        if ($envelope->hasTurns() && $recipient->order_index > $envelope->current_order) {
             return $result('waiting', 'Aguardando outro participante');
         }
 

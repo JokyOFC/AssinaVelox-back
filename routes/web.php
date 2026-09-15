@@ -15,6 +15,8 @@ use App\Http\Controllers\Admin\RiskReviewController as AdminRiskReviewController
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Affiliates\AffiliatePortalController;
 use App\Http\Controllers\Affiliates\ReferralLinkController;
+use App\Http\Controllers\Anchors\EnvelopeAnchorController;
+use App\Http\Controllers\Anchors\TemplateAnchorRuleController;
 use App\Http\Controllers\Batch\BatchLinkController;
 use App\Http\Controllers\Batch\BatchSigningController;
 use App\Http\Controllers\Billing\BillingCheckoutController;
@@ -22,6 +24,7 @@ use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\PaymentActionController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
 use App\Http\Controllers\Billing\PlanController;
+use App\Http\Controllers\BulkGenerations\BulkGenerationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Dossier\DossierDownloadController;
 use App\Http\Controllers\Dossier\DossierExportController;
@@ -31,12 +34,16 @@ use App\Http\Controllers\Envelopes\EnvelopeDocumentController;
 use App\Http\Controllers\Envelopes\EnvelopeDownloadController;
 use App\Http\Controllers\Envelopes\EnvelopeEvidenceController;
 use App\Http\Controllers\Envelopes\EnvelopeFieldController;
+use App\Http\Controllers\Envelopes\EnvelopeFlowController;
 use App\Http\Controllers\Envelopes\EnvelopeRecipientController;
 use App\Http\Controllers\Envelopes\EnvelopeSendController;
 use App\Http\Controllers\Envelopes\LegalHoldController;
+use App\Http\Controllers\Envelopes\RecipientLocaleController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\Identity\CaptureRequirementController;
 use App\Http\Controllers\Identity\CnpjLookupController;
+use App\Http\Controllers\Identity\VideoPlaybackController;
+use App\Http\Controllers\Identity\VideoRequirementController;
 use App\Http\Controllers\InPerson\InPersonHostController;
 use App\Http\Controllers\InPerson\KioskController;
 use App\Http\Controllers\IntegrationController;
@@ -71,11 +78,13 @@ use App\Http\Controllers\Settings\RetentionController;
 use App\Http\Controllers\Settings\SigningController;
 use App\Http\Controllers\Sign\CaptureController as SignCaptureController;
 use App\Http\Controllers\Sign\CertificateController as SignCertificateController;
+use App\Http\Controllers\Sign\DelegationController as SignDelegationController;
 use App\Http\Controllers\Sign\DocumentController as SignDocumentController;
 use App\Http\Controllers\Sign\DownloadController as SignDownloadController;
 use App\Http\Controllers\Sign\ExternalSignatureController;
 use App\Http\Controllers\Sign\ExternalSimulatorController;
 use App\Http\Controllers\Sign\GovBrReturnController as SignGovBrReturnController;
+use App\Http\Controllers\Sign\LocaleController as SignLocaleController;
 use App\Http\Controllers\Sign\OtpController;
 use App\Http\Controllers\Sign\RefusalController;
 use App\Http\Controllers\Sign\SignatureController;
@@ -90,6 +99,7 @@ use App\Http\Controllers\Tsa\TsaController;
 use App\Http\Controllers\Webhooks\MercadoPagoController;
 use App\Http\Controllers\Webhooks\SmsStatusWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppStatusWebhookController;
+use App\Http\Middleware\ApplySignerLocale;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
@@ -153,7 +163,9 @@ Route::prefix('assinar/{token}')
     ->where(['token' => '[A-Za-z0-9_-]{20,128}'])
     // `signer` resolve o token do convite e injeta o contexto; `signer.verified` exige a
     // sessão criada depois do código por e-mail (docs/fluxo-do-signatario.md).
-    ->middleware(['throttle:signer', 'signer'])
+    // F-I18N (Fase 3 §3.3): `ApplySignerLocale` depois de `signer` — idioma da página; sem a
+    // flag `multilingual` não faz nada.
+    ->middleware(['throttle:signer', 'signer', ApplySignerLocale::class])
     ->name('sign.')
     ->group(function (): void {
         Route::get('/', [SignerPageController::class, 'show'])->name('show');
@@ -172,6 +184,11 @@ Route::prefix('assinar/{token}')
             ->middleware('signer.verified')
             ->whereIn('kind', ['selfie', 'document_front', 'document_back'])
             ->name('capture.store');
+        // Fase 3 §3.3 (F-VIDEO, docs/fase-3/captura-de-video.md): vídeo curto exigido pelo
+        // remetente. 404 com a flag `identity_video` desligada ou vídeo não exigido.
+        Route::post('captura-video', [SignCaptureController::class, 'storeVideo'])
+            ->middleware('signer.verified')
+            ->name('capture.video.store');
         // Sem `signer.verified`: o aceite consome a sessão e o comprovante é pedido logo
         // depois. A autorização é feita no controller (aceite registrado ou sessão viva).
         Route::get('download/{type}', [SignDownloadController::class, 'show'])->whereIn('type', ['signed', 'evidence'])->name('download');
@@ -203,6 +220,14 @@ Route::prefix('assinar/{token}')
         Route::post('gov-br/reservar', [SignGovBrReturnController::class, 'reserve'])->middleware('throttle:20,10,sign-govbr-reserve')->name('govbr.reserve');
         Route::get('gov-br/{pedido}/revisao', [SignGovBrReturnController::class, 'download'])->where('pedido', '[0-9A-Za-z]{26}')->middleware('throttle:30,10,sign-govbr-download')->name('govbr.download');
         Route::post('gov-br/{pedido}/devolver', [SignGovBrReturnController::class, 'upload'])->where('pedido', '[0-9A-Za-z]{26}')->middleware('throttle:10,10,sign-govbr-upload')->name('govbr.upload');
+        // Fase 3 §3.3 (F-FLOW, docs/fase-3/etapas-e-delegacao.md §5): delegação pelo participante.
+        // JSON; 404 com a flag `delegation` desligada ou sem a sessão do código. As proibições e os
+        // limites por participante e por organização ficam no serviço; este é o freio por IP.
+        Route::get('delegar', [SignDelegationController::class, 'show'])->middleware('throttle:60,1,sign-delegation-show')->name('delegation.show');
+        Route::post('delegar', [SignDelegationController::class, 'store'])->middleware('throttle:6,10,sign-delegation-store')->name('delegation.store');
+        // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §4): o participante troca o idioma de
+        // EXIBIÇÃO (vale para a sessão e vai para a trilha). 404 com a flag `multilingual` desligada.
+        Route::post('idioma', [SignLocaleController::class, 'update'])->middleware('throttle:20,10,sign-locale')->name('locale.update');
     });
 
 // -- Assinatura em lote (Fase 2 §2.7, C-PRES — docs/fase-2/presencial-e-lote.md §3) -------
@@ -312,10 +337,29 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::patch('{envelope}/destinatarios/{recipient}', [EnvelopeRecipientController::class, 'update'])->name('recipients.update');
         // Fase 2 §2.10 (C-ID): fotos exigidas do participante antes do aceite (só rascunho).
         Route::put('{envelope}/participantes/{recipient}/captura', [CaptureRequirementController::class, 'update'])->name('recipients.identity_capture');
+        // Fase 3 §3.3 (F-VIDEO): exigência de vídeo curto (só rascunho) e reprodução por URL
+        // assinada e curta para quem vê o envelope. 404 com a flag `identity_video` desligada.
+        Route::put('{envelope}/participantes/{recipient}/video', [VideoRequirementController::class, 'update'])->name('recipients.identity_video');
+        // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §3): idioma e fuso de cada participante
+        // (JSON; alteração só no rascunho). 404 com a flag `multilingual` desligada.
+        Route::get('{envelope}/idiomas', [RecipientLocaleController::class, 'index'])->name('recipients.locales');
+        Route::put('{envelope}/participantes/{recipient}/idioma', [RecipientLocaleController::class, 'update'])->name('recipients.locale');
+        Route::get('{envelope}/videos', [VideoPlaybackController::class, 'index'])->name('identity_videos.index');
+        Route::get('{envelope}/videos/{video}/arquivo', [VideoPlaybackController::class, 'file'])->name('identity_videos.file');
         Route::post('{envelope}/cancelar', [EnvelopeController::class, 'cancel'])->name('cancel');
         Route::delete('{envelope}', [EnvelopeController::class, 'destroy'])->name('destroy');
         Route::post('{envelope}/duplicar', [EnvelopeController::class, 'duplicate'])->name('duplicate');
         Route::patch('{envelope}/pasta', [EnvelopeController::class, 'move'])->name('move');
+        // Fase 3 §3.3 (F-FLOW, docs/fase-3/etapas-e-delegacao.md §5): etapas condicionais e
+        // delegação do lado de quem envia. JSON (exceto confirmar/recusar, que voltam com flash);
+        // 404 com as flags `conditional_steps` e `delegation` desligadas.
+        // Limites com prefixo próprio: o `throttle:N,M` genérico divide o contador com as outras
+        // rotas do usuário (inclusive o link de verificação de e-mail, 6/min).
+        Route::get('{envelope}/fluxo', [EnvelopeFlowController::class, 'show'])->middleware('throttle:120,1,envelope-flow-show')->name('flow.show');
+        Route::put('{envelope}/etapas', [EnvelopeFlowController::class, 'updateSteps'])->middleware('throttle:60,1,envelope-steps-update')->name('steps.update');
+        Route::put('{envelope}/delegacao', [EnvelopeFlowController::class, 'updateDelegation'])->middleware('throttle:60,1,envelope-delegation-update')->name('delegation.update');
+        Route::post('{envelope}/delegacoes/{delegation}/aprovar', [EnvelopeFlowController::class, 'approve'])->where('delegation', '[0-9A-Za-z]{26}')->middleware('throttle:30,1,envelope-delegation-decide')->name('delegations.approve');
+        Route::post('{envelope}/delegacoes/{delegation}/recusar', [EnvelopeFlowController::class, 'reject'])->where('delegation', '[0-9A-Za-z]{26}')->middleware('throttle:30,1,envelope-delegation-decide')->name('delegations.reject');
     });
 
     // Pastas (owner/admin)
@@ -352,6 +396,22 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         Route::post('{template}/arquivo', [TemplateSourceController::class, 'update'])->middleware('throttle:30,1')->name('source.update');
         Route::get('{template}/pre-visualizacao', [TemplateSourceController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
         Route::post('{template}/usar', [TemplateUseController::class, 'store'])->middleware('throttle:20,1')->name('use');
+    });
+    // Geração em lote (Fase 3 §3.1, F-BULK — docs/fase-3/geracao-em-lote.md). Flag
+    // `bulk_generation` desligada: 404 em todas (middleware do controller).
+    Route::get('modelos/{template}/lotes/novo', [BulkGenerationController::class, 'create'])->name('bulk_generations.create');
+    Route::get('modelos/{template}/lotes/planilha-modelo', [BulkGenerationController::class, 'sample'])->name('bulk_generations.sample');
+    // I-3F: limites com prefixo próprio (o `throttle:N,M` sem nome divide o contador por usuário
+    // com as outras rotas, inclusive o link de verificação de e-mail, 6/min).
+    Route::post('modelos/{template}/lotes', [BulkGenerationController::class, 'store'])->middleware('throttle:10,1,bulk-store')->name('bulk_generations.store');
+    Route::prefix('lotes')->name('bulk_generations.')->group(function (): void {
+        Route::get('/', [BulkGenerationController::class, 'index'])->name('index');
+        Route::get('{bulkGeneration}', [BulkGenerationController::class, 'show'])->name('show');
+        Route::put('{bulkGeneration}/mapeamento', [BulkGenerationController::class, 'mapping'])->middleware('throttle:20,1,bulk-mapping')->name('mapping');
+        Route::post('{bulkGeneration}/confirmar', [BulkGenerationController::class, 'confirm'])->middleware('throttle:10,1,bulk-confirm')->name('confirm');
+        Route::post('{bulkGeneration}/cancelar', [BulkGenerationController::class, 'cancel'])->name('cancel');
+        Route::delete('{bulkGeneration}', [BulkGenerationController::class, 'destroy'])->name('destroy');
+        Route::get('{bulkGeneration}/relatorio', [BulkGenerationController::class, 'report'])->name('report');
     });
     // Formulários públicos (Fase 2 §2.2, C-FORM — docs/fase-2/formulario-publico.md). Flag
     // `public_forms` desligada: 404 em todas (middleware dos controllers). Sem `org.role`:
@@ -678,6 +738,31 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
     Route::post('revisao-de-seguranca', [RiskAppealController::class, 'store'])
         ->middleware('throttle:5,60')
         ->name('risk.appeal.store');
+});
+
+// -- Fase 3 §3.2 (F-ANCHOR) — âncoras e OCR (docs/fase-3/ancoras-e-ocr.md §8) -----------------
+// JSON do editor de campos e da aba "Âncoras" do modelo. Flag `field_anchors` desligada (o
+// padrão): 404 em todas (checado nos controllers, antes da Policy). Autorização: `update`.
+Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->name('anchors.')->group(function (): void {
+    // Sem `throttle` nos GET: o limitador sem nome do Laravel conta por usuário em TODAS as rotas
+    // com `throttle:X,1`, e a consulta periódica do painel esgotaria o limite de outras rotas.
+    Route::get('documentos/{envelope}/ancoras', [EnvelopeAnchorController::class, 'index'])
+        ->name('envelope.index');
+    Route::post('documentos/{envelope}/ancoras/detectar', [EnvelopeAnchorController::class, 'detect'])
+        ->middleware('throttle:10,1,anchors-detect')->name('envelope.detect');
+    Route::post('documentos/{envelope}/sugestoes/confirmar-todas', [EnvelopeAnchorController::class, 'acceptAll'])
+        ->middleware('throttle:30,1,anchors-accept-all')->name('suggestions.accept_all');
+    Route::post('documentos/{envelope}/sugestoes/{suggestion}/confirmar', [EnvelopeAnchorController::class, 'accept'])
+        ->whereUlid('suggestion')->middleware('throttle:120,1,anchors-suggestion')->name('suggestions.accept');
+    Route::post('documentos/{envelope}/sugestoes/{suggestion}/descartar', [EnvelopeAnchorController::class, 'discard'])
+        ->whereUlid('suggestion')->middleware('throttle:120,1,anchors-suggestion')->name('suggestions.discard');
+    Route::get('modelos/{template}/ancoras', [TemplateAnchorRuleController::class, 'index'])
+        ->name('template.index');
+    // I-3F: limites com prefixo próprio (contador separado do `throttle:N,M` sem nome).
+    Route::put('modelos/{template}/ancoras', [TemplateAnchorRuleController::class, 'update'])
+        ->middleware('throttle:30,1,anchors-rules-update')->name('template.update');
+    Route::post('modelos/{template}/ancoras/testar', [TemplateAnchorRuleController::class, 'test'])
+        ->middleware('throttle:10,1,anchors-rules-test')->name('template.test');
 });
 
 require __DIR__.'/settings.php';

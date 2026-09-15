@@ -10,6 +10,7 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Notifications\Envelopes\EnvelopeExpiringNotification;
 use App\Notifications\Envelopes\SenderEnvelopeExpiringNotification;
+use App\Services\Envelopes\Delegation\DelegationVoider;
 use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Organizations\NotificationPreferences;
 use App\Services\Signing\Contracts\RevalidatesEnvelopeExpiration;
@@ -163,6 +164,9 @@ class ExpireEnvelopes implements RevalidatesEnvelopeExpiration
             ));
 
             $this->links->revokeForEnvelope($locked, exceptRecipientIds: $signed);
+
+            // Fase 3 §3.3 (F-FLOW): pedido de delegação pendente fica sem efeito no encerramento.
+            DelegationVoider::voidStale($locked, $correlationId);
 
             EnvelopeAudit::record($locked, AuditEventType::EnvelopeExpired, [
                 'pending_recipients' => $pending->count(),

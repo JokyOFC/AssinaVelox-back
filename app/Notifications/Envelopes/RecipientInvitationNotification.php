@@ -10,6 +10,7 @@ use App\Models\Recipient;
 use App\Notifications\Channels\TrackedMailChannel;
 use App\Notifications\Concerns\AppliesOrganizationBranding;
 use App\Notifications\Contracts\TracksDelivery;
+use App\Support\Locale\LocalizesRecipientMail;
 use App\Support\MailText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
@@ -28,10 +29,13 @@ use Illuminate\Notifications\Notification;
  *
  * Vocabulário (arquitetura §2): o texto fala em **assinar eletronicamente** e em
  * confirmação de identidade por código — nunca em "assinatura digital ICP-Brasil".
+ *
+ * Fase 3 §3.3 (F-I18N): os textos vêm de `lang/{idioma}/signer_mail.php`, no idioma do
+ * participante quando a flag `multilingual` está ligada (PT-BR, idêntico ao de sempre, quando não).
  */
 class RecipientInvitationNotification extends Notification implements ShouldBeEncrypted, ShouldQueue, TracksDelivery
 {
-    use AppliesOrganizationBranding, Queueable;
+    use AppliesOrganizationBranding, LocalizesRecipientMail, Queueable;
 
     public function __construct(
         public readonly Recipient $recipient,
@@ -41,6 +45,7 @@ class RecipientInvitationNotification extends Notification implements ShouldBeEn
         public readonly bool $isReminder = false,
     ) {
         $this->onQueue((string) config('assinavelox.queues.notifications', 'notifications'));
+        $this->localizeFor($recipient, $envelope->organization);
     }
 
     /**
@@ -61,47 +66,58 @@ class RecipientInvitationNotification extends Notification implements ShouldBeEn
         );
     }
 
+    /**
+     * Fase 2 §2.4: papéis que não assinam como signatário ganham texto próprio (arquitetura §2 —
+     * aprovar, testemunhar e acompanhar não são "assinar"). O texto do signatário, único papel da
+     * Fase 1, continua idêntico.
+     */
     public function toMail(object $notifiable): MailMessage
     {
         $role = $this->role();
-
-        // Fase 2 §2.4: papéis que não assinam como signatário ganham texto próprio
-        // (arquitetura §2 — aprovar, testemunhar e acompanhar não são "assinar"). O texto do
-        // signatário, único papel da Fase 1, continua idêntico.
-        if ($role !== RecipientRole::Signer) {
-            return $this->applyOrganizationBranding($this->roleMail($role), $this->envelope->organization);
-        }
+        $key = match ($role) {
+            RecipientRole::Witness => 'witness',
+            RecipientRole::Approver => 'approver',
+            RecipientRole::Viewer => 'viewer',
+            default => 'signer',
+        };
 
         $organization = $this->envelope->organization;
         $sender = $this->envelope->creator;
 
+        // Corpo em Markdown: texto de terceiros escapado (MailText). Assunto: texto puro.
+        $body = [
+            'sender' => MailText::escape($sender->name ?? $this->mailText('sender_fallback')),
+            'organization' => MailText::escape($organization->name),
+            'title' => MailText::escape($this->envelope->title),
+            'code' => $this->envelope->display_code,
+        ];
+        $subject = ['organization' => $organization->name, 'title' => $this->envelope->title];
+
         $message = (new MailMessage)
             ->subject($this->isReminder
-                ? 'Lembrete: '.$this->envelope->title.' aguarda sua assinatura'
-                : $organization->name.' enviou um documento para você assinar')
-            ->greeting('Olá, '.$this->firstName().'!');
-
-        if ($this->isReminder) {
-            $message->line('Este é um lembrete: o documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') ainda aguarda a sua assinatura.');
-        } else {
-            $message->line(MailText::escape($sender->name ?? 'Um usuário').', de **'.MailText::escape($organization->name).'**, enviou o documento **'.MailText::escape($this->envelope->title).'** ('.$this->envelope->display_code.') para você assinar eletronicamente.');
-        }
+                ? $this->mailText("invitation.{$key}.reminder_subject", $subject)
+                : $this->mailText("invitation.{$key}.subject", $subject))
+            ->greeting($this->mailText('greeting_named', ['name' => $this->firstName()]))
+            ->line($this->isReminder
+                ? $this->mailText("invitation.{$key}.reminder_line", $body)
+                : $this->mailText("invitation.{$key}.intro", $body));
 
         if (filled($this->envelope->message)) {
-            $message->line('Mensagem de quem enviou: "'.MailText::escape($this->envelope->message).'"');
+            $message->line($this->mailText('sender_message', ['message' => MailText::escape($this->envelope->message)]));
         }
 
         $message
-            ->action($this->isReminder ? 'Abrir e assinar' : 'Revisar e assinar', $this->signingUrl)
-            ->line('Para confirmar que é você, vamos enviar um código de 6 dígitos para este mesmo e-mail.');
+            ->action($this->mailText("invitation.{$key}.".($this->isReminder ? 'reminder_action' : 'action')), $this->signingUrl)
+            ->line($this->mailText('code_notice'));
 
-        if ($this->envelope->expires_at !== null) {
-            $message->line('O prazo para assinar termina em '.$this->deadline().'.');
+        // O visualizador não tem prazo para "assinar": a linha não existe para ele.
+        if ($role !== RecipientRole::Viewer && $this->envelope->expires_at !== null) {
+            $message->line($this->mailText("invitation.{$key}.deadline", ['deadline' => $this->deadline()]));
         }
 
         $message
-            ->line('Este link é pessoal e foi criado só para você — não encaminhe este e-mail.')
-            ->salutation('Atenciosamente, AssinaVelox');
+            ->line($this->mailText('personal_link'))
+            ->salutation($this->mailText('salutation'));
 
         // Fase 2 §2.8: com a marca ativa, só o tema (cabeçalho, botão) e o Reply-To mudam.
         return $this->applyOrganizationBranding($message, $organization);
@@ -113,77 +129,15 @@ class RecipientInvitationNotification extends Notification implements ShouldBeEn
         return $this->recipient->role;
     }
 
-    /**
-     * Convite de testemunha, aprovador ou visualizador (Fase 2 §2.4).
-     */
-    private function roleMail(RecipientRole $role): MailMessage
-    {
-        $organization = $this->envelope->organization;
-        $sender = $this->envelope->creator;
-        $title = MailText::escape($this->envelope->title);
-        $code = $this->envelope->display_code;
-        $from = MailText::escape($sender->name ?? 'Um usuário').', de **'.MailText::escape($organization->name).'**,';
-
-        [$subject, $reminderSubject, $intro, $reminderLine, $action, $deadline] = match ($role) {
-            RecipientRole::Witness => [
-                $organization->name.' pediu que você assine um documento como testemunha',
-                'Lembrete: '.$this->envelope->title.' aguarda sua assinatura como testemunha',
-                $from.' pediu que você assine eletronicamente o documento **'.$title.'** ('.$code.') como testemunha.',
-                'Este é um lembrete: o documento **'.$title.'** ('.$code.') ainda aguarda a sua assinatura como testemunha.',
-                'Revisar e assinar como testemunha',
-                'O prazo para assinar termina em ',
-            ],
-            RecipientRole::Approver => [
-                $organization->name.' enviou um documento para a sua aprovação',
-                'Lembrete: '.$this->envelope->title.' aguarda a sua aprovação',
-                $from.' enviou o documento **'.$title.'** ('.$code.') para você revisar e aprovar eletronicamente.',
-                'Este é um lembrete: o documento **'.$title.'** ('.$code.') ainda aguarda a sua aprovação.',
-                'Revisar e aprovar',
-                'O prazo para aprovar termina em ',
-            ],
-            default => [
-                $organization->name.' compartilhou um documento com você',
-                $organization->name.' compartilhou um documento com você',
-                $from.' incluiu você para acompanhar o documento **'.$title.'** ('.$code.'). Você não precisa assinar nada; quando o documento for concluído, você receberá a cópia final.',
-                $from.' incluiu você para acompanhar o documento **'.$title.'** ('.$code.').',
-                'Acompanhar o documento',
-                null,
-            ],
-        };
-
-        $message = (new MailMessage)
-            ->subject($this->isReminder ? $reminderSubject : $subject)
-            ->greeting('Olá, '.$this->firstName().'!')
-            ->line($this->isReminder ? $reminderLine : $intro);
-
-        if (filled($this->envelope->message)) {
-            $message->line('Mensagem de quem enviou: "'.MailText::escape($this->envelope->message).'"');
-        }
-
-        $message
-            ->action($action, $this->signingUrl)
-            ->line('Para confirmar que é você, vamos enviar um código de 6 dígitos para este mesmo e-mail.');
-
-        if ($deadline !== null && $this->envelope->expires_at !== null) {
-            $message->line($deadline.$this->deadline().'.');
-        }
-
-        return $message
-            ->line('Este link é pessoal e foi criado só para você — não encaminhe este e-mail.')
-            ->salutation('Atenciosamente, AssinaVelox');
-    }
-
     private function firstName(): string
     {
         $parts = preg_split('/\s+/u', trim($this->recipient->name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-        return MailText::escape($parts[0] ?? 'tudo bem?');
+        return MailText::escape($parts[0] ?? $this->mailText('first_name_fallback'));
     }
 
     private function deadline(): string
     {
-        return $this->envelope->expires_at
-            ->setTimezone($this->envelope->organization->timezone)
-            ->format('d/m/Y \à\s H:i');
+        return $this->mailDeadline($this->envelope->expires_at, $this->envelope->organization->timezone);
     }
 }

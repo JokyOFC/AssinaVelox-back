@@ -56,6 +56,7 @@ import {
 import { create as inPersonCreate } from '@/routes/in_person';
 import { index as integrationsIndex } from '@/routes/integrations';
 import { index as membersIndex } from '@/routes/members';
+import { create as organizationsCreate } from '@/routes/organizations';
 import { index as plansIndex } from '@/routes/plans';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as publicFormsIndex } from '@/routes/public_forms';
@@ -354,6 +355,17 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     href: dashboard(),
                     icon: ArrowLeft,
                     activePrefixes: ['/__never__'],
+                    // Sem organização, o dashboard só devolveria ao painel.
+                    hidden: !organization,
+                },
+                {
+                    // Administrador da plataforma sem organização: a ação que faz
+                    // sentido aqui é criar uma, não "voltar" a um app que ele não tem.
+                    key: 'create-organization',
+                    title: 'Criar organização',
+                    href: organizationsCreate(),
+                    icon: Plus,
+                    hidden: !!organization,
                 },
             ],
         },

@@ -345,7 +345,7 @@ function smokeDefaultStatus(string $role, string $group, RouteInstance $route): 
         'guest' => in_array($group, ['public', 'guest'], true) ? 200 : 302,
         'platform_admin' => match ($group) {
             'guest' => 302,
-            'app' => 302, // sem membership → organizations.create
+            'app' => 302, // sem membership → painel interno (admin.organizations.index)
             default => 200,
         },
         'member' => match ($group) {
@@ -558,14 +558,17 @@ test('member não vê documentos criados por outros usuários da organização',
     $this->get(route('envelopes.show', ['envelope' => $ctx['envelope']->ulid]))->assertOk();
 });
 
-test('platform admin sem membership é levado a criar organização ao acessar o app', function (): void {
+test('platform admin sem membership é levado ao painel interno ao acessar o app', function (): void {
     $admin = User::query()->where('email', 'admin@assinavelox.local')->firstOrFail();
 
     expect(Membership::query()->where('user_id', $admin->getKey())->exists())->toBeFalse();
     expect($admin->is_platform_admin)->toBeTrue();
 
-    $this->actingAs($admin)->get(route('dashboard'))->assertRedirect(route('organizations.create'));
+    // Antes ia para organizations.create; o app de cliente não é para essa conta
+    // (App\Support\LandingRoute). Criar organização continua possível pelo endereço direto.
+    $this->actingAs($admin)->get(route('dashboard'))->assertRedirect(route('admin.organizations.index'));
     $this->actingAs($admin)->get(route('admin.organizations.index'))->assertOk();
+    $this->actingAs($admin)->get(route('organizations.create'))->assertOk();
 });
 
 test('owner da demo tem os papéis esperados nos seeders', function (): void {

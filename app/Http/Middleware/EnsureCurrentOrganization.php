@@ -17,7 +17,8 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * 1. `session('current_organization_id')` → membership ATIVA nessa organização;
  * 2. fallback: `users.current_organization_id` e, por fim, a primeira membership ativa;
- * 3. sem membership ativa → redireciona para `organizations.create`.
+ * 3. sem membership ativa → redireciona para `organizations.create` (administrador da
+ *    plataforma: para o painel interno, `admin.organizations.index`).
  *
  * Define App\Support\CurrentOrganization (organização + membership) para o escopo global,
  * policies e props compartilhadas, e sincroniza `users.current_organization_id`.
@@ -51,6 +52,13 @@ class EnsureCurrentOrganization
             }
 
             $request->session()->forget(self::SESSION_KEY);
+
+            // O administrador da plataforma sem organização opera o painel interno; o app de
+            // cliente não é para ele (App\Support\LandingRoute). "Criar organização" continua
+            // acessível pelo endereço direto, para quando ele quiser de fato criar uma.
+            if ($user->is_platform_admin) {
+                return redirect()->route('admin.organizations.index');
+            }
 
             return redirect()->route('organizations.create');
         }

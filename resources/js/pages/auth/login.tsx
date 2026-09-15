@@ -1,6 +1,7 @@
 import { Form, Head } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import { SsoLoginEntry } from '@/components/sso/sso-login-entry';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -105,6 +106,8 @@ export default function Login({ status, canResetPassword }: Props) {
                     </>
                 )}
             </Form>
+
+            <SsoLoginEntry />
 
             <p className="text-text-secondary text-center text-[13.5px]">
                 Não tem conta?{' '}

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "assinavelox"
+version = "1.0.0"
+description = "SDK Python da API v1 da AssinaVelox (gerado da especificação OpenAPI; sem dependências)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietário — publicação pendente de decisão do proprietário" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+    "Private :: Do Not Upload",
+]
+dependencies = []
+
+[tool.setuptools]
+packages = ["assinavelox"]
+
+[tool.setuptools.package-data]
+assinavelox = ["py.typed"]

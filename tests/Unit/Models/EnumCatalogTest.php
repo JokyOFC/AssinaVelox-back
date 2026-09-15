@@ -135,9 +135,26 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
     // Fase 3, parte 2, onda F — multilíngue (F-I18N, docs/fase-3/multilingue.md §8). Só acréscimos (T7).
     $i18n = ['recipient.locale_updated', 'recipient.display_locale_changed'];
 
+    // Fase 3, onda G — login corporativo OIDC/SAML (G-SSO, docs/fase-3/sso.md §9). Só acréscimos (T7).
+    $sso = [
+        'sso.connection_created', 'sso.connection_updated', 'sso.connection_deleted', 'sso.connection_tested',
+        'sso.domain_added', 'sso.domain_verified', 'sso.domain_removed',
+        'sso.login_succeeded', 'sso.login_failed', 'sso.user_provisioned', 'sso.identity_linked',
+        'sso.break_glass_used',
+    ];
+
+    // Fase 3, onda G — importação da nuvem e app HubSpot (G-CONN, docs/fase-3/conectores.md §7). Só acréscimos (T7).
+    $connectors = [
+        'cloud_import.completed', 'cloud_import.rejected',
+        'hubspot.connected', 'hubspot.disconnected', 'hubspot.action_received',
+    ];
+
+    // Fase 3, onda G — assinatura embutida (G-EMBED, docs/fase-3/widget-embutido.md §7). Só acréscimos (T7).
+    $embed = ['embedded_session.created', 'embedded_session.opened', 'embedded_session.revoked', 'embed_origins.updated'];
+
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api, ...$identityVideo, ...$flow, ...$i18n])
-        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api) + count($identityVideo) + count($flow) + count($i18n));
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api, ...$identityVideo, ...$flow, ...$i18n, ...$sso, ...$connectors, ...$embed])
+        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api) + count($identityVideo) + count($flow) + count($i18n) + count($sso) + count($connectors) + count($embed));
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

@@ -110,6 +110,13 @@ const SMOKE_WAVE_B_STUBS_404 = [
  * @var array<string, array<string, int>>
  */
 const SMOKE_OVERRIDES = [
+    // Fase 3 §3.9 (G-CONN, docs/fase-3/conectores.md §8): importação da nuvem e app HubSpot — com
+    // as flags `cloud_import` e `hubspot` desligadas (o padrão), 404 para os papéis do app.
+    'cloud_import.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'cloud_import.google.start' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'cloud_import.google.callback' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'integrations.hubspot.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    'integrations.hubspot.callback' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     // Cria um rascunho e redireciona para o wizard.
     'envelopes.create' => ['owner' => 302, 'admin' => 302, 'member' => 302],
     // Placeholders Fase 2: redirecionam para o índice (member cai no org.role → 403).
@@ -193,6 +200,21 @@ const SMOKE_OVERRIDES = [
     // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §3): JSON dos idiomas dos participantes —
     // com a flag `multilingual` desligada (o padrão), 404 para todos.
     'envelopes.recipients.locales' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.9 (G-EMBED, docs/fase-3/widget-embutido.md §10): com a flag `embedded_signing`
+    // desligada — o padrão — o embed.js, a página do widget, o estado e o PDF respondem 404 para
+    // todos (rotas fora do grupo `web`, sem login), e a tela de origens responde 404 no painel.
+    'embed.script' => ['*' => 404],
+    'embed.show' => ['*' => 404],
+    'embed.state' => ['*' => 404],
+    'embed.document' => ['*' => 404],
+    'integrations.embed.edit' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 3 §3.9 (G-SSO, docs/fase-3/sso.md §11): com as flags `sso_oidc`/`sso_saml` desligadas —
+    // o padrão — a tela de configuração, a página de SSO obrigatório, a volta do OIDC e o metadata
+    // do SAML respondem 404 (a tela exige owner/admin: o member recebe 403 antes, do `org.role`).
+    'settings.sso' => ['owner' => 404, 'admin' => 404],
+    'sso.required' => ['owner' => 404, 'admin' => 404, 'member' => 404, 'platform_admin' => 404],
+    'sso.oidc.callback' => ['*' => 404],
+    'sso.saml.metadata' => ['*' => 404],
 ];
 
 /**
@@ -212,6 +234,8 @@ function smokeRouteParameters(string $name, array $ctx): array
     $user = $ctx['user'];
 
     return match ($name) {
+        // Fase 3 §3.9 (G-CONN): rascunho real — flag `cloud_import` desligada responde 404.
+        'cloud_import.show', 'cloud_import.google.start' => ['envelope' => $draft->ulid],
         'envelopes.edit' => ['envelope' => $draft->ulid],
         'envelopes.show', 'envelopes.evidence', 'envelopes.document.status', 'envelopes.document.preview' => ['envelope' => $envelope->ulid],
         // Fase 2 §2.19 (K-RET): JSON de preservação do detalhe (só `view`).
@@ -266,6 +290,12 @@ function smokeRouteParameters(string $name, array $ctx): array
         'anchors.template.index' => ['template' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         // Fase 3 §3.3 (F-I18N): envelope em andamento do seeder — flag `multilingual` desligada, 404.
         'envelopes.recipients.locales' => ['envelope' => $envelope->ulid],
+        // Fase 3 §3.9 (G-EMBED): ULIDs sintéticos de sessão e documento — flag `embedded_signing`
+        // desligada responde 404.
+        'embed.show', 'embed.state' => ['session' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
+        'embed.document' => ['session' => '01HZZZZZZZZZZZZZZZZZZZZZZZ', 'document' => '01HZZZZZZZZZZZZZZZZZZZZZZY'],
+        // Fase 3 §3.9 (G-SSO): ULID sintético de conexão — flags `sso_oidc`/`sso_saml` desligadas, 404.
+        'sso.oidc.callback', 'sso.saml.metadata' => ['connection' => '01HZZZZZZZZZZZZZZZZZZZZZZZ'],
         default => [],
     };
 }

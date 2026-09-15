@@ -30,6 +30,8 @@ void createInertiaApp({
             // pelo Inertia 3 como resolvedor de props e cai no AppLayout (topbar da conta).
             case name === 'public-forms/fill':
             case name === 'public-forms/confirm':
+            // Fase 3 §3.9 (G-EMBED): o widget embutido roda no iframe de outro site, sem casca.
+            case name === 'embed/sign':
                 return null;
             default:
                 return AppLayout;

@@ -203,9 +203,72 @@ enum AuditEventType: string
     // já na transição, não só quando alguém tenta confirmá-lo. Payload só com ULIDs e o código.
     case DelegationVoided = 'delegation.voided';
 
+    // Fase 3 §3.9 (G-SSO, docs/fase-3/sso.md §9) — login corporativo por OIDC/SAML. Da
+    // ORGANIZAÇÃO (`envelope_id` nulo). Payload só com ULIDs, protocolo, domínio (nunca e-mail
+    // completo), códigos de motivo e booleanos — nunca token, assertion, claim bruta ou segredo.
+    // O login por SSO autentica o USUÁRIO do painel, nunca o signatário de um envelope (T1).
+    case SsoConnectionCreated = 'sso.connection_created';
+    case SsoConnectionUpdated = 'sso.connection_updated';
+    case SsoConnectionDeleted = 'sso.connection_deleted';
+    case SsoConnectionTested = 'sso.connection_tested';
+    case SsoDomainAdded = 'sso.domain_added';
+    case SsoDomainVerified = 'sso.domain_verified';
+    case SsoDomainRemoved = 'sso.domain_removed';
+    case SsoLoginSucceeded = 'sso.login_succeeded';
+    case SsoLoginFailed = 'sso.login_failed';
+    case SsoUserProvisioned = 'sso.user_provisioned';
+    case SsoIdentityLinked = 'sso.identity_linked';
+    case SsoBreakGlassUsed = 'sso.break_glass_used';
+
+    // Fase 3 §3.9 (G-EMBED, docs/fase-3/widget-embutido.md §7) — sessão de assinatura embutida.
+    // Gravados no envelope, ligados ao participante. Payload só com o ULID da sessão, a origem
+    // (site do cliente, não é dado pessoal), a validade e o motivo — nunca token ou URL.
+    // `created`: a API v1 emitiu a URL de uso único (ator: quem criou o token).
+    // `opened`: o widget trocou a URL pela sessão, dentro do site da origem (ator: participante).
+    // `revoked`: a sessão foi encerrada antes do fim (API ou convite revogado).
+    case EmbeddedSessionCreated = 'embedded_session.created';
+    case EmbeddedSessionOpened = 'embedded_session.opened';
+    case EmbeddedSessionRevoked = 'embedded_session.revoked';
+    // Da ORGANIZAÇÃO (`envelope_id` nulo): quem mudou a lista de origens que podem hospedar o
+    // widget. Payload: origens acrescentadas e removidas e o total.
+    case EmbedOriginsUpdated = 'embed_origins.updated';
+
+    // Fase 3 §3.9 (G-CONN, docs/fase-3/conectores.md §7) — importação da nuvem e app HubSpot.
+    // `cloud_import.*`: no envelope; payload com ULIDs, provedor, id externo do arquivo, SHA-256,
+    // tamanho, código de recusa e `simulated` — nunca token, link de download ou conteúdo.
+    // `hubspot.connected|disconnected`: da ORGANIZAÇÃO (`envelope_id` nulo); portal e escopos.
+    // `hubspot.action_received`: no envelope criado pela ação de workflow; portal, objeto e o
+    // ULID da execução — nunca token nem assinatura.
+    case CloudImportCompleted = 'cloud_import.completed';
+    case CloudImportRejected = 'cloud_import.rejected';
+    case HubSpotConnected = 'hubspot.connected';
+    case HubSpotDisconnected = 'hubspot.disconnected';
+    case HubSpotActionReceived = 'hubspot.action_received';
+
     public function label(): string
     {
         return match ($this) {
+            self::CloudImportCompleted => 'Arquivo importado da nuvem',
+            self::CloudImportRejected => 'Importação de arquivo da nuvem recusada',
+            self::HubSpotConnected => 'Conta do HubSpot conectada',
+            self::HubSpotDisconnected => 'Conta do HubSpot desconectada',
+            self::HubSpotActionReceived => 'Documento criado por um workflow do HubSpot',
+            self::EmbeddedSessionCreated => 'Acesso embutido ao documento criado pela API',
+            self::EmbeddedSessionOpened => 'Participante abriu o documento no site integrado',
+            self::EmbeddedSessionRevoked => 'Acesso embutido ao documento encerrado',
+            self::EmbedOriginsUpdated => 'Origens permitidas do widget de assinatura alteradas',
+            self::SsoConnectionCreated => 'Login corporativo (SSO) configurado',
+            self::SsoConnectionUpdated => 'Login corporativo (SSO) alterado',
+            self::SsoConnectionDeleted => 'Login corporativo (SSO) removido',
+            self::SsoConnectionTested => 'Conexão do login corporativo testada',
+            self::SsoDomainAdded => 'Domínio adicionado ao login corporativo',
+            self::SsoDomainVerified => 'Domínio do login corporativo verificado',
+            self::SsoDomainRemoved => 'Domínio removido do login corporativo',
+            self::SsoLoginSucceeded => 'Entrada pelo login corporativo',
+            self::SsoLoginFailed => 'Entrada pelo login corporativo recusada',
+            self::SsoUserProvisioned => 'Usuário criado pelo login corporativo',
+            self::SsoIdentityLinked => 'Conta ligada ao provedor de identidade',
+            self::SsoBreakGlassUsed => 'Acesso de emergência por senha com SSO obrigatório',
             self::DelegationVoided => 'Pedido de delegação ficou sem efeito',
             self::RecipientLocaleUpdated => 'Idioma do participante definido por quem enviou',
             self::RecipientDisplayLocaleChanged => 'Participante trocou o idioma de exibição da página',
@@ -364,7 +427,9 @@ enum AuditEventType: string
             self::PaymentApproved,
             self::SubscriptionActivated,
             self::SubscriptionRenewed,
-            self::SubscriptionResumed => 'ok',
+            self::SubscriptionResumed,
+            self::SsoDomainVerified,
+            self::SsoLoginSucceeded => 'ok',
 
             self::ChallengeFailed,
             self::ChallengePinFailed,
@@ -386,7 +451,9 @@ enum AuditEventType: string
             self::PaymentFailed,
             self::SubscriptionPastDue,
             self::SubscriptionExpired,
-            self::ImpersonationStarted => 'warn',
+            self::ImpersonationStarted,
+            self::SsoLoginFailed,
+            self::SsoBreakGlassUsed => 'warn',
 
             default => 'info',
         };

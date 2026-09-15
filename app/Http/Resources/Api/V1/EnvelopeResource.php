@@ -82,11 +82,17 @@ class EnvelopeResource extends JsonResource
             'signature_status_label' => $signatureStatus?->label(),
             'created_at' => ApiFormat::date($envelope->created_at),
             'updated_at' => ApiFormat::date($envelope->updated_at),
+            /** @var string|null */
             'sent_at' => ApiFormat::date($envelope->sent_at),
+            /** @var string|null */
             'expires_at' => ApiFormat::date($envelope->expires_at),
+            /** @var string|null */
             'completed_at' => ApiFormat::date($envelope->completed_at),
+            /** @var string|null */
             'refused_at' => ApiFormat::date($envelope->refused_at),
+            /** @var string|null */
             'expired_at' => ApiFormat::date($envelope->expired_at),
+            /** @var string|null */
             'canceled_at' => ApiFormat::date($envelope->canceled_at),
         ];
 
@@ -94,15 +100,24 @@ class EnvelopeResource extends JsonResource
             return $data;
         }
 
-        return $data + [
+        // array_merge (e não `+`): mesmo resultado (chaves distintas) e o OpenAPI (Scramble)
+        // consegue descrever os campos do detalhe — docs/fase-3/sdks.md §4.
+        return array_merge($data, [
+            /** Só no detalhe. */
             'message' => $envelope->message,
+            /** @var int|null Só no detalhe. */
             'expiration_days' => $envelope->setting('expiration_days'),
+            /** Só no detalhe. */
             'send_copy_to_all' => (bool) $envelope->setting('send_copy_to_all', false),
+            /** @var string|null Só no detalhe. */
             'cancel_reason' => $envelope->status === EnvelopeStatus::Canceled ? $envelope->setting('cancel_reason') : null,
+            /** @var list<DocumentResource> Só no detalhe. */
             'documents' => DocumentResource::listFor($envelope, $request),
+            /** @var list<RecipientResource> Só no detalhe. */
             'recipients' => RecipientResource::collection($all)->resolve($request),
+            /** Só no detalhe. */
             'links' => $this->links($envelope, $completed),
-        ];
+        ]);
     }
 
     /**

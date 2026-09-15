@@ -10,6 +10,7 @@ import {
     useCnpjLookup,
 } from '@/components/identity/cnpj-lookup';
 import InputError from '@/components/input-error';
+import { SsoSecurityRow } from '@/components/sso/sso-security-row';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -440,13 +441,17 @@ export default function SettingsGeneral({
                         saveSecurity({ require_two_factor: checked });
                     }}
                 />
-                <SecurityRow
-                    title="Login único (SSO / SAML)"
-                    description="Disponível no plano Empresarial"
-                    checked={security.sso_enabled}
-                    disabled
-                    phase2
-                />
+                {features?.sso_oidc === true || features?.sso_saml === true ? (
+                    <SsoSecurityRow />
+                ) : (
+                    <SecurityRow
+                        title="Login único (SSO / SAML)"
+                        description="Disponível no plano Empresarial"
+                        checked={security.sso_enabled}
+                        disabled
+                        phase2
+                    />
+                )}
                 <SecurityRow
                     title="Encerrar sessões após 12 h inativas"
                     description="Recomendado para computadores compartilhados"

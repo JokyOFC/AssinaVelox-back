@@ -73,4 +73,32 @@ return [
         'credentials' => env('ASSINAVELOX_EMAIL_API_CREDENTIALS'),
     ],
 
+    /*
+    | Fase 3 §3.9 — conectores (G-CONN, docs/fase-3/conectores.md). Classe B: apps que o
+    | proprietário ainda precisa registrar. Sem estes valores o conector aparece como "aguardando
+    | app registrado pelo proprietário" e nada é chamado. Segredos só no ambiente — nunca em
+    | banco, log, fila, exceção ou resposta. Os tokens OAuth por organização (HubSpot) ficam
+    | cifrados em `hubspot_connections`.
+    */
+    'google_drive' => [
+        'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_DRIVE_CLIENT_SECRET'),
+        // Chave do Google Picker (pública; restringir por referrer no console do Google).
+        'api_key' => env('GOOGLE_DRIVE_API_KEY'),
+        // Número do projeto no Google Cloud (App ID do Picker).
+        'app_id' => env('GOOGLE_DRIVE_APP_ID'),
+    ],
+
+    'dropbox' => [
+        // App key do Chooser (pública; os domínios do app precisam estar registrados no Dropbox).
+        'app_key' => env('DROPBOX_APP_KEY'),
+    ],
+
+    'hubspot' => [
+        'client_id' => env('HUBSPOT_CLIENT_ID'),
+        // Também é a chave da assinatura v3 das requisições da ação de workflow.
+        'client_secret' => env('HUBSPOT_CLIENT_SECRET'),
+        'app_id' => env('HUBSPOT_APP_ID'),
+    ],
+
 ];

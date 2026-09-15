@@ -28,6 +28,7 @@ use App\Http\Controllers\BulkGenerations\BulkGenerationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Dossier\DossierDownloadController;
 use App\Http\Controllers\Dossier\DossierExportController;
+use App\Http\Controllers\Embed\EmbedOriginsController;
 use App\Http\Controllers\Envelopes\EnvelopeBulkController;
 use App\Http\Controllers\Envelopes\EnvelopeController;
 use App\Http\Controllers\Envelopes\EnvelopeDocumentController;
@@ -47,6 +48,9 @@ use App\Http\Controllers\Identity\VideoRequirementController;
 use App\Http\Controllers\InPerson\InPersonHostController;
 use App\Http\Controllers\InPerson\KioskController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\Integrations\CloudImportController;
+use App\Http\Controllers\Integrations\HubSpotActionController;
+use App\Http\Controllers\Integrations\HubSpotController;
 use App\Http\Controllers\Integrations\KeysController;
 use App\Http\Controllers\Integrations\WebhookDeliveryController;
 use App\Http\Controllers\Integrations\WebhookEndpointController;
@@ -435,6 +439,11 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
     // ApiTokenManager (anti-escalada). A criação responde com a página (token exibido uma vez).
     Route::post('api-integracoes/chaves', [KeysController::class, 'store'])->middleware('throttle:10,1')->name('integrations.keys.store');
     Route::delete('api-integracoes/chaves/{apiToken}', [KeysController::class, 'destroy'])->middleware('throttle:30,1')->name('integrations.keys.destroy');
+    // Fase 3 §3.9 (G-EMBED, docs/fase-3/widget-embutido.md §4) — origens que podem hospedar o
+    // widget de assinatura embutida. Flag `embedded_signing` desligada: 404. Sem `org.role`:
+    // `manage_integrations` conferida no controller.
+    Route::get('api-integracoes/widget', [EmbedOriginsController::class, 'edit'])->name('integrations.embed.edit');
+    Route::put('api-integracoes/widget', [EmbedOriginsController::class, 'update'])->middleware('throttle:20,1,embed-origins-update')->name('integrations.embed.update');
 
     // Fase 2 §2.16 — webhooks de saída (D-HOOK, docs/fase-2/webhooks.md §9). Flag
     // `outbound_webhooks` desligada: 404 em todas (middleware dos controllers). Sem `org.role`:
@@ -765,4 +774,43 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->name('anchors.')->gro
         ->middleware('throttle:10,1,anchors-rules-test')->name('template.test');
 });
 
+// -- Fase 3 §3.9 (G-CONN) — importação da nuvem e app HubSpot (docs/fase-3/conectores.md §8) ----
+// Flags `cloud_import` e `hubspot` desligadas (o padrão): 404 em todas (middleware dos controllers,
+// depois do `org`). Autorização: `update` do envelope na importação; `manage_integrations` no
+// HubSpot. Limites com prefixo próprio (contador separado do `throttle:N,M` sem nome).
+Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): void {
+    Route::get('documentos/{envelope}/importar', [CloudImportController::class, 'show'])
+        ->name('cloud_import.show');
+    Route::get('documentos/{envelope}/importar/google', [CloudImportController::class, 'googleStart'])
+        ->middleware('throttle:10,1,cloud-import-google-start')->name('cloud_import.google.start');
+    Route::post('documentos/{envelope}/importar/google/token', [CloudImportController::class, 'googleToken'])
+        ->middleware('throttle:30,1,cloud-import-google-token')->name('cloud_import.google.token');
+    Route::post('documentos/{envelope}/importar/google', [CloudImportController::class, 'googleStore'])
+        ->middleware('throttle:10,1,cloud-import-store')->name('cloud_import.google.store');
+    Route::post('documentos/{envelope}/importar/dropbox', [CloudImportController::class, 'dropboxStore'])
+        ->middleware('throttle:10,1,cloud-import-store')->name('cloud_import.dropbox.store');
+    // Retorno do OAuth do Google: URL FIXA (registrada no console do Google); o envelope vem do `state`.
+    Route::get('integracoes/nuvem/google/retorno', [CloudImportController::class, 'googleCallback'])
+        ->middleware('throttle:20,1,cloud-import-google-callback')->name('cloud_import.google.callback');
+
+    Route::get('api-integracoes/hubspot', [HubSpotController::class, 'show'])
+        ->name('integrations.hubspot.show');
+    Route::post('api-integracoes/hubspot/conectar', [HubSpotController::class, 'connect'])
+        ->middleware('throttle:10,1,hubspot-connect')->name('integrations.hubspot.connect');
+    Route::get('api-integracoes/hubspot/retorno', [HubSpotController::class, 'callback'])
+        ->middleware('throttle:20,1,hubspot-callback')->name('integrations.hubspot.callback');
+    Route::delete('api-integracoes/hubspot', [HubSpotController::class, 'disconnect'])
+        ->middleware('throttle:10,1,hubspot-disconnect')->name('integrations.hubspot.disconnect');
+});
+
+// Ação de workflow do HubSpot: sem CSRF e sem sessão de usuário — autenticada pela assinatura v3
+// (HMAC do client secret, janela de 5 min) e idempotente por `callbackId`. Flag global desligada: 404.
+Route::post('webhooks/hubspot/acao', HubSpotActionController::class)
+    ->middleware('throttle:webhook')
+    ->withoutMiddleware([PreventRequestForgery::class])
+    ->name('webhooks.hubspot.action');
+
 require __DIR__.'/settings.php';
+
+// Fase 3 §3.9 (G-SSO): login corporativo OIDC/SAML — docs/fase-3/sso.md. Flags desligadas: 404.
+require __DIR__.'/sso.php';

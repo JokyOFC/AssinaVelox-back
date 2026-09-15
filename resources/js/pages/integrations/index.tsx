@@ -1,5 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { Code } from 'lucide-react';
+import { ConnectorsCallout } from '@/components/integrations/cloud/connectors-callout';
+import { EmbedSettingsCallout } from '@/embed/embed-settings-callout';
 import { PageHeader } from '@/components/page-header';
 import { Phase2EmptyState } from '@/components/phase2-empty-state';
 import { SegmentedControl } from '@/components/segmented-control';
@@ -7,7 +9,12 @@ import { Button } from '@/components/ui/button';
 import { index as envelopesIndex } from '@/routes/envelopes';
 import { index as integrationsIndex } from '@/routes/integrations';
 
-/** Placeholder Fase 2 de API e integrações (ROUTES §2.21; DESIGN §6.9/6.10). */
+/**
+ * API e integrações com a API v1 e os webhooks desligados para a organização (ROUTES §2.21;
+ * DESIGN §6.9/6.10). A Fase 2 já existe: o texto diz que ela não está disponível AQUI (plano ou
+ * interruptor), sem prometer data. O widget embutido depende da API v1, então o cartão dele não
+ * aparece nesta tela (EmbedFeature exige `api_integrations` — revisão adversarial G).
+ */
 export default function IntegrationsIndex() {
     return (
         <>
@@ -24,27 +31,29 @@ export default function IntegrationsIndex() {
                                 value: 'docs',
                                 label: 'Documentação',
                                 disabled: true,
-                                title: 'Disponível na Fase 2',
+                                title: 'Ainda não disponível para esta organização',
                             },
                             {
                                 value: 'keys',
                                 label: 'Chaves e webhooks',
                                 disabled: true,
-                                title: 'Disponível na Fase 2',
+                                title: 'Ainda não disponível para esta organização',
                             },
                             {
                                 value: 'logs',
                                 label: 'Logs',
                                 disabled: true,
-                                title: 'Disponível na Fase 2',
+                                title: 'Ainda não disponível para esta organização',
                             },
                         ]}
                     />
                 }
             />
+            <ConnectorsCallout />
+            <EmbedSettingsCallout />
             <Phase2EmptyState
-                title="A API pública, chaves e webhooks estarão disponíveis na Fase 2"
-                description="Você poderá criar solicitações por API, receber eventos por webhook e consultar logs de entrega. Enquanto isso, use a interface para enviar documentos."
+                title="A API pública, as chaves e os webhooks ainda não estão disponíveis para esta organização"
+                description="Quando estiverem, você poderá criar solicitações por API, receber eventos por webhook e consultar os logs de entrega. Enquanto isso, use a interface para enviar documentos."
                 ctaHref={envelopesIndex.url()}
                 ctaLabel="Ir para Documentos"
                 extra={

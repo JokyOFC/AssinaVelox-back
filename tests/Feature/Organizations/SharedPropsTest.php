@@ -106,6 +106,14 @@ test('props compartilhadas do owner são coerentes com o contrato', function () 
             'ocr' => false,
             // Fase 3, parte 2 — F-I18N (página pública e e-mails multilíngues), desligada por padrão (T8).
             'multilingual' => false,
+            // Fase 3, onda G — G-CONN (importação da nuvem e app HubSpot), desligadas por padrão (T8).
+            'cloud_import' => false,
+            'hubspot' => false,
+            // Fase 3, onda G — G-EMBED (assinatura embutida por iframe), desligada por padrão (T8).
+            'embedded_signing' => false,
+            // Fase 3, onda G — G-SSO (login corporativo OIDC/SAML), desligadas por padrão (T8).
+            'sso_oidc' => false,
+            'sso_saml' => false,
         ])
         ->has('flash')
         ->has('sidebarOpen')

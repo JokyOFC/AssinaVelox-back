@@ -1,0 +1,241 @@
+<!doctype html>
+<!--
+  AssinaVelox — página hospedeira de EXEMPLO do widget de assinatura (docs/fase-3/widget-embutido.md §9.1).
+
+  Serve para QA e para quem integra ver o widget em OUTRA origem sem escrever código. Não é servida
+  pelo app. Como usar, fora de produção:
+
+    1. Sirva esta pasta numa porta própria (outra origem que a do app):
+         php -S 127.0.0.1:8200 -t docs/fase-3/exemplos
+    2. No app, API e integrações → Widget de assinatura: cadastre a origem  http://127.0.0.1:8200
+       (loopback só vale fora de produção).
+    3. Pelo SEU servidor (nunca pelo navegador), crie a sessão com uma chave que tenha a permissão
+       embedded_signing:manage:
+         POST {APP}/api/v1/envelopes/{envelope}/recipients/{recipient}/embedded-sessions
+         Authorization: Bearer <chave>   Idempotency-Key: <uuid>
+         { "origin": "http://127.0.0.1:8200" }
+    4. Abra http://127.0.0.1:8200/widget-hospedeiro.html, cole o `data.url` devolvido e escolha a largura
+       (375 px = celular). O endereço é apagado do campo assim que o widget é montado: ele vale uma vez
+       e não deve ficar em log, histórico nem na tela.
+
+  Sem dependências: carrega o embed.js da origem do app (tirada da própria URL colada).
+-->
+<html lang="pt-BR">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Exemplo de site com o widget da AssinaVelox</title>
+        <style>
+            body {
+                margin: 0;
+                font:
+                    14px/1.5 system-ui,
+                    -apple-system,
+                    'Segoe UI',
+                    sans-serif;
+                background: #f5f7fb;
+                color: #0b1f42;
+            }
+            header,
+            main {
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 16px;
+            }
+            form {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+            }
+            input[type='url'] {
+                flex: 1 1 320px;
+                min-width: 0;
+                padding: 8px 10px;
+                border: 1px solid #c8d1e0;
+                border-radius: 8px;
+            }
+            button,
+            select {
+                padding: 8px 12px;
+                border: 1px solid #c8d1e0;
+                border-radius: 8px;
+                background: #fff;
+            }
+            #frame {
+                margin: 16px auto;
+                background: #fff;
+                border: 1px dashed #c8d1e0;
+                border-radius: 12px;
+                padding: 8px;
+                max-width: 100%;
+            }
+            #log {
+                font:
+                    12px/1.5 ui-monospace,
+                    Consolas,
+                    monospace;
+                background: #0b1f42;
+                color: #e6ecf5;
+                border-radius: 8px;
+                padding: 10px;
+                min-height: 80px;
+                white-space: pre-wrap;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1 style="font-size: 18px; margin: 0 0 4px">
+                Site de exemplo com o widget de assinatura
+            </h1>
+            <p style="margin: 0; color: #4a5a78">
+                Cole a URL de uso único criada pela API e abra o widget. Os
+                eventos abaixo são só estado — confirme o resultado no seu
+                servidor.
+            </p>
+        </header>
+        <main>
+            <form id="form">
+                <input
+                    id="url"
+                    type="url"
+                    required
+                    autocomplete="off"
+                    placeholder="https://…/embed/v1/sessoes/…#t=…"
+                    aria-label="URL da sessão embutida"
+                />
+                <select id="width" aria-label="Largura do espaço do widget">
+                    <option value="375">375 px (celular)</option>
+                    <option value="768">768 px (tablet)</option>
+                    <option value="100%" selected>Largura total</option>
+                </select>
+                <button type="submit">Abrir widget</button>
+                <button type="button" id="ping">Pedir estado (ping)</button>
+                <button type="button" id="close">Fechar</button>
+            </form>
+            <div id="frame"><div id="assinatura"></div></div>
+            <div id="log" aria-live="polite"></div>
+        </main>
+        <script>
+            (function () {
+                var widget = null;
+                var log = document.getElementById('log');
+                var frame = document.getElementById('frame');
+
+                function write(line) {
+                    log.textContent =
+                        new Date().toLocaleTimeString('pt-BR') +
+                        '  ' +
+                        line +
+                        '\n' +
+                        log.textContent;
+                }
+
+                function loadScript(origin) {
+                    return new Promise(function (resolve, reject) {
+                        if (window.AssinaVelox) {
+                            resolve();
+                            return;
+                        }
+                        var script = document.createElement('script');
+                        script.src = origin + '/embed/v1/embed.js';
+                        script.onload = function () {
+                            resolve();
+                        };
+                        script.onerror = function () {
+                            reject(
+                                new Error(
+                                    'embed.js não carregou (flag ligada?)',
+                                ),
+                            );
+                        };
+                        document.head.appendChild(script);
+                    });
+                }
+
+                document
+                    .getElementById('form')
+                    .addEventListener('submit', function (event) {
+                        event.preventDefault();
+                        var input = document.getElementById('url');
+                        var url = input.value.trim();
+                        // A URL vale uma vez: sai do campo (e da tela) antes de qualquer outra coisa.
+                        input.value = '';
+                        var width = document.getElementById('width').value;
+                        frame.style.width =
+                            width === '100%' ? 'auto' : width + 'px';
+
+                        var origin;
+                        try {
+                            origin = new URL(url).origin;
+                        } catch (e) {
+                            write('URL inválida.');
+                            return;
+                        }
+
+                        if (widget) {
+                            widget.destroy();
+                            widget = null;
+                        }
+
+                        loadScript(origin)
+                            .then(function () {
+                                widget = window.AssinaVelox.mount({
+                                    url: url,
+                                    container: '#assinatura',
+                                    onReady: function (e) {
+                                        write(
+                                            'pronto: tela ' +
+                                                e.screen +
+                                                ' (sessão ' +
+                                                e.session +
+                                                ')',
+                                        );
+                                    },
+                                    onCompleted: function (e) {
+                                        write(
+                                            'aceite registrado: ' +
+                                                e.status +
+                                                ' — confirme pelo GET da sessão ou pelo webhook',
+                                        );
+                                    },
+                                    onRefused: function () {
+                                        write('recusado pelo participante');
+                                    },
+                                    onError: function (e) {
+                                        write(
+                                            'erro ' +
+                                                e.code +
+                                                (e.fatal ? ' (fatal)' : '') +
+                                                ': ' +
+                                                e.message,
+                                        );
+                                    },
+                                });
+                                url = '';
+                            })
+                            .catch(function (error) {
+                                write(error.message);
+                            });
+                    });
+
+                document
+                    .getElementById('ping')
+                    .addEventListener('click', function () {
+                        if (widget) widget.ping();
+                    });
+
+                document
+                    .getElementById('close')
+                    .addEventListener('click', function () {
+                        if (widget) {
+                            widget.destroy();
+                            widget = null;
+                            write('widget fechado');
+                        }
+                    });
+            })();
+        </script>
+    </body>
+</html>

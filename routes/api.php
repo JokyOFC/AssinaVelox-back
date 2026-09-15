@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\HooksCatalogController;
 use App\Http\Controllers\Api\HooksSubscriptionController;
+use App\Http\Controllers\Api\V1\EmbeddedSigningSessionController;
 use App\Http\Controllers\Api\V1\EnvelopeController;
 use App\Http\Controllers\Api\V1\EnvelopeDocumentController;
 use App\Http\Controllers\Api\V1\EnvelopeEventController;
@@ -111,4 +112,20 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::delete('webhook-subscriptions/{subscription}', [HooksSubscriptionController::class, 'destroy'])
         ->middleware('api.ability:webhooks:manage')
         ->name('webhook_subscriptions.destroy');
+
+    /*
+    | Assinatura embutida (Fase 3 §3.9, G-EMBED — docs/fase-3/widget-embutido.md §2). Flag
+    | `embedded_signing` (global E plano): desligada, 404 em todas. A criação devolve a URL de uso
+    | único UMA vez (resposta fora do armazenamento de idempotência; a repetição com a mesma chave
+    | reemite a URL da MESMA sessão enquanto ela não foi usada).
+    */
+    Route::post('envelopes/{envelope}/recipients/{recipient}/embedded-sessions', [EmbeddedSigningSessionController::class, 'store'])
+        ->middleware(['api.ability:embedded_signing:manage', 'api.idempotent'])
+        ->name('envelopes.recipients.embedded_sessions.store');
+    Route::get('envelopes/{envelope}/recipients/{recipient}/embedded-sessions/{embeddedSession}', [EmbeddedSigningSessionController::class, 'show'])
+        ->middleware('api.ability:embedded_signing:manage')
+        ->name('envelopes.recipients.embedded_sessions.show');
+    Route::delete('envelopes/{envelope}/recipients/{recipient}/embedded-sessions/{embeddedSession}', [EmbeddedSigningSessionController::class, 'destroy'])
+        ->middleware('api.ability:embedded_signing:manage')
+        ->name('envelopes.recipients.embedded_sessions.destroy');
 });

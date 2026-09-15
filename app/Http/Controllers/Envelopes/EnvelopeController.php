@@ -27,6 +27,8 @@ use App\Models\Membership;
 use App\Models\Recipient;
 use App\Models\SigningField;
 use App\Models\User;
+use App\Services\CloudImport\CloudFileSources;
+use App\Services\CloudImport\CloudImportFeature;
 use App\Services\Documents\DocumentIntake;
 use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Documents\Exceptions\UploadRejectedException;
@@ -333,6 +335,10 @@ class EnvelopeController extends Controller
             // Flags de domínio desta organização (derivadas de config + plano). Aditivo:
             // `features` compartilhado continua sendo a fonte do shell.
             'domain_features' => DomainFeatures::forOrganization($organization),
+            // G-CONN: o passo 1 só oferece "Importar da nuvem" com algum provedor de verdade
+            // disponível (app registrado ou simulador identificado) — revisão adversarial G.
+            'cloud_import_available' => CloudImportFeature::enabled($organization)
+                && CloudFileSources::anyConfigured(),
             'participant_roles' => array_map(
                 static fn (RecipientRole $role): array => ['value' => $role->value, 'label' => $role->label()],
                 RecipientRole::cases(),

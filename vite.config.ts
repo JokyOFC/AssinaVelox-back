@@ -149,7 +149,13 @@ function mergeFontFaceFormats(): Plugin {
 export default defineConfig({
     plugins: lazyPlugins(() => [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.tsx'],
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.tsx',
+                // Fase 3 §3.9 (G-EMBED): script do site hospedeiro, SEM importações (arquivo
+                // único); servido em /embed/v1/embed.js pela rota `embed.script`.
+                'resources/js/embed/embed.ts',
+            ],
             refresh: true,
             fonts: [
                 bunny('Exo 2', {

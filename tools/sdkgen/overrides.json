@@ -1,0 +1,291 @@
+{
+    "_doc": "Complementos da especificação exportada (sdks/openapi/v1.json) que o Scramble não consegue inferir sem alterar controllers da API. Cada item é conferido por tests/Feature/Phase3/Sdk: a operação precisa existir e a idempotência precisa bater com o middleware das rotas (routes/api.php). Detalhes em docs/fase-3/sdks.md §4.",
+    "sdk": {
+        "version": "1.0.0",
+        "apiMajor": 1
+    },
+    "exportPins": [
+        {
+            "env": "APP_URL",
+            "config": "app.url",
+            "value": "http://localhost"
+        },
+        {
+            "env": "API_VERSION",
+            "config": "scramble.info.version",
+            "value": "1.0.0"
+        },
+        {
+            "env": "ASSINAVELOX_MAX_UPLOAD_MB",
+            "config": "assinavelox.upload.max_mb",
+            "value": 25
+        },
+        {
+            "env": "ASSINAVELOX_API_PAGE_SIZE_MAX",
+            "config": "assinavelox.api.page_size.max",
+            "value": 100
+        }
+    ],
+    "server": {
+        "url": "https://sua-instalacao.example/api/v1",
+        "description": "Troque pelo endereço da sua instalação, terminando em /api/v1."
+    },
+    "schemas": {
+        "EmbeddedSigningSession": {
+            "type": "object",
+            "description": "Sessão de assinatura embutida (widget, docs/fase-3/widget-embutido.md). `url` (uso único, com o token no fragmento) só vem na criação.",
+            "properties": {
+                "id": { "type": "string" },
+                "object": {
+                    "type": "string",
+                    "const": "embedded_signing_session"
+                },
+                "envelope_id": { "type": ["string", "null"] },
+                "recipient_id": { "type": ["string", "null"] },
+                "origin": { "type": "string" },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "active",
+                        "completed",
+                        "refused",
+                        "expired",
+                        "revoked",
+                        "closed"
+                    ]
+                },
+                "expires_at": { "type": ["string", "null"] },
+                "used_at": { "type": ["string", "null"] },
+                "completed_at": { "type": ["string", "null"] },
+                "revoked_at": { "type": ["string", "null"] },
+                "created_at": { "type": ["string", "null"] },
+                "url": {
+                    "type": "string",
+                    "description": "Endereço de uso único para o iframe; só na criação."
+                }
+            },
+            "required": [
+                "id",
+                "object",
+                "envelope_id",
+                "recipient_id",
+                "origin",
+                "status",
+                "expires_at",
+                "used_at",
+                "completed_at",
+                "revoked_at",
+                "created_at"
+            ]
+        },
+        "WebhookSubscription": {
+            "type": "object",
+            "description": "Assinatura de REST Hook (um endpoint de webhook ligado ao token que a criou). `secret` só vem na criação (201); nas listagens é null e, quando a assinatura já existia (200), não vem.",
+            "properties": {
+                "id": { "type": "string" },
+                "object": { "type": "string", "const": "webhook_subscription" },
+                "target_url": { "type": "string" },
+                "events": { "type": "array", "items": { "type": "string" } },
+                "status": { "type": "string", "enum": ["active", "paused"] },
+                "status_label": { "type": "string" },
+                "paused_reason": { "type": ["string", "null"] },
+                "secret_hint": { "type": "string" },
+                "signature_header": { "type": "string" },
+                "created_at": { "type": "string" },
+                "secret": { "type": ["string", "null"] }
+            },
+            "required": [
+                "id",
+                "object",
+                "target_url",
+                "events",
+                "status",
+                "status_label",
+                "paused_reason",
+                "secret_hint",
+                "signature_header",
+                "created_at"
+            ]
+        }
+    },
+    "operations": {
+        "v1.envelopes.index": { "method": "listEnvelopes" },
+        "v1.envelopes.store": {
+            "method": "createEnvelope",
+            "idempotency": "required"
+        },
+        "v1.envelopes.show": { "method": "getEnvelope" },
+        "v1.envelopes.documents.store": {
+            "method": "uploadDocument",
+            "idempotency": "required"
+        },
+        "v1.envelopes.recipients.index": { "method": "listRecipients" },
+        "v1.envelopes.recipients.sync": {
+            "method": "syncRecipients",
+            "idempotency": "optional"
+        },
+        "v1.envelopes.fields.index": { "method": "listFields" },
+        "v1.envelopes.fields.sync": {
+            "method": "syncFields",
+            "idempotency": "optional"
+        },
+        "v1.envelopes.send": {
+            "method": "sendEnvelope",
+            "idempotency": "required"
+        },
+        "v1.envelopes.cancel": {
+            "method": "cancelEnvelope",
+            "idempotency": "optional",
+            "_why": "`meta.recipients_notified` é inteiro (quantos participantes foram avisados); o Scramble o descreve como string porque o valor vem de um array do serviço.",
+            "response": {
+                "statuses": ["200"],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "$ref": "#/components/schemas/EnvelopeResource"
+                        },
+                        "meta": {
+                            "type": "object",
+                            "properties": {
+                                "recipients_notified": { "type": "integer" }
+                            },
+                            "required": ["recipients_notified"]
+                        }
+                    },
+                    "required": ["data", "meta"]
+                }
+            }
+        },
+        "v1.envelopes.files.show": {
+            "method": "downloadFile",
+            "binary": true,
+            "_why": "O controller devolve o arquivo (stream do disco privado); o Scramble o descreve como JSON. O parâmetro `type` é limitado por whereIn na rota e `document` é lido da query.",
+            "pathEnums": { "type": ["original", "signed", "evidence"] },
+            "extraQuery": [
+                {
+                    "name": "document",
+                    "schema": {
+                        "type": ["string", "null"],
+                        "minLength": 26,
+                        "maxLength": 26
+                    },
+                    "description": "ULID do arquivo, quando o envelope tem mais de um. Ausente = primeiro arquivo."
+                }
+            ]
+        },
+        "v1.envelopes.events.index": { "method": "listEvents" },
+        "v1.envelopes.verification.show": { "method": "getVerification" },
+        "v1.templates.index": { "method": "listTemplates" },
+        "v1.templates.show": { "method": "getTemplate" },
+        "v1.templates.envelopes.store": {
+            "method": "createEnvelopeFromTemplate",
+            "idempotency": "required"
+        },
+        "v1.webhook_events.index": { "method": "listWebhookEvents" },
+        "v1.webhook_events.sample": { "method": "getWebhookEventSample" },
+        "v1.webhook_subscriptions.index": {
+            "method": "listWebhookSubscriptions",
+            "_why": "Resposta montada no controller; o item ganha nome e o campo `secret` fica string|null, como na criação.",
+            "response": {
+                "statuses": ["200"],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/x-sdk/schemas/WebhookSubscription"
+                            }
+                        },
+                        "meta": {
+                            "type": "object",
+                            "properties": {
+                                "limit": { "type": "integer" },
+                                "count": { "type": "integer" }
+                            },
+                            "required": ["limit", "count"]
+                        }
+                    },
+                    "required": ["data", "meta"]
+                }
+            }
+        },
+        "v1.webhook_subscriptions.store": {
+            "method": "createWebhookSubscription",
+            "idempotency": "required",
+            "_why": "O controller monta a Response à mão (201 na criação, 200 quando já existia); o Scramble a descreve como string.",
+            "response": {
+                "statuses": ["201", "200"],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "$ref": "#/x-sdk/schemas/WebhookSubscription"
+                        },
+                        "meta": {
+                            "type": "object",
+                            "properties": {
+                                "existing": { "type": "boolean" },
+                                "note": { "type": "string" }
+                            },
+                            "required": ["existing", "note"]
+                        }
+                    },
+                    "required": ["data"]
+                }
+            }
+        },
+        "v1.webhook_subscriptions.destroy": {
+            "method": "deleteWebhookSubscription"
+        },
+        "v1.envelopes.recipients.embedded_sessions.store": {
+            "method": "createEmbeddedSession",
+            "idempotency": "required",
+            "_why": "G-EMBED monta a Response à mão (a URL com o token não pode ir para o armazenamento de idempotência); o Scramble a descreve como string. O Resource ainda tem ids sem tipo, datas não anuláveis e `url` como null obrigatório: descrito aqui até ganhar anotações.",
+            "response": {
+                "statuses": ["201"],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "$ref": "#/x-sdk/schemas/EmbeddedSigningSession"
+                        }
+                    },
+                    "required": ["data"]
+                }
+            }
+        },
+        "v1.envelopes.recipients.embedded_sessions.show": {
+            "method": "getEmbeddedSession",
+            "response": {
+                "statuses": ["200"],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "$ref": "#/x-sdk/schemas/EmbeddedSigningSession"
+                        }
+                    },
+                    "required": ["data"]
+                }
+            }
+        },
+        "v1.envelopes.recipients.embedded_sessions.destroy": {
+            "method": "revokeEmbeddedSession",
+            "response": {
+                "statuses": ["200"],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "$ref": "#/x-sdk/schemas/EmbeddedSigningSession"
+                        }
+                    },
+                    "required": ["data"]
+                }
+            }
+        }
+    }
+}

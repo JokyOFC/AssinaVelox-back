@@ -21,6 +21,7 @@ use App\Http\Middleware\ResolveSignerToken;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\ThrottleSensitiveRoutes;
 use App\Services\Api\ApiProblem;
+use App\Services\Sso\Middleware\EnforceOrganizationSso;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -28,6 +29,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -39,6 +41,11 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // Fase 3 §3.9 (G-EMBED, docs/fase-3/widget-embutido.md): `/embed/*` FORA do grupo `web`
+        // (sem sessão do app, sem cookie, sem CSRF — autenticação pelo token no cabeçalho).
+        then: function (): void {
+            Route::group([], __DIR__.'/../routes/embed.php');
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Proxies confiáveis (X-Forwarded-*): configurados em AppServiceProvider::configureTrustedProxies()
@@ -68,6 +75,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // `verified` e `org` passam a rodar ANTES de SubstituteBindings (após `auth`).
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsureEmailIsVerified::class);
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsureCurrentOrganization::class);
+        // Fase 3 §3.9 (G-SSO, docs/fase-3/sso.md §5): a exigência de login corporativo roda logo
+        // DEPOIS de `org` (precisa da organização corrente) e antes do binding das rotas.
+        $middleware->appendToPriorityList(EnsureCurrentOrganization::class, EnforceOrganizationSso::class);
 
         $middleware->encryptCookies(except: ['sidebar_state']);
 
@@ -86,6 +96,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // sessão, os dois não fazem nada.
             EnsureAccountNotBlocked::class,
             EnforceImpersonationReadOnly::class,
+            // Fase 3 §3.9 (G-SSO): login corporativo obrigatório por organização, com o acesso de
+            // emergência dos owners. Sem flag, sem conexão ativa com `enforce` ou fora de rota com
+            // organização corrente, não faz nada. Ordenado depois de `org` (lista de prioridade).
+            EnforceOrganizationSso::class,
         ]);
 
         // Webhook do Mercado Pago: sem CSRF (autenticado por assinatura do provedor).
@@ -125,6 +139,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('webhooks/*') || $request->expectsJson(),
         );
+
+        // Segredos nunca voltam para a sessão no redirect de erro de validação (Fase 3 §3.9,
+        // G-SSO — revisão adversarial): o client secret do OIDC ficaria em claro na sessão.
+        $exceptions->dontFlash(['oidc_client_secret']);
 
         // API v1: todo e qualquer erro sai como problem+json (RFC 9457) com a mesma forma — 400, 401, 403,
         // 404, 409, 422, 429 e 500 —, sem stack nem mensagem interna (App\Services\Api\ApiProblem).

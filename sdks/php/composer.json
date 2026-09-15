@@ -1,0 +1,22 @@
+{
+    "name": "assinavelox/sdk",
+    "description": "SDK PHP da API v1 da AssinaVelox (gerado da especificação OpenAPI; sem dependências)",
+    "type": "library",
+    "version": "1.0.0",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1",
+        "ext-json": "*"
+    },
+    "suggest": {
+        "ext-curl": "Transporte padrão; sem ele, o SDK usa os streams do PHP"
+    },
+    "autoload": {
+        "psr-4": {
+            "AssinaVelox\\Sdk\\": "src/"
+        }
+    },
+    "scripts": {
+        "test": "php tests/run.php"
+    }
+}

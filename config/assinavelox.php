@@ -131,6 +131,105 @@ return [
         // Página pública e e-mails ao participante em pt_BR, en e es. Desligada: tudo continua em
         // PT-BR, idêntico ao de hoje, e as rotas novas dão 404. Parâmetros em `multilingual`.
         'multilingual' => filter_var(env('ASSINAVELOX_FEATURE_MULTILINGUAL', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.9 — G-SSO (docs/fase-3/sso.md). Organização (esta chave E plano; plano
+        // Empresarial). Login corporativo do USUÁRIO do painel — nunca do signatário (T1). Classe
+        // B: código real testado contra provedores simulados; sem IdP registrado pelo proprietário.
+        // Desligadas: rotas 404, login inalterado e nenhuma exigência de SSO vale. Parâmetros em `sso`.
+        'sso_oidc' => filter_var(env('ASSINAVELOX_FEATURE_SSO_OIDC', false), FILTER_VALIDATE_BOOLEAN),
+        'sso_saml' => filter_var(env('ASSINAVELOX_FEATURE_SSO_SAML', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.9 — G-EMBED (docs/fase-3/widget-embutido.md). Organização (esta chave E plano;
+        // a sessão é criada pela API v1, que exige `api_integrations`). Assinatura embutida por
+        // iframe + embed.js. Desligada: a rota da API, `/embed/*`, o embed.js e a tela de origens
+        // respondem 404, e todo o app continua com `X-Frame-Options: DENY`. Parâmetros em
+        // `embedded_signing`.
+        'embedded_signing' => filter_var(env('ASSINAVELOX_FEATURE_EMBEDDED_SIGNING', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 3 §3.9 — G-CONN (docs/fase-3/conectores.md). Organização (esta chave E plano).
+        // `cloud_import`: importar arquivo do Google Drive/Dropbox no passo Documento do wizard.
+        // `hubspot`: app HubSpot (OAuth por organização + ação de workflow "Enviar para
+        // assinatura"). Classe B: sem o app registrado pelo proprietário (config/services.php) a
+        // tela diz "aguardando app registrado pelo proprietário" e nenhuma chamada sai.
+        // Desligadas: todas as rotas novas dão 404 e nada muda no wizard nem nas integrações.
+        'cloud_import' => filter_var(env('ASSINAVELOX_FEATURE_CLOUD_IMPORT', false), FILTER_VALIDATE_BOOLEAN),
+        'hubspot' => filter_var(env('ASSINAVELOX_FEATURE_HUBSPOT', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /*
+    | Fase 3 §3.9 — G-CONN: importação do Google Drive e do Dropbox (docs/fase-3/conectores.md
+    | §4). Credenciais em config/services.php (`google_drive`, `dropbox`). O arquivo entra pelo
+    | mesmo caminho de um upload (limite de `upload.max_mb`). Nenhum token persiste além da
+    | importação: o do Google fica cifrado na sessão por no máximo `google_session_ttl_minutes`
+    | e é revogado ao terminar; o Dropbox Chooser não usa token nenhum.
+    */
+    'cloud_import' => [
+        // Arquivos por importação (o teto de documentos do envelope continua valendo).
+        'max_files_per_import' => (int) env('ASSINAVELOX_CLOUD_IMPORT_MAX_FILES', 10),
+        'connect_timeout_seconds' => (float) env('ASSINAVELOX_CLOUD_IMPORT_CONNECT_TIMEOUT', 5),
+        'timeout_seconds' => (float) env('ASSINAVELOX_CLOUD_IMPORT_TIMEOUT', 60),
+        // Validade do `state` + PKCE na sessão e do token do Google na sessão (minutos).
+        'state_ttl_minutes' => (int) env('ASSINAVELOX_CLOUD_IMPORT_STATE_TTL', 10),
+        'google_session_ttl_minutes' => (int) env('ASSINAVELOX_CLOUD_IMPORT_GOOGLE_TTL', 10),
+        // Hosts aceitos no link direto do Chooser. `.dominio` = o domínio e seus subdomínios.
+        // O domínio exato do link direto está NÃO CONFIRMADO: conferir em sandbox antes de ligar.
+        'dropbox_download_hosts' => array_values(array_filter(array_map('trim', explode(',', (string) env('ASSINAVELOX_DROPBOX_DOWNLOAD_HOSTS', 'dl.dropboxusercontent.com,.dropboxusercontent.com'))))),
+        // CSP SÓ da página de importação (App\Services\CloudImport\CloudImportCsp). Hosts do
+        // Picker e do Chooser NÃO CONFIRMADOS na documentação: ajustar no primeiro teste real.
+        'csp' => [
+            'coop' => 'same-origin-allow-popups',
+            'sources' => [
+                'script-src' => ['https://apis.google.com', 'https://www.dropbox.com'],
+                'style-src' => ['https://www.dropbox.com'],
+                'frame-src' => ['https://docs.google.com', 'https://drive.google.com'],
+                'connect-src' => ['https://www.googleapis.com', 'https://content.googleapis.com'],
+                'img-src' => ['https://*.googleusercontent.com', 'https://ssl.gstatic.com', 'https://www.gstatic.com'],
+            ],
+        ],
+    ],
+
+    /*
+    | Fase 3 §3.9 — G-CONN: app HubSpot (docs/fase-3/conectores.md §5). Credenciais do app de
+    | desenvolvedor em config/services.php (`hubspot`). Endpoints OAuth v3 (os v1 ficam no ar
+    | até 2027-02-16); o formato exato da resposta do `introspect` está NÃO CONFIRMADO.
+    */
+    'hubspot' => [
+        'api_base' => env('ASSINAVELOX_HUBSPOT_API_BASE', 'https://api.hubapi.com'),
+        'api_hosts' => ['api.hubapi.com'],
+        'authorize_url' => 'https://app.hubspot.com/oauth/authorize',
+        'token_path' => env('ASSINAVELOX_HUBSPOT_TOKEN_PATH', '/oauth/2026-03/token'),
+        'introspect_path' => env('ASSINAVELOX_HUBSPOT_INTROSPECT_PATH', '/oauth/2026-03/token/introspect'),
+        'revoke_path' => env('ASSINAVELOX_HUBSPOT_REVOKE_PATH', '/oauth/2026-03/token/revoke'),
+        // Escopos mínimos (pacotes-fase-2-3 §4.3): ler/gravar contatos e negócios. Nada `*.sensitive.*`.
+        'scopes' => ['oauth', 'crm.objects.contacts.read', 'crm.objects.contacts.write', 'crm.objects.deals.read', 'crm.objects.deals.write'],
+        // Janela do X-HubSpot-Request-Timestamp da assinatura v3 (a documentação pede 5 minutos).
+        'signature_tolerance_seconds' => (int) env('ASSINAVELOX_HUBSPOT_SIGNATURE_TOLERANCE', 300),
+        // Propriedade do negócio/contato atualizada quando o envelope muda de estado. Precisa
+        // existir no portal (criada na instalação do app — pendência do proprietário).
+        'status_property' => env('ASSINAVELOX_HUBSPOT_STATUS_PROPERTY', 'assinavelox_status'),
+        // Documento ainda processando: novas tentativas de envio (espera entre elas, segundos).
+        'send_attempts' => (int) env('ASSINAVELOX_HUBSPOT_SEND_ATTEMPTS', 20),
+        'send_retry_seconds' => (int) env('ASSINAVELOX_HUBSPOT_SEND_RETRY_SECONDS', 30),
+        // Tentativas de atualizar o negócio/contato (backoff do job).
+        'sync_attempts' => (int) env('ASSINAVELOX_HUBSPOT_SYNC_ATTEMPTS', 5),
+        // Participantes por ação (campos `participant_N_name`/`participant_N_email`).
+        'max_participants' => 5,
+        'queue' => env('ASSINAVELOX_HUBSPOT_QUEUE', 'default'),
+    ],
+
+    // Fase 3 §3.9 — G-EMBED: widget de assinatura embutida (docs/fase-3/widget-embutido.md §8).
+    'embedded_signing' => [
+        // Validade da URL de uso único (segundos). A API aceita `expires_in` até o teto.
+        'url_ttl_seconds' => (int) env('ASSINAVELOX_EMBED_URL_TTL_SECONDS', 300),
+        'url_ttl_max_seconds' => (int) env('ASSINAVELOX_EMBED_URL_TTL_MAX_SECONDS', 900),
+        // Vida do token de execução, depois da troca (minutos). Nunca passa do prazo do envelope.
+        'runtime_ttl_minutes' => (int) env('ASSINAVELOX_EMBED_RUNTIME_TTL_MINUTES', 30),
+        // Sessões ainda utilizáveis (não usadas no prazo, ou ativas) por participante.
+        'max_live_per_recipient' => (int) env('ASSINAVELOX_EMBED_MAX_LIVE_PER_RECIPIENT', 5),
+        // Origens cadastradas por organização.
+        'max_allowed_origins' => (int) env('ASSINAVELOX_EMBED_MAX_ALLOWED_ORIGINS', 20),
+        // Tamanho mínimo do iframe para o widget operar (px). Abaixo disso ele se recusa.
+        'min_frame_width' => (int) env('ASSINAVELOX_EMBED_MIN_FRAME_WIDTH', 320),
+        'min_frame_height' => (int) env('ASSINAVELOX_EMBED_MIN_FRAME_HEIGHT', 420),
+        // Tempo mínimo entre a confirmação visual aparecer e o clique final valer (ms).
+        'confirm_delay_ms' => (int) env('ASSINAVELOX_EMBED_CONFIRM_DELAY_MS', 800),
     ],
 
     // Fase 3 §3.3 — etapas condicionais (F-FLOW). Motor declarativo fechado: estes são só os tetos.
@@ -249,6 +348,53 @@ return [
     'rest_hooks' => [
         // Assinaturas ativas por token (cada Zap/cenário/fluxo costuma criar uma).
         'max_subscriptions_per_token' => (int) env('ASSINAVELOX_REST_HOOKS_MAX_PER_TOKEN', 10),
+    ],
+
+    /*
+    | Fase 3 §3.9 — login corporativo por OIDC e SAML 2.0 (G-SSO, docs/fase-3/sso.md). Vale com
+    | `features.sso_oidc` / `features.sso_saml` (global E plano). Toda URL do provedor (discovery,
+    | JWKS, token, metadata) passa pela proteção contra SSRF dos webhooks (OutboundUrlGuard +
+    | pino de IP + sem redirecionamento + sem proxy). `homologated` fica false até o proprietário
+    | testar com um provedor de identidade REAL: enquanto isso a tela diz que o recurso está em
+    | homologação (classe B).
+    */
+    'sso' => [
+        'homologated' => filter_var(env('ASSINAVELOX_SSO_HOMOLOGATED', false), FILTER_VALIDATE_BOOLEAN),
+        // Validade do `state`/`nonce` (OIDC) e do pedido SAML pendente.
+        'flow_ttl_minutes' => (int) env('ASSINAVELOX_SSO_FLOW_TTL_MINUTES', 10),
+        // Fluxos OIDC pendentes guardados por sessão (o mais antigo sai).
+        'max_pending_flows' => 5,
+        // Tolerância de relógio para exp/iat/nbf do id_token (segundos). SAML usa a do toolkit (180 s).
+        'clock_leeway_seconds' => (int) env('ASSINAVELOX_SSO_CLOCK_LEEWAY', 60),
+        // Idade máxima do `iat` do id_token (segundos).
+        'id_token_max_age_seconds' => (int) env('ASSINAVELOX_SSO_ID_TOKEN_MAX_AGE', 600),
+        // `at_hash` é conferido sempre que vier; `true` passa a exigi-lo.
+        'require_at_hash' => filter_var(env('ASSINAVELOX_SSO_REQUIRE_AT_HASH', false), FILTER_VALIDATE_BOOLEAN),
+        // Algoritmos que uma conexão OIDC pode fixar. Nunca `none`, nunca HS* (chave simétrica).
+        'oidc_algorithms' => ['RS256', 'RS384', 'RS512', 'PS256', 'ES256', 'ES384'],
+        'discovery_cache_minutes' => (int) env('ASSINAVELOX_SSO_DISCOVERY_CACHE_MINUTES', 60),
+        // Recarga forçada do JWKS (kid desconhecido = rotação) no máximo uma vez por janela.
+        'jwks_refresh_cooldown_seconds' => (int) env('ASSINAVELOX_SSO_JWKS_REFRESH_COOLDOWN', 60),
+        'http' => [
+            'connect_timeout_seconds' => (float) env('ASSINAVELOX_SSO_CONNECT_TIMEOUT', 5),
+            'timeout_seconds' => (float) env('ASSINAVELOX_SSO_TIMEOUT', 10),
+            'max_response_kb' => (int) env('ASSINAVELOX_SSO_MAX_RESPONSE_KB', 512),
+            'user_agent' => 'AssinaVelox-SSO/1.0',
+        ],
+        'saml' => [
+            // Resposta SAML (base64) acima disto é recusada antes de qualquer parse.
+            'max_response_kb' => (int) env('ASSINAVELOX_SSO_SAML_MAX_RESPONSE_KB', 256),
+            // IDs de assertion consumidos ficam guardados até o NotOnOrAfter + esta margem.
+            'replay_margin_minutes' => (int) env('ASSINAVELOX_SSO_SAML_REPLAY_MARGIN', 10),
+            // Cookie que liga o pedido SAML ao navegador que o iniciou (POST do IdP é entre sites).
+            'binding_cookie' => 'av_sso_saml',
+        ],
+        'domains' => [
+            'max_per_organization' => (int) env('ASSINAVELOX_SSO_MAX_DOMAINS', 10),
+            // Registro TXT: {record_prefix}.{domínio} = "{value_prefix}={token}".
+            'record_prefix' => '_assinavelox-sso',
+            'value_prefix' => 'assinavelox-sso',
+        ],
     ],
 
     /*

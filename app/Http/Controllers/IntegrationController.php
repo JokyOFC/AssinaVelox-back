@@ -11,6 +11,8 @@ use App\Models\Membership;
 use App\Models\Organization;
 use App\Services\Api\ApiFeature;
 use App\Services\Api\ApiTokenManager;
+use App\Services\CloudImport\CloudFileSources;
+use App\Services\CloudImport\CloudImportFeature;
 use App\Services\RestHooks\ApiReference;
 use App\Services\RestHooks\IntegrationsNavigation;
 use App\Services\RestHooks\RestHookSamples;
@@ -52,6 +54,9 @@ class IntegrationController extends Controller
                 'title' => 'API e integrações',
                 'subtitle' => 'Automatize envios e receba eventos por webhooks.',
                 'support_email' => (string) config('assinavelox.support_email'),
+                // Conectores (G-CONN): há algum provedor de nuvem com app registrado?
+                'cloud_import_available' => CloudImportFeature::enabled($organization)
+                    && CloudFileSources::anyConfigured(),
             ]);
         }
 
@@ -71,6 +76,9 @@ class IntegrationController extends Controller
             'events' => app(WebhookPresenter::class)->catalog(),
             'signature' => ApiReference::signature(),
             'sample_event' => app(RestHookSamples::class)->forEvent(WebhookEventType::RecipientSigned),
+            // O `ConnectorsCallout` também aparece aqui: mesma regra do placeholder.
+            'cloud_import_available' => CloudImportFeature::enabled($organization)
+                && CloudFileSources::anyConfigured(),
         ]);
     }
 

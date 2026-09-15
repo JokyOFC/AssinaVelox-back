@@ -24,10 +24,14 @@ enum ApiAbility: string
     case TemplatesRead = 'templates:read';
     case TemplatesUse = 'templates:use';
     case WebhooksManage = 'webhooks:manage';
+    // Fase 3 §3.9 (G-EMBED, docs/fase-3/widget-embutido.md §2): criar, consultar e revogar a
+    // sessão de assinatura embutida (URL de uso único) de um participante.
+    case EmbeddedSigningManage = 'embedded_signing:manage';
 
     public function label(): string
     {
         return match ($this) {
+            self::EmbeddedSigningManage => 'Gerenciar assinatura embutida',
             self::EnvelopesRead => 'Consultar documentos',
             self::EnvelopesWrite => 'Criar e preparar documentos',
             self::EnvelopesSend => 'Enviar e cancelar documentos',
@@ -50,6 +54,7 @@ enum ApiAbility: string
             self::TemplatesRead => 'Listar modelos e ver as variáveis e os papéis de cada um.',
             self::TemplatesUse => 'Gerar um documento em rascunho a partir de um modelo.',
             self::WebhooksManage => 'Cadastrar e remover assinaturas de webhooks.',
+            self::EmbeddedSigningManage => 'Criar, consultar e revogar a sessão de assinatura embutida (widget) de um participante.',
         };
     }
 
@@ -69,6 +74,8 @@ enum ApiAbility: string
             self::TemplatesUse => [Permission::CreateEnvelopes],
             self::EnvelopesSend => [Permission::SendEnvelopes],
             self::WebhooksManage => [Permission::ManageIntegrations],
+            // Abrir o acesso de um participante a partir de outro site é agir sobre o envio.
+            self::EmbeddedSigningManage => [Permission::SendEnvelopes],
         };
     }
 

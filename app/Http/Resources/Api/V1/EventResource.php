@@ -36,6 +36,7 @@ class EventResource extends JsonResource
             'id' => $event->ulid,
             'object' => 'event',
             'type' => $event->event_type->value,
+            /** @var string Rótulo em PT-BR do tipo; a lista cresce com a trilha — não é enumeração fechada. */
             'label' => $event->event_type->label(),
             'kind' => $event->event_type->kind(),
             'actor' => [

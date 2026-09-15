@@ -28,4 +28,20 @@ class SyncEnvelopeFieldsRequest extends SyncFieldsRequest
 
         return parent::authorize();
     }
+
+    /**
+     * As MESMAS regras da interface; só documenta no OpenAPI que `page` é inteiro (a regra
+     * herdada é `required`, sem tipo, e o Scramble a descrevia como texto).
+     *
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        $rules = parent::rules();
+
+        return array_merge($rules, [
+            /** @var int Página do documento exibido, a partir de 1. */
+            'fields.*.page' => $rules['fields.*.page'],
+        ]);
+    }
 }

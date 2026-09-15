@@ -54,7 +54,10 @@ class TemplateResource extends JsonResource
 
         $version->loadMissing(['variables', 'roles']);
 
-        return $data + [
+        // array_merge (e não `+`): mesmo resultado (chaves distintas) e o OpenAPI (Scramble)
+        // consegue descrever os campos do detalhe — docs/fase-3/sdks.md §4.
+        return array_merge($data, [
+            /** Só no detalhe. */
             'variables' => $version->variables->map(fn (TemplateVariable $variable): array => [
                 'key' => $variable->key,
                 'label' => $variable->label,
@@ -64,12 +67,13 @@ class TemplateResource extends JsonResource
                 'default_value' => $variable->default_value,
                 'options' => $variable->options ?? (object) [],
             ])->values()->all(),
+            /** @var list<array{id: string, name: string, participant_role: string, participant_role_label: string}> Só no detalhe. */
             'roles' => $version->roles->map(fn (TemplateRole $role): array => [
                 'id' => $role->ulid,
                 'name' => $role->name,
                 'participant_role' => $role->participant_role->value,
                 'participant_role_label' => $role->participant_role->label(),
             ])->values()->all(),
-        ];
+        ]);
     }
 }

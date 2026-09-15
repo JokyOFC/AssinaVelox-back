@@ -67,7 +67,10 @@ test('sem a ability exigida: 403 missing-ability em cada rota desta área', func
     $template = templateHtml($this->organization, $this->owner, '<p>{{nome}}</p>', [
         ['key' => 'nome', 'label' => 'Nome', 'type' => 'text', 'required' => true],
     ]);
-    $values = ['envelope' => $envelope->ulid, 'template' => $template->ulid, 'type' => 'original'];
+    $values = ['envelope' => $envelope->ulid, 'template' => $template->ulid, 'type' => 'original',
+        // Fase 3 §3.9 (G-EMBED): ULIDs sintéticos — a ability é conferida antes de o controller
+        // procurar o participante e a sessão embutida.
+        'recipient' => '01HZZZZZZZZZZZZZZZZZZZZZZZ', 'embeddedSession' => '01HZZZZZZZZZZZZZZZZZZZZZZY'];
     $checked = 0;
 
     foreach (Route::getRoutes()->getRoutes() as $route) {

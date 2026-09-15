@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\CloudImport\CloudImportCsp;
+use App\Services\Embed\Http\EmbedSecurityHeaders;
 use App\Services\Identity\CameraPermission;
 use Closure;
 use Illuminate\Http\Request;
@@ -78,6 +80,14 @@ class SecurityHeaders
 
             $headers->set($headerName, $this->policy($nonce));
         }
+
+        // Fase 3 §3.9 (G-CONN): só a página de importação da nuvem (marcada pelo middleware da
+        // rota) acrescenta os hosts do Google Picker/Dropbox Chooser. Sem a marca, não faz nada.
+        CloudImportCsp::apply($request, $headers);
+
+        // Fase 3 §3.9 (G-EMBED): só em `/embed/*`. A página do widget com sessão encontrada troca
+        // DENY + `frame-ancestors 'none'` pela origem EXATA da sessão; o resto continua DENY.
+        EmbedSecurityHeaders::apply($request, $headers);
 
         return $response;
     }

@@ -44,6 +44,8 @@ use App\Models\SignatureAcceptance;
 use App\Models\SigningField;
 use App\Models\SigningFieldValue;
 use App\Models\SigningSession;
+use App\Models\SsoConnection;
+use App\Models\SsoDomain;
 use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\Template;
@@ -53,6 +55,7 @@ use App\Models\WebhookEndpoint;
 use App\Services\Affiliates\CommissionLedger;
 use App\Services\Anchors\TemplateAnchorRules;
 use App\Services\Branding\BrandingManager;
+use App\Services\Embed\AllowedOrigins;
 use App\Services\Envelopes\Delegation\DelegationPolicy;
 use App\Services\Envelopes\Steps\SigningStepPlan;
 use App\Services\Identity\IdentityVideos;
@@ -64,6 +67,8 @@ use App\Services\Retention\LegalHoldScope;
 use App\Services\Risk\RiskSignals;
 use App\Services\Signing\Certificates\ParticipantCertificateTool;
 use App\Services\Signing\Channels\SenderPins;
+use App\Services\Sso\SsoConnectionStatus;
+use App\Services\Sso\SsoProtocol;
 use App\Services\Tags\TagColor;
 use App\Services\Tags\TagManager;
 use App\Services\Templates\TemplateManager;
@@ -133,6 +138,15 @@ class DemoOrganizationSeeder extends Seeder
         'bulk_generation', 'field_anchors', 'ocr', 'conditional_steps', 'delegation', 'identity_video', 'multilingual',
     ];
 
+    /**
+     * Fase 3 — onda G (docs/fase-3/onda-g-relatorio.md §5): itens de PLANO — ligados na Horizonte,
+     * desligados na Vega. A interface só aparece com os interruptores globais ligados.
+     */
+    private const PHASE3_WAVE_G_PLAN_FEATURES = ['embedded_signing', 'sso_oidc', 'sso_saml', 'cloud_import', 'hubspot'];
+
+    /** Origem de EXEMPLO do widget na Horizonte (domínio reservado `.example`: não é um site real). */
+    public const DEMO_EMBED_ORIGIN = 'https://portal.imobiliaria-horizonte.example';
+
     /** Diretório (em storage/app/private) do PKCS#12 de TESTE do simulador de componente local. */
     public const DEMO_PHASE3_DIR = 'demo/fase-3';
 
@@ -177,8 +191,8 @@ class DemoOrganizationSeeder extends Seeder
         // os itens da onda A; o da Vega (Grátis) não. O recurso só aparece quando o
         // interruptor GLOBAL também está ligado (`ASSINAVELOX_FEATURE_*` no .env) — desligado,
         // que é o padrão e o que os testes usam, a demonstração é exatamente a da Fase 1.
-        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, true))])->save();
-        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, false))])->save();
+        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_G_PLAN_FEATURES, true))])->save();
+        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_G_PLAN_FEATURES, false))])->save();
 
         DB::transaction(function () use ($free, $professional): void {
             $hasPlatformCertificate = CertificateReference::query()
@@ -400,6 +414,45 @@ class DemoOrganizationSeeder extends Seeder
         $this->seedHorizonteWaveD($org, $owner, $subscription, $approvedPayment);
         $this->seedHorizontePhase3PartOne($org, $approvedPayment);
         $this->seedHorizonteWaveF($org, $owner);
+        $this->seedHorizonteWaveG($org, $owner);
+    }
+
+    /**
+     * Fase 3 — onda G (docs/fase-3/onda-g-relatorio.md §5) na Horizonte, SEM segredo nenhum:
+     *  - widget de assinatura: uma origem de exemplo (domínio reservado `.example`);
+     *  - login corporativo: uma conexão OIDC em RASCUNHO (sem client secret, sem teste) e o
+     *    domínio `horizonte.demo` ainda NÃO verificado — a tela mostra o estado honesto de "falta
+     *    configurar", e ninguém entra por ela;
+     *  - Google Drive, Dropbox e HubSpot: nada é semeado. Conexão falsa fingiria um app que o
+     *    proprietário ainda não registrou (classe B); sem as credenciais em config/services.php
+     *    as telas dizem "Aguardando app registrado pelo proprietário".
+     * As flags de plano ficam ligadas na Horizonte e desligadas na Vega; os interruptores globais
+     * continuam os do .env (desligados por padrão).
+     */
+    private function seedHorizonteWaveG(Organization $org, User $owner): void
+    {
+        AllowedOrigins::replace($org, [self::DEMO_EMBED_ORIGIN], $owner);
+
+        SsoConnection::withoutOrganizationScope()->create([
+            'organization_id' => $org->id,
+            'created_by_user_id' => $owner->id,
+            'protocol' => SsoProtocol::Oidc,
+            'name' => 'Login da Horizonte (exemplo)',
+            'status' => SsoConnectionStatus::Draft,
+            'oidc_issuer' => 'https://login.imobiliaria-horizonte.example',
+            'oidc_client_id' => 'assinavelox-demo',
+            'oidc_client_secret' => null,
+            'oidc_id_token_alg' => 'RS256',
+        ]);
+
+        SsoDomain::withoutOrganizationScope()->create([
+            'organization_id' => $org->id,
+            'created_by_user_id' => $owner->id,
+            'domain' => 'horizonte.demo',
+            'verified_domain' => null,
+            'verification_token' => Str::random(40),
+            'verified_at' => null,
+        ]);
     }
 
     /**

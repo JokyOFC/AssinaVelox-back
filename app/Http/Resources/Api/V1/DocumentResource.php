@@ -89,12 +89,17 @@ class DocumentResource extends JsonResource
             'source_type' => $document->source_type->value,
             'processing_status' => $document->processing_status->value,
             'processing_label' => $document->processing_status->label(),
+            /** @var bool */
             'ready' => $document->isReady() && $document->current_version_id !== null,
             'pages' => $document->page_count ?? $current->page_count ?? null,
+            /** @var int|null */
             'size_bytes' => $original->size_bytes ?? $current->size_bytes ?? null,
             'sha256' => [
+                /** @var string|null */
                 'original' => $original?->sha256,
+                /** @var string|null */
                 'sent' => $sent?->sha256,
+                /** @var string|null */
                 'final' => $final?->sha256,
             ],
             'failure' => $document->failure_code === null ? null : [

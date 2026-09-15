@@ -17,11 +17,14 @@ use App\Services\Billing\BillingSettings;
 use App\Services\Branding\BrandingFeature;
 use App\Services\Branding\BrandingPresenter;
 use App\Services\BulkGeneration\BulkGenerationFeature;
+use App\Services\CloudImport\CloudImportFeature;
 use App\Services\Dossier\DossierFeature;
+use App\Services\Embed\EmbedFeature;
 use App\Services\Envelopes\DomainFeatures;
 use App\Services\Envelopes\Reminders\RemindersFeature;
 use App\Services\Envelopes\Steps\FlowFeatures;
 use App\Services\Fiscal\FiscalFeature;
+use App\Services\HubSpot\HubSpotFeature;
 use App\Services\Identity\IdentityFeatures;
 use App\Services\InPerson\PresenceFeatures;
 use App\Services\Ltv\LtvFeatures;
@@ -32,6 +35,7 @@ use App\Services\Retention\RetentionFeature;
 use App\Services\Risk\RiskFeature;
 use App\Services\Risk\RiskStatus;
 use App\Services\Signing\Channels\ChannelFeatures;
+use App\Services\Sso\SsoFeature;
 use App\Services\Templates\TemplatesFeature;
 use App\Services\Timestamp\TimestampFeatures;
 use App\Services\Webhooks\WebhooksFeature;
@@ -193,6 +197,14 @@ class HandleInertiaRequests extends Middleware
             ...AnchorFeatures::forOrganization($organization),
             // Fase 3 §3.3 (F-I18N): página pública e e-mails multilíngues — global E plano, desligada (T8).
             'multilingual' => MultilingualFeature::enabled($organization),
+            // Fase 3 §3.9 (G-CONN): importação da nuvem e app HubSpot — global E plano, desligadas (T8).
+            'cloud_import' => CloudImportFeature::enabled($organization),
+            'hubspot' => HubSpotFeature::enabled($organization),
+            // Fase 3 §3.9 (G-EMBED): assinatura embutida por iframe — global E plano, desligada (T8).
+            'embedded_signing' => EmbedFeature::enabled($organization),
+            // Fase 3 §3.9 (G-SSO): login corporativo OIDC/SAML — global E plano; sem organização
+            // (tela de login) só o interruptor global, como `cnpj_lookup`. Desligadas (T8).
+            ...SsoFeature::forFeatures($organization),
         ];
     }
 

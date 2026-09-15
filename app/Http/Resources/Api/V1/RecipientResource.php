@@ -40,6 +40,7 @@ class RecipientResource extends JsonResource
             'object' => 'recipient',
             'name' => $personal ? $recipient->name : null,
             'email' => $personal ? $recipient->email : null,
+            /** @var string|null */
             'phone_masked' => $personal && $recipient->phone !== null ? PhoneE164::mask($recipient->phone) : null,
             'role' => $recipient->role->value,
             'role_label' => $recipient->role->label(),
@@ -52,7 +53,9 @@ class RecipientResource extends JsonResource
             'auth_method' => $personal ? $recipient->auth_method->value : null,
             'notified_at' => $recipient->status !== RecipientStatus::Pending ? ApiFormat::date($recipient->last_notified_at) : null,
             'notifications_count' => (int) $recipient->notification_count,
+            /** @var string|null */
             'signed_at' => ApiFormat::date($recipient->signed_at),
+            /** @var string|null */
             'refused_at' => ApiFormat::date($recipient->refused_at),
             'refusal_reason' => $personal ? $recipient->refusal_reason : null,
         ];

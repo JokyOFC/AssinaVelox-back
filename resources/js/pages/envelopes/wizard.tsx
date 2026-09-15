@@ -30,6 +30,7 @@ import {
     WizardStepRecipients,
 } from '@/components/envelopes/wizard-step-recipients';
 import { WizardStepReview } from '@/components/envelopes/wizard-step-review';
+import { CloudImportEntry } from '@/components/integrations/cloud/cloud-import-entry';
 import { usePdfDocument } from '@/components/pdf/use-pdf-document';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
@@ -1122,6 +1123,8 @@ export default function EnvelopeWizard({
                         templatesEnabled={templatesEnabled}
                     />
                 )}
+
+                {step === 1 && <CloudImportEntry envelopeId={envelope.id} />}
 
                 {step === 2 && (
                     <WizardStepRecipients

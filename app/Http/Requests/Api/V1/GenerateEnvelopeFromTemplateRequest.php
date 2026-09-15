@@ -30,7 +30,9 @@ class GenerateEnvelopeFromTemplateRequest extends FormRequest
     {
         return [
             'title' => ['nullable', 'string', 'max:160'],
+            /** @var array<string, string|int|float|bool|null>|null `{chave_da_variavel: valor}`. */
             'values' => ['nullable', 'array', 'max:100'],
+            /** @var array<string, array{name: string, email: string}>|null `{ulid_do_papel: {name, email}}`. */
             'participants' => ['nullable', 'array', 'max:20'],
         ];
     }

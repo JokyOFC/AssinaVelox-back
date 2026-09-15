@@ -177,6 +177,16 @@ export interface Features {
     conditional_steps?: boolean;
     /** Fase 3 §3.3 — delegação auditada pelo participante (política do remetente; global E plano). */
     delegation?: boolean;
+    /** Fase 3 §3.9 — importar arquivo do Google Drive/Dropbox no wizard (global E plano; classe B). */
+    cloud_import?: boolean;
+    /** Fase 3 §3.9 — app HubSpot: conexão por organização e ação de workflow (global E plano; classe B). */
+    hubspot?: boolean;
+    /** Fase 3 §3.9 — login corporativo por OIDC (global E plano; sem organização, só o global; classe B). */
+    sso_oidc?: boolean;
+    /** Fase 3 §3.9 — login corporativo por SAML 2.0 (global E plano; sem organização, só o global; classe B). */
+    sso_saml?: boolean;
+    /** Fase 3 §3.9 — assinatura embutida por iframe + embed.js (global E plano; G-EMBED). */
+    embedded_signing?: boolean;
 }
 
 export interface SharedProps {

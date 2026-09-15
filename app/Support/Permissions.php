@@ -62,6 +62,9 @@ final class Permissions
         'invitations.' => Permission::ManageMembers,
         'folders.' => Permission::ManageFolders,
         'billing.' => Permission::ManageBilling,
+        // Fase 3 §3.9 (G-SSO): Configurações › Login único (`settings.sso` e `settings.sso.*`),
+        // sob `org.role:owner,admin` — a mesma permissão das demais configurações.
+        'settings.sso' => Permission::ManageSettings,
     ];
 
     // -- Resolução ------------------------------------------------------------------------

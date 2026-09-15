@@ -1,0 +1,2972 @@
+{
+    "components": {
+        "responses": {
+            "AuthenticationException": {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "description": "Error overview.",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["message"],
+                            "type": "object"
+                        }
+                    }
+                },
+                "description": "Unauthenticated"
+            },
+            "AuthorizationException": {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "description": "Error overview.",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["message"],
+                            "type": "object"
+                        }
+                    }
+                },
+                "description": "Authorization error"
+            },
+            "ModelNotFoundException": {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "description": "Error overview.",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["message"],
+                            "type": "object"
+                        }
+                    }
+                },
+                "description": "Not found"
+            },
+            "NotFoundHttpException": {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "description": "Error overview.",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["message"],
+                            "type": "object"
+                        }
+                    }
+                },
+                "description": "Not found"
+            },
+            "ValidationException": {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "errors": {
+                                    "additionalProperties": {
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "type": "array"
+                                    },
+                                    "description": "A detailed description of each field that failed validation.",
+                                    "type": "object"
+                                },
+                                "message": {
+                                    "description": "Errors overview.",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["message", "errors"],
+                            "type": "object"
+                        }
+                    }
+                },
+                "description": "Validation error"
+            }
+        },
+        "schemas": {
+            "CancelEnvelopeRequest": {
+                "description": "POST /api/v1/envelopes/{envelope}/cancel — motivo opcional (o mesmo campo da interface).",
+                "properties": {
+                    "reason": {
+                        "maxLength": 500,
+                        "type": ["string", "null"]
+                    }
+                },
+                "title": "CancelEnvelopeRequest",
+                "type": "object"
+            },
+            "DocumentResource": {
+                "properties": {
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "failure": {
+                        "properties": {
+                            "code": {
+                                "type": ["string", "null"]
+                            },
+                            "message": {
+                                "type": ["string", "null"]
+                            }
+                        },
+                        "required": ["code", "message"],
+                        "type": ["object", "null"]
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "object": {
+                        "const": "document",
+                        "type": "string"
+                    },
+                    "original_filename": {
+                        "type": "string"
+                    },
+                    "pages": {
+                        "type": ["integer", "null"]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "processing_label": {
+                        "enum": [
+                            "Enviado",
+                            "Convertendo…",
+                            "Pronto",
+                            "Falha ao processar",
+                            "Bloqueado"
+                        ],
+                        "type": "string"
+                    },
+                    "processing_status": {
+                        "type": "string"
+                    },
+                    "ready": {
+                        "type": "boolean"
+                    },
+                    "sha256": {
+                        "properties": {
+                            "final": {
+                                "type": ["string", "null"]
+                            },
+                            "original": {
+                                "type": ["string", "null"]
+                            },
+                            "sent": {
+                                "type": ["string", "null"]
+                            }
+                        },
+                        "required": ["original", "sent", "final"],
+                        "type": "object"
+                    },
+                    "size_bytes": {
+                        "type": ["integer", "null"]
+                    },
+                    "source_type": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "object",
+                    "position",
+                    "name",
+                    "original_filename",
+                    "source_type",
+                    "processing_status",
+                    "processing_label",
+                    "ready",
+                    "pages",
+                    "size_bytes",
+                    "sha256",
+                    "failure",
+                    "created_at"
+                ],
+                "title": "DocumentResource",
+                "type": "object"
+            },
+            "EmbeddedSigningSessionResource": {
+                "properties": {
+                    "completed_at": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "envelope_id": {},
+                    "expires_at": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "object": {
+                        "const": "embedded_signing_session",
+                        "type": "string"
+                    },
+                    "origin": {
+                        "type": "string"
+                    },
+                    "recipient_id": {},
+                    "revoked_at": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "description": "pending | active | completed | refused | expired | revoked | closed (a pessoa\nrespondeu por outro caminho, como o link do e-mail, ou foi encerrada)",
+                        "enum": [
+                            "completed",
+                            "refused",
+                            "revoked",
+                            "closed",
+                            "active",
+                            "expired",
+                            "pending"
+                        ],
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "null"
+                    },
+                    "used_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "object",
+                    "envelope_id",
+                    "recipient_id",
+                    "origin",
+                    "status",
+                    "expires_at",
+                    "used_at",
+                    "completed_at",
+                    "revoked_at",
+                    "created_at",
+                    "url"
+                ],
+                "title": "EmbeddedSigningSessionResource",
+                "type": "object"
+            },
+            "EnvelopeResource": {
+                "anyOf": [
+                    {
+                        "properties": {
+                            "cancel_reason": {
+                                "description": "Só no detalhe.",
+                                "type": ["string", "null"]
+                            },
+                            "canceled_at": {
+                                "type": ["string", "null"]
+                            },
+                            "completed_at": {
+                                "type": ["string", "null"]
+                            },
+                            "created_at": {
+                                "type": "string"
+                            },
+                            "created_by": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["name"],
+                                "type": "object"
+                            },
+                            "display_code": {
+                                "type": "string"
+                            },
+                            "documents": {
+                                "description": "Só no detalhe.",
+                                "items": {
+                                    "$ref": "#/components/schemas/DocumentResource"
+                                },
+                                "type": "array"
+                            },
+                            "expiration_days": {
+                                "description": "Só no detalhe.",
+                                "type": ["integer", "null"]
+                            },
+                            "expired_at": {
+                                "type": ["string", "null"]
+                            },
+                            "expires_at": {
+                                "type": ["string", "null"]
+                            },
+                            "folder": {
+                                "properties": {
+                                    "id": {
+                                        "type": "string"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["id", "name"],
+                                "type": ["object", "null"]
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "links": {
+                                "description": "Só no detalhe.",
+                                "properties": {
+                                    "events": {
+                                        "type": "string"
+                                    },
+                                    "evidence_file": {
+                                        "type": ["string", "null"]
+                                    },
+                                    "fields": {
+                                        "type": "string"
+                                    },
+                                    "original_file": {
+                                        "type": "string"
+                                    },
+                                    "recipients": {
+                                        "type": "string"
+                                    },
+                                    "self": {
+                                        "type": "string"
+                                    },
+                                    "signed_file": {
+                                        "type": ["string", "null"]
+                                    },
+                                    "verification": {
+                                        "type": ["string", "null"]
+                                    }
+                                },
+                                "required": [
+                                    "self",
+                                    "recipients",
+                                    "fields",
+                                    "events",
+                                    "verification",
+                                    "original_file",
+                                    "signed_file",
+                                    "evidence_file"
+                                ],
+                                "type": "object"
+                            },
+                            "message": {
+                                "description": "Só no detalhe.",
+                                "type": ["string", "null"]
+                            },
+                            "object": {
+                                "const": "envelope",
+                                "type": "string"
+                            },
+                            "recipients": {
+                                "description": "Só no detalhe.",
+                                "items": {
+                                    "$ref": "#/components/schemas/RecipientResource"
+                                },
+                                "type": "array"
+                            },
+                            "recipients_count": {
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            "refused_at": {
+                                "type": ["string", "null"]
+                            },
+                            "send_copy_to_all": {
+                                "description": "Só no detalhe.",
+                                "type": "boolean"
+                            },
+                            "sent_at": {
+                                "type": ["string", "null"]
+                            },
+                            "signature_status": {
+                                "type": ["string", "null"]
+                            },
+                            "signature_status_label": {
+                                "enum": [
+                                    "Aceite eletrônico com evidências (sem assinatura criptográfica)",
+                                    "Assinatura criptográfica da operadora (certificado A1, PAdES)",
+                                    "Assinaturas criptográficas de participantes com o próprio certificado A1 (PAdES)",
+                                    "Assinaturas de participantes com o próprio certificado A1 e assinatura da operadora (PAdES)",
+                                    "Assinatura criptográfica de participante com certificado A3 (token ou cartão) por componente local (PAdES)",
+                                    "Assinatura criptográfica de participante feita fora da plataforma, por componente externo (PAdES)",
+                                    "Assinatura gov.br (avançada) de participante, devolvida pelo portal e conferida contra a cadeia gov.br fixada (PAdES)",
+                                    "Assinatura digital de terceiro devolvida pelo participante, cadeia não verificada (PAdES)",
+                                    null
+                                ],
+                                "type": ["string", "null"]
+                            },
+                            "signed_count": {
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            "signing_order": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string"
+                            },
+                            "status_label": {
+                                "enum": [
+                                    "Assinado",
+                                    "Concluído",
+                                    "Rascunho",
+                                    "Rascunho · processando",
+                                    "Aguardando",
+                                    "Em andamento · finalizando",
+                                    "Recusado",
+                                    "Expirado",
+                                    "Cancelado",
+                                    "Em andamento"
+                                ],
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            },
+                            "updated_at": {
+                                "type": "string"
+                            },
+                            "verification_code": {
+                                "type": ["string", "null"]
+                            },
+                            "viewers_count": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "object",
+                            "display_code",
+                            "title",
+                            "status",
+                            "status_label",
+                            "signing_order",
+                            "folder",
+                            "created_by",
+                            "recipients_count",
+                            "signed_count",
+                            "viewers_count",
+                            "verification_code",
+                            "signature_status",
+                            "signature_status_label",
+                            "created_at",
+                            "updated_at",
+                            "sent_at",
+                            "expires_at",
+                            "completed_at",
+                            "refused_at",
+                            "expired_at",
+                            "canceled_at",
+                            "message",
+                            "expiration_days",
+                            "send_copy_to_all",
+                            "cancel_reason",
+                            "documents",
+                            "recipients",
+                            "links"
+                        ],
+                        "type": "object"
+                    },
+                    {
+                        "properties": {
+                            "canceled_at": {
+                                "type": ["string", "null"]
+                            },
+                            "completed_at": {
+                                "type": ["string", "null"]
+                            },
+                            "created_at": {
+                                "type": "string"
+                            },
+                            "created_by": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["name"],
+                                "type": "object"
+                            },
+                            "display_code": {
+                                "type": "string"
+                            },
+                            "expired_at": {
+                                "type": ["string", "null"]
+                            },
+                            "expires_at": {
+                                "type": ["string", "null"]
+                            },
+                            "folder": {
+                                "properties": {
+                                    "id": {
+                                        "type": "string"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["id", "name"],
+                                "type": ["object", "null"]
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "object": {
+                                "const": "envelope",
+                                "type": "string"
+                            },
+                            "recipients_count": {
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            "refused_at": {
+                                "type": ["string", "null"]
+                            },
+                            "sent_at": {
+                                "type": ["string", "null"]
+                            },
+                            "signature_status": {
+                                "type": ["string", "null"]
+                            },
+                            "signature_status_label": {
+                                "enum": [
+                                    "Aceite eletrônico com evidências (sem assinatura criptográfica)",
+                                    "Assinatura criptográfica da operadora (certificado A1, PAdES)",
+                                    "Assinaturas criptográficas de participantes com o próprio certificado A1 (PAdES)",
+                                    "Assinaturas de participantes com o próprio certificado A1 e assinatura da operadora (PAdES)",
+                                    "Assinatura criptográfica de participante com certificado A3 (token ou cartão) por componente local (PAdES)",
+                                    "Assinatura criptográfica de participante feita fora da plataforma, por componente externo (PAdES)",
+                                    "Assinatura gov.br (avançada) de participante, devolvida pelo portal e conferida contra a cadeia gov.br fixada (PAdES)",
+                                    "Assinatura digital de terceiro devolvida pelo participante, cadeia não verificada (PAdES)",
+                                    null
+                                ],
+                                "type": ["string", "null"]
+                            },
+                            "signed_count": {
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            "signing_order": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string"
+                            },
+                            "status_label": {
+                                "enum": [
+                                    "Assinado",
+                                    "Concluído",
+                                    "Rascunho",
+                                    "Rascunho · processando",
+                                    "Aguardando",
+                                    "Em andamento · finalizando",
+                                    "Recusado",
+                                    "Expirado",
+                                    "Cancelado",
+                                    "Em andamento"
+                                ],
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            },
+                            "updated_at": {
+                                "type": "string"
+                            },
+                            "verification_code": {
+                                "type": ["string", "null"]
+                            },
+                            "viewers_count": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "object",
+                            "display_code",
+                            "title",
+                            "status",
+                            "status_label",
+                            "signing_order",
+                            "folder",
+                            "created_by",
+                            "recipients_count",
+                            "signed_count",
+                            "viewers_count",
+                            "verification_code",
+                            "signature_status",
+                            "signature_status_label",
+                            "created_at",
+                            "updated_at",
+                            "sent_at",
+                            "expires_at",
+                            "completed_at",
+                            "refused_at",
+                            "expired_at",
+                            "canceled_at"
+                        ],
+                        "type": "object"
+                    }
+                ],
+                "title": "EnvelopeResource"
+            },
+            "EventResource": {
+                "properties": {
+                    "actor": {
+                        "properties": {
+                            "name": {
+                                "type": ["string", "null"]
+                            },
+                            "type": {
+                                "type": "string"
+                            }
+                        },
+                        "required": ["type", "name"],
+                        "type": "object"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "enum": ["ok", "warn", "info"],
+                        "type": "string"
+                    },
+                    "label": {
+                        "description": "Rótulo em PT-BR do tipo; a lista cresce com a trilha — não é enumeração fechada.",
+                        "type": "string"
+                    },
+                    "object": {
+                        "const": "event",
+                        "type": "string"
+                    },
+                    "occurred_at": {
+                        "type": "string"
+                    },
+                    "recipient_id": {
+                        "type": ["string", "null"]
+                    },
+                    "type": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "object",
+                    "type",
+                    "label",
+                    "kind",
+                    "actor",
+                    "recipient_id",
+                    "occurred_at"
+                ],
+                "title": "EventResource",
+                "type": "object"
+            },
+            "FieldResource": {
+                "properties": {
+                    "auto": {
+                        "type": "boolean"
+                    },
+                    "document_id": {
+                        "type": ["string", "null"]
+                    },
+                    "h": {
+                        "type": "number"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": ["string", "null"]
+                    },
+                    "object": {
+                        "const": "field",
+                        "type": "string"
+                    },
+                    "page": {
+                        "type": "integer"
+                    },
+                    "recipient_id": {
+                        "type": ["string", "null"]
+                    },
+                    "required": {
+                        "type": "boolean"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "w": {
+                        "type": "number"
+                    },
+                    "x": {
+                        "type": "number"
+                    },
+                    "y": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "id",
+                    "object",
+                    "recipient_id",
+                    "document_id",
+                    "type",
+                    "page",
+                    "x",
+                    "y",
+                    "w",
+                    "h",
+                    "required",
+                    "label",
+                    "auto"
+                ],
+                "title": "FieldResource",
+                "type": "object"
+            },
+            "GenerateEnvelopeFromTemplateRequest": {
+                "description": "POST /api/v1/templates/{template}/envelopes — o mesmo corpo de \"Usar modelo\" na interface:\n\n - `title` (opcional; padrão: nome do modelo);\n - `values`: `{chave_da_variavel: valor}`, validados por tipo no servidor\n   (App\\Services\\Templates\\VariableValues);\n - `participants`: `{ulid_do_papel: {name, email}}`, um por papel do modelo.\n\nA validação por tipo e por papel é de App\\Services\\Templates\\CreateEnvelopeFromTemplate\n(erros em `values.*`, `participants.*` e `template`).",
+                "properties": {
+                    "participants": {
+                        "additionalProperties": {
+                            "properties": {
+                                "email": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["name", "email"],
+                            "type": "object"
+                        },
+                        "type": ["object", "null"]
+                    },
+                    "title": {
+                        "maxLength": 160,
+                        "type": ["string", "null"]
+                    },
+                    "values": {
+                        "additionalProperties": {
+                            "type": ["string", "number", "boolean", "null"]
+                        },
+                        "type": ["object", "null"]
+                    }
+                },
+                "title": "GenerateEnvelopeFromTemplateRequest",
+                "type": "object"
+            },
+            "RecipientResource": {
+                "properties": {
+                    "auth_method": {
+                        "type": ["string", "null"]
+                    },
+                    "email": {
+                        "type": ["string", "null"]
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": ["string", "null"]
+                    },
+                    "name": {
+                        "type": ["string", "null"]
+                    },
+                    "notifications_count": {
+                        "type": "integer"
+                    },
+                    "notified_at": {
+                        "type": ["string", "null"]
+                    },
+                    "object": {
+                        "const": "recipient",
+                        "type": "string"
+                    },
+                    "order": {
+                        "type": "integer"
+                    },
+                    "phone_masked": {
+                        "type": ["string", "null"]
+                    },
+                    "refusal_reason": {
+                        "type": ["string", "null"]
+                    },
+                    "refused_at": {
+                        "type": ["string", "null"]
+                    },
+                    "role": {
+                        "type": "string"
+                    },
+                    "role_label": {
+                        "enum": [
+                            "Signatário",
+                            "Testemunha",
+                            "Aprovador",
+                            "Visualizador"
+                        ],
+                        "type": "string"
+                    },
+                    "signed_at": {
+                        "type": ["string", "null"]
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "status_label": {
+                        "enum": [
+                            "Aprovado",
+                            "Pendente",
+                            "Assinado",
+                            "Recusado",
+                            "Expirado",
+                            "Cancelado",
+                            "Delegado"
+                        ],
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "object",
+                    "name",
+                    "email",
+                    "phone_masked",
+                    "role",
+                    "role_label",
+                    "label",
+                    "order",
+                    "status",
+                    "status_label",
+                    "auth_method",
+                    "notified_at",
+                    "notifications_count",
+                    "signed_at",
+                    "refused_at",
+                    "refusal_reason"
+                ],
+                "title": "RecipientResource",
+                "type": "object"
+            },
+            "SendingBlockedException": {
+                "properties": {
+                    "errorCode": {
+                        "type": "string"
+                    },
+                    "remaining": {
+                        "type": ["integer", "null"]
+                    }
+                },
+                "required": ["errorCode", "remaining"],
+                "title": "SendingBlockedException",
+                "type": "object"
+            },
+            "SendingException": {
+                "properties": {
+                    "context": {
+                        "additionalProperties": {},
+                        "type": "object"
+                    },
+                    "errorCode": {
+                        "type": "string"
+                    }
+                },
+                "required": ["errorCode", "context"],
+                "title": "SendingException",
+                "type": "object"
+            },
+            "StoreEmbeddedSigningSessionRequest": {
+                "description": "Corpo de `POST /api/v1/envelopes/{envelope}/recipients/{recipient}/embedded-sessions`\n(Fase 3 §3.9, docs/fase-3/widget-embutido.md §2). Só a forma; a origem é normalizada e\nconferida contra a lista da organização no serviço.",
+                "properties": {
+                    "expires_in": {
+                        "description": "Validade da URL de uso único, em segundos (60 a 900; padrão 300).",
+                        "maximum": 900,
+                        "minimum": 60,
+                        "type": ["integer", "null"]
+                    },
+                    "origin": {
+                        "description": "Origem exata do site que hospeda o widget, ex.: `https://app.cliente.com.br`.",
+                        "maxLength": 255,
+                        "type": "string"
+                    }
+                },
+                "required": ["origin"],
+                "title": "StoreEmbeddedSigningSessionRequest",
+                "type": "object"
+            },
+            "StoreEnvelopeRequest": {
+                "description": "POST /api/v1/envelopes — rascunho novo, com as mesmas regras de formato do passo 1 do\nwizard (App\\Http\\Requests\\Envelopes\\UpdateEnvelopeRequest).",
+                "properties": {
+                    "expires_in_days": {
+                        "maximum": 90,
+                        "minimum": 1,
+                        "type": ["integer", "null"]
+                    },
+                    "folder_id": {
+                        "maxLength": 26,
+                        "minLength": 26,
+                        "type": ["string", "null"]
+                    },
+                    "message": {
+                        "maxLength": 1000,
+                        "type": ["string", "null"]
+                    },
+                    "send_copy_to_all": {
+                        "type": ["boolean", "null"]
+                    },
+                    "signing_order": {
+                        "enum": ["sequential", "parallel", null],
+                        "type": ["string", "null"]
+                    },
+                    "title": {
+                        "maxLength": 160,
+                        "minLength": 3,
+                        "type": "string"
+                    }
+                },
+                "required": ["title"],
+                "title": "StoreEnvelopeRequest",
+                "type": "object"
+            },
+            "SyncEnvelopeFieldsRequest": {
+                "description": "PUT /api/v1/envelopes/{envelope}/fields — substitui os campos posicionados.\n\nMesmo contrato do passo 3 do wizard (App\\Http\\Requests\\Envelopes\\SyncFieldsRequest +\nApp\\Services\\Envelopes\\FieldSync): geometria em frações [0,1] da página exibida, origem no\ncanto superior esquerdo; `recipient_id` e `document_id` são ULIDs do próprio envelope.\n\nEnvelope invisível para o criador do token → 404 (antes da validação); visível sem `update`\n→ 403.",
+                "properties": {
+                    "fields": {
+                        "items": {
+                            "properties": {
+                                "auto": {
+                                    "type": ["boolean", "null"]
+                                },
+                                "document_id": {
+                                    "description": "Fase 2 §2.3: ULID do documento onde o campo fica. Ausente = primeiro documento.",
+                                    "maxLength": 26,
+                                    "minLength": 26,
+                                    "type": ["string", "null"]
+                                },
+                                "h": {
+                                    "type": "number"
+                                },
+                                "id": {
+                                    "maxLength": 26,
+                                    "minLength": 26,
+                                    "type": ["string", "null"]
+                                },
+                                "label": {
+                                    "maxLength": 120,
+                                    "type": ["string", "null"]
+                                },
+                                "options": {
+                                    "properties": {
+                                        "date_format": {
+                                            "maxLength": 32,
+                                            "type": ["string", "null"]
+                                        },
+                                        "default": {
+                                            "type": ["boolean", "null"]
+                                        },
+                                        "font_size": {
+                                            "type": ["number", "null"]
+                                        },
+                                        "placeholder": {
+                                            "maxLength": 60,
+                                            "type": ["string", "null"]
+                                        }
+                                    },
+                                    "type": ["object", "null"]
+                                },
+                                "page": {
+                                    "type": "integer"
+                                },
+                                "placeholder": {
+                                    "maxLength": 60,
+                                    "type": ["string", "null"]
+                                },
+                                "recipient_client_id": {
+                                    "maxLength": 64,
+                                    "type": ["string", "null"]
+                                },
+                                "recipient_id": {
+                                    "maxLength": 26,
+                                    "minLength": 26,
+                                    "type": ["string", "null"]
+                                },
+                                "required": {
+                                    "type": ["boolean", "null"]
+                                },
+                                "type": {
+                                    "enum": [
+                                        "signature",
+                                        "initials",
+                                        "name",
+                                        "date",
+                                        "text",
+                                        "checkbox",
+                                        "cpf",
+                                        "stamp"
+                                    ],
+                                    "type": "string"
+                                },
+                                "w": {
+                                    "type": "number"
+                                },
+                                "x": {
+                                    "type": "number"
+                                },
+                                "y": {
+                                    "type": "number"
+                                }
+                            },
+                            "required": ["type", "page", "x", "y", "w", "h"],
+                            "type": "object"
+                        },
+                        "maxItems": 200,
+                        "type": "array"
+                    },
+                    "initials_on_all_pages": {
+                        "type": ["boolean", "null"]
+                    }
+                },
+                "required": ["fields"],
+                "title": "SyncEnvelopeFieldsRequest",
+                "type": "object"
+            },
+            "SyncEnvelopeRecipientsRequest": {
+                "description": "PUT /api/v1/envelopes/{envelope}/recipients — substitui a lista inteira de participantes.\n\nMesmo contrato e mesmas regras do passo 2 do wizard (App\\Http\\Requests\\Envelopes\\\nSyncRecipientsRequest + App\\Services\\Envelopes\\RecipientSync): para manter um participante,\nenvie o `id` (ULID) dele; linhas sem `id` são criadas; quem não vier é removido. O PIN, se\nenviado, sai da entrada logo após a validação e nunca é devolvido.\n\nEnvelope invisível para o criador do token → 404 (antes da validação); visível sem `update`\n→ 403.",
+                "properties": {
+                    "recipients": {
+                        "items": {
+                            "properties": {
+                                "auth_method": {
+                                    "enum": [
+                                        "email_otp",
+                                        "sms_otp",
+                                        "whatsapp_otp",
+                                        null
+                                    ],
+                                    "type": ["string", "null"]
+                                },
+                                "channel": {
+                                    "enum": ["email", "sms", "whatsapp", null],
+                                    "type": ["string", "null"]
+                                },
+                                "email": {
+                                    "format": "email",
+                                    "maxLength": 255,
+                                    "type": "string"
+                                },
+                                "id": {
+                                    "maxLength": 26,
+                                    "minLength": 26,
+                                    "type": ["string", "null"]
+                                },
+                                "name": {
+                                    "maxLength": 120,
+                                    "minLength": 2,
+                                    "type": "string"
+                                },
+                                "order": {
+                                    "maximum": 20,
+                                    "minimum": 1,
+                                    "type": ["integer", "null"]
+                                },
+                                "participant_role": {
+                                    "description": "Fase 2 §2.4: papel de domínio (o `role` acima é o rótulo livre). A flag\n`participant_roles` é conferida em RecipientSync.",
+                                    "enum": [
+                                        "signer",
+                                        "witness",
+                                        "approver",
+                                        "viewer",
+                                        null
+                                    ],
+                                    "type": ["string", "null"]
+                                },
+                                "phone": {
+                                    "description": "Fase 2 §2.9 (C-CAN): telefone, canal do convite, método de autenticação e PIN.\nDisponibilidade do canal, formato E.164 e força do PIN são conferidos em\nApp\\Services\\Signing\\Channels\\RecipientChannels (com a flag e o provedor).",
+                                    "maxLength": 32,
+                                    "type": ["string", "null"]
+                                },
+                                "pin": {
+                                    "maxLength": 8,
+                                    "pattern": "^\\d*$",
+                                    "type": ["string", "null"]
+                                },
+                                "remove_pin": {
+                                    "type": ["boolean", "null"]
+                                },
+                                "role": {
+                                    "maxLength": 40,
+                                    "type": ["string", "null"]
+                                }
+                            },
+                            "required": ["name", "email"],
+                            "type": "object"
+                        },
+                        "maxItems": 20,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                    },
+                    "signing_order": {
+                        "enum": ["sequential", "parallel"],
+                        "type": "string"
+                    }
+                },
+                "required": ["signing_order", "recipients"],
+                "title": "SyncEnvelopeRecipientsRequest",
+                "type": "object"
+            },
+            "TemplateResource": {
+                "anyOf": [
+                    {
+                        "properties": {
+                            "category": {
+                                "type": ["string", "null"]
+                            },
+                            "description": {
+                                "type": ["string", "null"]
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "object": {
+                                "const": "template",
+                                "type": "string"
+                            },
+                            "roles": {
+                                "description": "Só no detalhe.",
+                                "items": {
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "participant_role": {
+                                            "type": "string"
+                                        },
+                                        "participant_role_label": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name",
+                                        "participant_role",
+                                        "participant_role_label"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            },
+                            "source_type": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string"
+                            },
+                            "updated_at": {
+                                "type": "string"
+                            },
+                            "usable": {
+                                "type": "boolean"
+                            },
+                            "variables": {
+                                "description": "Só no detalhe.",
+                                "items": {
+                                    "properties": {
+                                        "default_value": {
+                                            "type": ["string", "null"]
+                                        },
+                                        "help_text": {
+                                            "type": ["string", "null"]
+                                        },
+                                        "key": {
+                                            "type": "string"
+                                        },
+                                        "label": {
+                                            "type": "string"
+                                        },
+                                        "options": {
+                                            "anyOf": [
+                                                {
+                                                    "additionalProperties": {},
+                                                    "type": "object"
+                                                },
+                                                {
+                                                    "type": "string"
+                                                }
+                                            ]
+                                        },
+                                        "required": {
+                                            "type": "boolean"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "key",
+                                        "label",
+                                        "type",
+                                        "required",
+                                        "help_text",
+                                        "default_value",
+                                        "options"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            },
+                            "version": {
+                                "type": ["integer", "null"]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "object",
+                            "name",
+                            "description",
+                            "category",
+                            "source_type",
+                            "status",
+                            "usable",
+                            "version",
+                            "updated_at",
+                            "variables",
+                            "roles"
+                        ],
+                        "type": "object"
+                    },
+                    {
+                        "properties": {
+                            "category": {
+                                "type": ["string", "null"]
+                            },
+                            "description": {
+                                "type": ["string", "null"]
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "object": {
+                                "const": "template",
+                                "type": "string"
+                            },
+                            "source_type": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string"
+                            },
+                            "updated_at": {
+                                "type": "string"
+                            },
+                            "usable": {
+                                "type": "boolean"
+                            },
+                            "version": {
+                                "type": ["integer", "null"]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "object",
+                            "name",
+                            "description",
+                            "category",
+                            "source_type",
+                            "status",
+                            "usable",
+                            "version",
+                            "updated_at"
+                        ],
+                        "type": "object"
+                    }
+                ],
+                "title": "TemplateResource"
+            },
+            "UploadDocumentRequest": {
+                "description": "POST /api/v1/envelopes/{envelope}/documents — multipart com o campo `file`.\n\nAs MESMAS regras da interface: aqui só o tamanho máximo (`assinavelox.upload.max_mb`); o\nconteúdo (MIME real, assinatura de bytes, ZIP do DOCX, dimensões de imagem) é inspecionado\npor App\\Services\\Documents\\UploadInspector dentro de DocumentIntake. Upload por URL não\nexiste (evita SSRF — roadmap §2.15).\n\nA autorização roda ANTES da validação: envelope invisível → 404; visível sem `update` → 403.",
+                "properties": {
+                    "file": {
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 25600 kilobytes.",
+                        "format": "binary",
+                        "type": "string"
+                    }
+                },
+                "required": ["file"],
+                "title": "UploadDocumentRequest",
+                "type": "object"
+            }
+        },
+        "securitySchemes": {
+            "bearerAuth": {
+                "description": "Token de API criado em Integrações → Chaves, enviado como \"Authorization: Bearer {token}\". O texto do token é exibido uma única vez, na criação.",
+                "scheme": "bearer",
+                "type": "http"
+            }
+        }
+    },
+    "info": {
+        "description": "API REST da AssinaVelox, versão 1 — preparo de documentos e coleta de aceites por integração.\n\n**Autenticação.** `Authorization: Bearer {token}`. Crie a chave em *Integrações → Chaves*; o texto do token aparece uma única vez. Cada chave pertence a uma organização e a quem a criou, tem permissões (abilities) explícitas e nunca faz mais do que essa pessoa pode fazer na interface.\n\n**Formato.** JSON com `data` (e `links`/`meta` nas listas, paginadas por cursor). Identificadores públicos em ULID, datas em ISO-8601 UTC, dinheiro em centavos com a moeda.\n\n**Erros.** `application/problem+json` (RFC 9457): `type`, `title`, `status`, `detail`, `errors` por campo (422) e `correlation_id`.\n\n**Idempotência.** Criações e envio exigem o cabeçalho `Idempotency-Key`; a mesma chave com o mesmo corpo devolve a mesma resposta por 24 h.\n\n**Limites.** Por chave e por organização, com os cabeçalhos `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` e `Retry-After` no 429.\n\nExemplo:\n\n```\ncurl -X POST https://{sua-instalacao}/api/v1/envelopes \\\n  -H \"Authorization: Bearer 12|avk_...\" \\\n  -H \"Idempotency-Key: 7d1f5c2e-4b7a-4a51-9d0e-2f0b6c3a9e11\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"title\": \"Contrato de locação — Apto 302\"}'\n```",
+        "title": "AssinaVelox — API v1",
+        "version": "1.0.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {
+        "/envelopes": {
+            "get": {
+                "description": "Documentos visíveis para o token, do mais recente para o mais antigo, com paginação por\ncursor (`meta.next_cursor`). Filtros: `status` (um ou vários, separados por vírgula),\n`folder` (ULID), `q` (título ou número AV-00012), `created_after`, `created_before`,\n`updated_after` (ISO-8601). Ability: `envelopes:read`.",
+                "operationId": "v1.envelopes.index",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "per_page",
+                        "schema": {
+                            "maximum": 100,
+                            "minimum": 1,
+                            "type": ["integer", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "maxLength": 512,
+                            "type": ["string", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "status[]",
+                        "schema": {
+                            "enum": [
+                                "draft",
+                                "preparing",
+                                "ready",
+                                "in_progress",
+                                "finalizing",
+                                "completed",
+                                "refused",
+                                "expired",
+                                "canceled"
+                            ],
+                            "items": {
+                                "enum": [
+                                    "draft",
+                                    "preparing",
+                                    "ready",
+                                    "in_progress",
+                                    "finalizing",
+                                    "completed",
+                                    "refused",
+                                    "expired",
+                                    "canceled"
+                                ],
+                                "type": "string"
+                            },
+                            "type": "array"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "folder",
+                        "schema": {
+                            "maxLength": 26,
+                            "minLength": 26,
+                            "type": ["string", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "schema": {
+                            "maxLength": 120,
+                            "type": ["string", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "created_after",
+                        "schema": {
+                            "format": "date-time",
+                            "type": ["string", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "created_before",
+                        "schema": {
+                            "format": "date-time",
+                            "type": ["string", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "updated_after",
+                        "schema": {
+                            "format": "date-time",
+                            "type": ["string", "null"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/EnvelopeResource"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "links": {
+                                            "properties": {
+                                                "first": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "last": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "next": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "prev": {
+                                                    "type": ["string", "null"]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "next_cursor": {
+                                                    "description": "The \"cursor\" that points to the next set of items.",
+                                                    "type": ["string", "null"]
+                                                },
+                                                "path": {
+                                                    "description": "Base path for paginator generated URLs.",
+                                                    "type": ["string", "null"]
+                                                },
+                                                "per_page": {
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "prev_cursor": {
+                                                    "description": "The \"cursor\" that points to the previous set of items.",
+                                                    "type": ["string", "null"]
+                                                }
+                                            },
+                                            "required": [
+                                                "path",
+                                                "per_page",
+                                                "next_cursor",
+                                                "prev_cursor"
+                                            ],
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data", "links", "meta"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Paginated set of `EnvelopeResource`"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Listar documentos",
+                "tags": ["Envelope"]
+            },
+            "post": {
+                "description": "Cria um documento em rascunho com os padrões da organização (ordem, prazo, rubrica). Em\nseguida: enviar o arquivo, definir participantes e campos e enviar. Exige o cabeçalho\n`Idempotency-Key`. Ability: `envelopes:write`.",
+                "operationId": "v1.envelopes.store",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreEnvelopeRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/EnvelopeResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`EnvelopeResource`"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Criar rascunho",
+                "tags": ["Envelope"]
+            }
+        },
+        "/envelopes/{envelope}": {
+            "get": {
+                "description": "Situação, arquivos (com resumos SHA-256), participantes e links. Ability: `envelopes:read`.",
+                "operationId": "v1.envelopes.show",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/EnvelopeResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`EnvelopeResource`"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Detalhar documento",
+                "tags": ["Envelope"]
+            }
+        },
+        "/envelopes/{envelope}/cancel": {
+            "post": {
+                "description": "Encerra a coleta: participantes pendentes são cancelados e avisados, links revogados.\n`Idempotency-Key` é opcional. Ability: `envelopes:send`.",
+                "operationId": "v1.envelopes.cancel",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelEnvelopeRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/EnvelopeResource"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "recipients_notified": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["recipients_notified"],
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data", "meta"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`EnvelopeResource`"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Cancelar documento",
+                "tags": ["EnvelopeLifecycle"]
+            }
+        },
+        "/envelopes/{envelope}/documents": {
+            "post": {
+                "description": "Upload multipart (`file`): PDF, DOCX ou imagem (PNG, JPEG, WebP), até o limite da\ninterface. O conteúdo é conferido pelos bytes, não pela extensão. Com a flag\n`multi_document` desligada, um segundo arquivo SUBSTITUI o anterior (e apaga os campos).\nO processamento pode continuar em segundo plano: acompanhe `processing_status` no\ndetalhe do documento. Exige `Idempotency-Key`. Ability: `envelopes:write`.",
+                "operationId": "v1.envelopes.documents.store",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadDocumentRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DocumentResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`DocumentResource`"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Enviar arquivo",
+                "tags": ["EnvelopeDocument"]
+            }
+        },
+        "/envelopes/{envelope}/events": {
+            "get": {
+                "description": "Em ordem cronológica, com paginação por cursor. Sem payload, IP ou user-agent.\nAbility: `envelopes:read`.",
+                "operationId": "v1.envelopes.events.index",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "per_page",
+                        "schema": {
+                            "maximum": 100,
+                            "minimum": 1,
+                            "type": ["integer", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "maxLength": 512,
+                            "type": ["string", "null"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/EventResource"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "links": {
+                                            "properties": {
+                                                "first": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "last": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "next": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "prev": {
+                                                    "type": ["string", "null"]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "next_cursor": {
+                                                    "description": "The \"cursor\" that points to the next set of items.",
+                                                    "type": ["string", "null"]
+                                                },
+                                                "path": {
+                                                    "description": "Base path for paginator generated URLs.",
+                                                    "type": ["string", "null"]
+                                                },
+                                                "per_page": {
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "prev_cursor": {
+                                                    "description": "The \"cursor\" that points to the previous set of items.",
+                                                    "type": ["string", "null"]
+                                                }
+                                            },
+                                            "required": [
+                                                "path",
+                                                "per_page",
+                                                "next_cursor",
+                                                "prev_cursor"
+                                            ],
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data", "links", "meta"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Paginated set of `EventResource`"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Eventos da trilha",
+                "tags": ["EnvelopeEvent"]
+            }
+        },
+        "/envelopes/{envelope}/fields": {
+            "get": {
+                "description": "Geometria em frações [0,1] da página exibida. O valor preenchido não é devolvido.\nAbility: `envelopes:read`.",
+                "operationId": "v1.envelopes.fields.index",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/FieldResource"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Array of `FieldResource`"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Listar campos",
+                "tags": ["EnvelopeField"]
+            },
+            "put": {
+                "description": "Substitui os campos (até 200). Página, participante e documento são conferidos contra o\narquivo processado; tamanhos mínimos por tipo valem como na interface. Só em rascunho.\nAbility: `envelopes:write`.",
+                "operationId": "v1.envelopes.fields.sync",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncEnvelopeFieldsRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/FieldResource"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Array of `FieldResource`"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Definir campos",
+                "tags": ["EnvelopeField"]
+            }
+        },
+        "/envelopes/{envelope}/files/{type}": {
+            "get": {
+                "description": "`type`: `original` (como foi enviado, em qualquer situação), `signed` (arquivo final) ou\n`evidence` (página de evidências) — os dois últimos só com o documento concluído.\n`?document={ulid}` escolhe o arquivo em documentos com vários. Ability: `documents:read`.",
+                "operationId": "v1.envelopes.files.show",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "type",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Baixar arquivo",
+                "tags": ["EnvelopeFile"]
+            }
+        },
+        "/envelopes/{envelope}/recipients": {
+            "get": {
+                "description": "Na ordem da lista. Ability: `recipients:read`.",
+                "operationId": "v1.envelopes.recipients.index",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/RecipientResource"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Array of `RecipientResource`"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Situação dos participantes",
+                "tags": ["EnvelopeRecipient"]
+            },
+            "put": {
+                "description": "Substitui a lista inteira (até 20). Para manter um participante, envie o `id` dele; linhas\nsem `id` são criadas e quem ficar de fora é removido. Só em rascunho. Ability:\n`envelopes:write`.",
+                "operationId": "v1.envelopes.recipients.sync",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncEnvelopeRecipientsRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/RecipientResource"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Array of `RecipientResource`"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Definir participantes",
+                "tags": ["EnvelopeRecipient"]
+            }
+        },
+        "/envelopes/{envelope}/recipients/{recipient}/embedded-sessions": {
+            "post": {
+                "description": "Devolve `url` — endereço de uso único para o iframe (`AssinaVelox.mount({ url })`), com o\ntoken no fragmento `#t=`. Ela aparece SÓ nesta resposta e vale `expires_in` segundos\n(padrão 300, máximo 900) até ser aberta. `origin` é a origem exata do site que vai\nhospedar o widget e precisa estar cadastrada em API e integrações → Widget de assinatura.\n\nExige `Idempotency-Key`. Repetir o pedido com a mesma chave devolve a MESMA sessão com uma\n`url` nova (a anterior deixa de valer) enquanto ela não foi aberta; depois de aberta,\n`409 embedded-session-closed`.\n\nErros próprios: `409 invalid-status` (documento fora de andamento), `recipient-not-signable`\n(visualizador), `recipient-not-invited`, `recipient-not-active` (fora da vez ou já\nrespondeu), `embedded-unsupported` (foto ou vídeo exigidos), `too-many-sessions`;\n`422 validation-failed` com `errors.origin` (origem inválida ou não cadastrada).",
+                "operationId": "v1.envelopes.recipients.embedded_sessions.store",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "recipient",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreEmbeddedSigningSessionRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "description": "",
+                        "headers": {
+                            "Cache-Control": {
+                                "schema": {
+                                    "const": "no-store",
+                                    "type": "string"
+                                }
+                            },
+                            "Idempotent-Replayed": {
+                                "schema": {
+                                    "const": "true",
+                                    "type": "string"
+                                }
+                            },
+                            "Location": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Criar sessão de assinatura embutida",
+                "tags": ["EmbeddedSigningSession"]
+            }
+        },
+        "/envelopes/{envelope}/recipients/{recipient}/embedded-sessions/{embeddedSession}": {
+            "delete": {
+                "description": "Encerra a sessão (a URL e o widget aberto deixam de valer, inclusive a sessão de\nassinatura já confirmada por código). Idempotente. Um aceite já registrado nunca é\ndesfeito.",
+                "operationId": "v1.envelopes.recipients.embedded_sessions.destroy",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "recipient",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "embeddedSession",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/EmbeddedSigningSessionResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`EmbeddedSigningSessionResource`"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Revogar sessão embutida",
+                "tags": ["EmbeddedSigningSession"]
+            },
+            "get": {
+                "description": "`status`: `pending` (URL ainda não aberta), `active`, `completed`, `refused`, `expired`,\n`revoked` ou `closed` (a pessoa já respondeu por outro caminho, como o link do e-mail, ou foi\nencerrada). O desfecho registrado pelo widget nunca é trocado por `revoked`. A `url` nunca\nvolta.",
+                "operationId": "v1.envelopes.recipients.embedded_sessions.show",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "recipient",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "embeddedSession",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/EmbeddedSigningSessionResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`EmbeddedSigningSessionResource`"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Situação da sessão embutida",
+                "tags": ["EmbeddedSigningSession"]
+            }
+        },
+        "/envelopes/{envelope}/send": {
+            "post": {
+                "description": "Exige o documento pronto (arquivo processado, participantes e campos obrigatórios) e\nplano em dia. Exige `Idempotency-Key`: repetir com a mesma chave devolve a mesma\nresposta sem enviar de novo. Ability: `envelopes:send`.",
+                "operationId": "v1.envelopes.send",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/EnvelopeResource"
+                                                },
+                                                "meta": {
+                                                    "properties": {
+                                                        "invitations_sent": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "invitations_sent"
+                                                    ],
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "required": ["data", "meta"],
+                                            "type": "object"
+                                        },
+                                        {
+                                            "anyOf": [
+                                                {
+                                                    "$ref": "#/components/schemas/SendingException"
+                                                },
+                                                {
+                                                    "$ref": "#/components/schemas/SendingBlockedException"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "`EnvelopeResource`"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Enviar para assinatura",
+                "tags": ["EnvelopeLifecycle"]
+            }
+        },
+        "/envelopes/{envelope}/verification": {
+            "get": {
+                "description": "Código, situação com rótulo honesto, resumos SHA-256 publicáveis, situação da\nassinatura criptográfica e participantes com nome mascarado. Ability: `envelopes:read`.",
+                "operationId": "v1.envelopes.verification.show",
+                "parameters": [
+                    {
+                        "description": "The envelope ulid",
+                        "in": "path",
+                        "name": "envelope",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "additionalProperties": {},
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Registro de verificação",
+                "tags": ["EnvelopeVerification"]
+            }
+        },
+        "/templates": {
+            "get": {
+                "description": "Modelos não arquivados da organização, com paginação por cursor. Ability: `templates:read`.",
+                "operationId": "v1.templates.index",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "per_page",
+                        "schema": {
+                            "maximum": 100,
+                            "minimum": 1,
+                            "type": ["integer", "null"]
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "maxLength": 512,
+                            "type": ["string", "null"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "$ref": "#/components/schemas/TemplateResource"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "links": {
+                                            "properties": {
+                                                "first": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "last": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "next": {
+                                                    "type": ["string", "null"]
+                                                },
+                                                "prev": {
+                                                    "type": ["string", "null"]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "next_cursor": {
+                                                    "description": "The \"cursor\" that points to the next set of items.",
+                                                    "type": ["string", "null"]
+                                                },
+                                                "path": {
+                                                    "description": "Base path for paginator generated URLs.",
+                                                    "type": ["string", "null"]
+                                                },
+                                                "per_page": {
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "prev_cursor": {
+                                                    "description": "The \"cursor\" that points to the previous set of items.",
+                                                    "type": ["string", "null"]
+                                                }
+                                            },
+                                            "required": [
+                                                "path",
+                                                "per_page",
+                                                "next_cursor",
+                                                "prev_cursor"
+                                            ],
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data", "links", "meta"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Paginated set of `TemplateResource`"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Listar modelos",
+                "tags": ["Template"]
+            }
+        },
+        "/templates/{template}": {
+            "get": {
+                "description": "Variáveis (chave, tipo, obrigatoriedade) e papéis (ULID) esperados na geração.\nAbility: `templates:read`.",
+                "operationId": "v1.templates.show",
+                "parameters": [
+                    {
+                        "description": "The template ulid",
+                        "in": "path",
+                        "name": "template",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TemplateResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`TemplateResource`"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "summary": "Detalhar modelo",
+                "tags": ["Template"]
+            }
+        },
+        "/templates/{template}/envelopes": {
+            "post": {
+                "description": "Cria um rascunho com o arquivo preenchido, os participantes por papel e os campos do\nmodelo. Corpo: `title`, `values` (`{chave: valor}`) e `participants`\n(`{ulid_do_papel: {name, email}}`). Exige `Idempotency-Key`. Ability: `templates:use`.",
+                "operationId": "v1.templates.envelopes.store",
+                "parameters": [
+                    {
+                        "description": "The template ulid",
+                        "in": "path",
+                        "name": "template",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/GenerateEnvelopeFromTemplateRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/EnvelopeResource"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "`EnvelopeResource`"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Gerar documento a partir do modelo",
+                "tags": ["Template"]
+            }
+        },
+        "/webhook-events": {
+            "get": {
+                "operationId": "v1.webhook_events.index",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {},
+                                            "type": "array"
+                                        }
+                                    },
+                                    "required": ["data"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                },
+                "summary": "Eventos que podem ser assinados (`*` = todos, inclusive os que forem criados depois)",
+                "tags": ["HooksCatalog"]
+            }
+        },
+        "/webhook-events/{event}/sample": {
+            "get": {
+                "operationId": "v1.webhook_events.sample",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "event",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "maxItems": 1,
+                                            "minItems": 1,
+                                            "prefixItems": [
+                                                {
+                                                    "properties": {
+                                                        "data": {
+                                                            "properties": {
+                                                                "endpoint": {
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "const": "01SAMPEND00000000000000000",
+                                                                            "type": "string"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "id"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                "message": {
+                                                                    "const": "Evento de teste da AssinaVelox. Nenhum documento envolvido.",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "endpoint",
+                                                                "message"
+                                                            ],
+                                                            "type": "object"
+                                                        },
+                                                        "id": {
+                                                            "const": "01SAMPEVENT000000000000000",
+                                                            "type": "string"
+                                                        },
+                                                        "occurred_at": {
+                                                            "const": "2026-01-15T13:00:00Z",
+                                                            "type": "string"
+                                                        },
+                                                        "organization": {
+                                                            "properties": {
+                                                                "id": {
+                                                                    "const": "01SAMP0RGAN1ZAT10N00000000",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["id"],
+                                                            "type": "object"
+                                                        },
+                                                        "type": {
+                                                            "type": "string"
+                                                        },
+                                                        "version": {
+                                                            "const": 1,
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "id",
+                                                        "type",
+                                                        "version",
+                                                        "occurred_at",
+                                                        "organization",
+                                                        "data"
+                                                    ],
+                                                    "type": "object"
+                                                }
+                                            ],
+                                            "type": "array"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "note": {
+                                                    "const": "Exemplo com identificadores fictícios. As entregas reais têm a mesma forma.",
+                                                    "type": "string"
+                                                },
+                                                "sample": {
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": ["sample", "note"],
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data", "meta"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    }
+                },
+                "summary": "Payload de exemplo de um evento, no formato `{data: [payload]}` — lista com um item, que\né o que os editores de gatilho esperam para mapear campos. Nenhum dado real",
+                "tags": ["HooksCatalog"]
+            }
+        },
+        "/webhook-subscriptions": {
+            "get": {
+                "operationId": "v1.webhook_subscriptions.index",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "items": {
+                                                "properties": {
+                                                    "created_at": {
+                                                        "type": "string"
+                                                    },
+                                                    "events": {
+                                                        "items": {
+                                                            "type": "string"
+                                                        },
+                                                        "type": "array"
+                                                    },
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "object": {
+                                                        "const": "webhook_subscription",
+                                                        "type": "string"
+                                                    },
+                                                    "paused_reason": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "secret": {
+                                                        "type": "null"
+                                                    },
+                                                    "secret_hint": {
+                                                        "type": "string"
+                                                    },
+                                                    "signature_header": {
+                                                        "const": "X-AssinaVelox-Signature",
+                                                        "type": "string"
+                                                    },
+                                                    "status": {
+                                                        "enum": [
+                                                            "active",
+                                                            "paused"
+                                                        ],
+                                                        "type": "string"
+                                                    },
+                                                    "status_label": {
+                                                        "enum": [
+                                                            "Ativa",
+                                                            "Pausada"
+                                                        ],
+                                                        "type": "string"
+                                                    },
+                                                    "target_url": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "object",
+                                                    "target_url",
+                                                    "events",
+                                                    "status",
+                                                    "status_label",
+                                                    "paused_reason",
+                                                    "secret_hint",
+                                                    "signature_header",
+                                                    "created_at",
+                                                    "secret"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "count": {
+                                                    "type": "integer"
+                                                },
+                                                "limit": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": ["limit", "count"],
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": ["data", "meta"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                },
+                "summary": "Assinaturas ativas deste token",
+                "tags": ["HooksSubscription"]
+            },
+            "post": {
+                "description": "Corpo: `target_url` (obrigatório) e `event` (um valor do catálogo ou `*`) OU `events[]`.\n201 com `secret` (a ÚNICA vez em que ele aparece) na criação; 200 sem `secret` quando a\nmesma assinatura já existe para este token (repetição segura).\n\nA resposta de criação sai de propósito como resposta HTTP simples (não `JsonResponse`):\no armazenamento de `Idempotency-Key` guarda o corpo de respostas JSON por 24 h, e o\nsegredo não pode ficar gravado em claro. A repetição com a mesma chave é resolvida aqui\nmesmo (mesmo token, URL e eventos → a assinatura existente, sem segredo).",
+                "operationId": "v1.webhook_subscriptions.store",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "event": {
+                                        "enum": [
+                                            "*",
+                                            "envelope.sent",
+                                            "recipient.viewed",
+                                            "recipient.signed",
+                                            "recipient.approved",
+                                            "recipient.refused",
+                                            "envelope.refused",
+                                            "envelope.completed",
+                                            "envelope.expired",
+                                            "envelope.canceled",
+                                            "document.processing_failed",
+                                            null
+                                        ],
+                                        "type": ["string", "null"]
+                                    },
+                                    "events": {
+                                        "items": {
+                                            "enum": [
+                                                "*",
+                                                "envelope.sent",
+                                                "recipient.viewed",
+                                                "recipient.signed",
+                                                "recipient.approved",
+                                                "recipient.refused",
+                                                "envelope.refused",
+                                                "envelope.completed",
+                                                "envelope.expired",
+                                                "envelope.canceled",
+                                                "document.processing_failed"
+                                            ],
+                                            "type": "string"
+                                        },
+                                        "maxItems": 11,
+                                        "minItems": 1,
+                                        "type": ["array", "null"],
+                                        "uniqueItems": true
+                                    },
+                                    "target_url": {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["target_url"],
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "summary": "Assina um evento (ou vários) numa URL HTTPS pública",
+                "tags": ["HooksSubscription"]
+            }
+        },
+        "/webhook-subscriptions/{subscription}": {
+            "delete": {
+                "operationId": "v1.webhook_subscriptions.destroy",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "subscription",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    }
+                },
+                "summary": "Remove a assinatura (o \"unsubscribe\" do REST Hooks). 204; 404 se não for deste token",
+                "tags": ["HooksSubscription"]
+            }
+        }
+    },
+    "security": [
+        {
+            "bearerAuth": []
+        }
+    ],
+    "servers": [
+        {
+            "description": "Troque pelo endereço da sua instalação, terminando em /api/v1.",
+            "url": "https://sua-instalacao.example/api/v1"
+        }
+    ]
+}

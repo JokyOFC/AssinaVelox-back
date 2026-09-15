@@ -2,6 +2,8 @@ import { Head, Link } from '@inertiajs/react';
 import { ExternalLink, Info } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { MethodBadge } from '@/components/integrations/badges';
+import { ConnectorsCallout } from '@/components/integrations/cloud/connectors-callout';
+import { EmbedSettingsCallout } from '@/embed/embed-settings-callout';
 import {
     CodeBlock,
     InlineCode,
@@ -113,6 +115,8 @@ export default function IntegrationsDocs({
                 title="Documentação da API"
                 subtitle="REST · JSON · HTTPS. Integre o envio e o acompanhamento de documentos ao seu sistema."
             >
+                <ConnectorsCallout />
+                <EmbedSettingsCallout />
                 <div className="flex items-start gap-6">
                     <nav
                         aria-label="Nesta página"

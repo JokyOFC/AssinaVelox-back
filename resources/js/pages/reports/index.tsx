@@ -156,7 +156,7 @@ export default function ReportsIndex(props: ReportsIndexProps) {
                     subtitle="Envios, conclusões e tempo até assinar."
                 />
                 <Phase2EmptyState
-                    title="Relatórios estarão disponíveis na Fase 2"
+                    title="Relatórios não estão ativados para esta conta"
                     description="Acompanhe documentos enviados, concluídos e recusados por período, usuário, time e etiqueta, com exportação em CSV."
                     ctaHref={envelopesIndex.url()}
                 />

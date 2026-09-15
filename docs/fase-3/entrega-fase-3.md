@@ -153,7 +153,6 @@ PHPStan 0 erros; Pint, `types:check`, `check` e `build` passam.
 
 ## 7. Pendências de engenharia que continuam abertas
 
-- `.env.example` sem as flags das partes anteriores da Fase 3.
 - Item "Login único" no menu de Configurações e categoria "Login corporativo" no registro de
   atividades (hoje se chega pela linha da tela Geral).
 - Tecla Enter no campo "E-mail corporativo" não envia.

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 /**
- * Estado vazio de recursos da Fase 2 (ROUTES §1.6): título, descrição e CTA
+ * Estado vazio de recurso não ativado para a conta (ROUTES §1.6): título, descrição e CTA
  * opcional. Renderizado dentro de um card branco.
  */
 export function Phase2EmptyState({
@@ -30,7 +30,7 @@ export function Phase2EmptyState({
                 description={
                     <>
                         <Badge variant="phase" className="mb-3">
-                            Fase 2
+                            Não ativado
                         </Badge>
                         <br />
                         {description}

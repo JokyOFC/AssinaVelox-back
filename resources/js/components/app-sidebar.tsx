@@ -117,7 +117,7 @@ function NavItem({
             {item.badge !== undefined && item.badge > 0 && (
                 <Badge variant="count">{item.badge}</Badge>
             )}
-            {item.phase2 && <Badge variant="phase">Fase 2</Badge>}
+            {item.phase2 && <Badge variant="phase">Não ativado</Badge>}
         </>
     );
 
@@ -130,7 +130,7 @@ function NavItem({
                     </span>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                    Disponível na Fase 2
+                    Recurso não ativado para esta conta
                 </TooltipContent>
             </Tooltip>
         );

@@ -38,10 +38,10 @@ class PlanController extends Controller
         'company_signature' => 'Assinatura criptográfica da operadora',
         'folders' => 'Pastas',
         'priority_support' => 'Suporte prioritário',
-        'api' => 'API e webhooks (Fase 2)',
-        'templates' => 'Modelos (Fase 2)',
-        'sms_whatsapp' => 'SMS e WhatsApp (Fase 2)',
-        'branding' => 'Logo da empresa (Fase 2)',
+        'api' => 'API e webhooks',
+        'templates' => 'Modelos',
+        'sms_whatsapp' => 'SMS e WhatsApp',
+        'branding' => 'Logo da empresa',
     ];
 
     public function index(Request $request): Response

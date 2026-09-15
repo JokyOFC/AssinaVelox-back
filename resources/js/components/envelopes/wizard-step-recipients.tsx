@@ -563,7 +563,7 @@ export function WizardStepRecipients({
                                             selected={false}
                                             disabled
                                         >
-                                            Token SMS · Fase 2
+                                            Token SMS · não ativado
                                         </SelectableChip>
                                     </div>
                                 </div>

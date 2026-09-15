@@ -393,7 +393,7 @@ export function WizardStepDocument({
                             <span>
                                 <span className="flex items-center gap-2 text-[13.5px] font-semibold">
                                     Lembretes automáticos
-                                    <Badge variant="phase">Fase 2</Badge>
+                                    <Badge variant="phase">Não ativado</Badge>
                                 </span>
                                 <span className="text-muted-foreground block text-[12.5px]">
                                     Reenvie convites manualmente pelo detalhe do
@@ -403,7 +403,7 @@ export function WizardStepDocument({
                             <Switch
                                 checked={false}
                                 disabled
-                                aria-label="Lembretes automáticos (Fase 2)"
+                                aria-label="Lembretes automáticos (não ativado)"
                             />
                         </label>
                     )}

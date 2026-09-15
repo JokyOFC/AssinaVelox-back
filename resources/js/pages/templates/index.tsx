@@ -107,7 +107,9 @@ function TemplatesPlaceholder() {
                                 </Button>
                             </span>
                         </TooltipTrigger>
-                        <TooltipContent>Disponível na Fase 2</TooltipContent>
+                        <TooltipContent>
+                            Recurso não ativado para esta conta
+                        </TooltipContent>
                     </Tooltip>
                 }
             />
@@ -123,7 +125,7 @@ function TemplatesPlaceholder() {
                 ))}
             </div>
             <Phase2EmptyState
-                title="Modelos estarão disponíveis na Fase 2"
+                title="Modelos não estão ativados para esta conta"
                 description="Enquanto isso, duplique um documento existente para reaproveitar signatários e campos."
                 ctaHref={envelopesIndex.url()}
                 ctaLabel="Ir para Documentos"

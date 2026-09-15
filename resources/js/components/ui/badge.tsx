@@ -32,7 +32,7 @@ const badgeVariants = cva(
                 /** Pill sólida "Ativo" do card de plano */
                 solidSuccess:
                     'border-transparent bg-success-solid text-[11px] font-bold text-white',
-                /** Tag "Fase 2" (cinza) */
+                /** Selo "Não ativado" (cinza) */
                 phase: 'border-transparent bg-muted px-[7px] py-px text-[11px] font-bold text-muted-foreground',
                 /** Contagem âmbar (badge da sidebar "Documentos") */
                 count: 'border-transparent bg-warning-bg px-[7px] py-px text-[11px] font-bold text-warning',

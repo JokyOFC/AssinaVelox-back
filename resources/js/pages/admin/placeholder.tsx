@@ -46,7 +46,7 @@ const FALLBACK: Record<Feature, { title: string; subtitle: string }> = {
     },
 };
 
-/** Placeholder de telas do painel interno na Fase 2 (ROUTES §1.5 / §2.21). */
+/** Placeholder de telas do painel interno ainda não ativadas (ROUTES §1.5 / §2.21). */
 export default function AdminPlaceholder(
     props: Partial<Phase2PlaceholderProps>,
 ) {
@@ -60,8 +60,8 @@ export default function AdminPlaceholder(
             <Head title={title} />
             <PageHeader title={title} subtitle={subtitle} />
             <Phase2EmptyState
-                title={`${title} estará disponível na Fase 2`}
-                description={`Esta área do painel interno ainda não foi implementada (${url}). Use a lista de clientes para dar suporte.`}
+                title={`${title} ainda não está ativado nesta instalação`}
+                description={`Esta área do painel interno não está ativada (${url}). Use a lista de clientes para dar suporte.`}
                 ctaHref={adminOrganizations.url()}
                 ctaLabel="Ir para Clientes"
             />

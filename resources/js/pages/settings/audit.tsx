@@ -63,7 +63,7 @@ export default function SettingsAudit(props: SettingsAuditProps) {
             <>
                 <Head title="Registro de atividades" />
                 <Phase2EmptyState
-                    title="O registro de atividades estará disponível na Fase 2"
+                    title="O registro de atividades não está ativado para esta conta"
                     description="Veja quem alterou usuários, funções, times, etiquetas e o plano da conta, e quando o suporte acessou a conta."
                     ctaHref={envelopesIndex.url()}
                 />

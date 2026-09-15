@@ -105,7 +105,7 @@ function SwitchRow({
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
                     {title}
-                    {phase2 && <Badge variant="phase">Fase 2</Badge>}
+                    {phase2 && <Badge variant="phase">Não ativado</Badge>}
                 </div>
                 <div className="text-muted-foreground mt-0.5 text-[12.5px]">
                     {description}
@@ -301,7 +301,7 @@ export default function SettingsSigning({
                             >
                                 Lembretes automáticos{' '}
                                 {!remindersAvailable && (
-                                    <Badge variant="phase">Fase 2</Badge>
+                                    <Badge variant="phase">Não ativado</Badge>
                                 )}
                             </Label>
                             {remindersAvailable ? (
@@ -455,16 +455,16 @@ export default function SettingsSigning({
                                 Token e-mail
                             </SelectableChip>
                             <SelectableChip selected={false} disabled>
-                                Token SMS · Fase 2
+                                Token SMS · não ativado
                             </SelectableChip>
                             <SelectableChip selected={false} disabled>
-                                Token WhatsApp · Fase 2
+                                Token WhatsApp · não ativado
                             </SelectableChip>
                         </div>
                         <span className="text-muted-foreground text-[12px] leading-[1.5]">
-                            O código por e-mail é o método disponível na Fase 1.
-                            Outros fatores aumentam a robustez do aceite e
-                            chegam na Fase 2.
+                            O código por e-mail é o método padrão. SMS e
+                            WhatsApp aumentam a robustez do aceite e dependem de
+                            ativação pela plataforma.
                         </span>
                     </div>
                 </div>

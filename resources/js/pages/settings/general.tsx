@@ -68,7 +68,7 @@ function SecurityRow({
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
                     {title}
-                    {phase2 && <Badge variant="phase">Fase 2</Badge>}
+                    {phase2 && <Badge variant="phase">Não ativado</Badge>}
                 </div>
                 <div className="text-muted-foreground mt-0.5 text-[12.5px]">
                     {description}
@@ -376,7 +376,7 @@ export default function SettingsGeneral({
                         <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
                             Logo da empresa{' '}
                             {!brandingEnabled && (
-                                <Badge variant="phase">Fase 2</Badge>
+                                <Badge variant="phase">Não ativado</Badge>
                             )}
                         </div>
                         <div className="text-muted-foreground text-[12.5px] leading-[1.5]">
@@ -401,7 +401,7 @@ export default function SettingsGeneral({
                             variant="outline"
                             size="xs"
                             disabled
-                            title="Disponível na Fase 2"
+                            title="Recurso não ativado para esta conta"
                         >
                             Enviar logo
                         </Button>

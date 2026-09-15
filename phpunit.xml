@@ -38,5 +38,58 @@
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <!-- Nunca o dev server: um public/hot (vivo ou obsoleto) não afeta a suíte. -->
         <env name="VITE_HOT_FILE" value="storage/framework/testing/vite.hot.never"/>
+        <!-- Flags de recurso sempre desligadas na suíte: os testes ligam o que precisam com
+             config()->set(). Sem isto, um .env de desenvolvimento com recursos ligados
+             muda o resultado dos testes de flag desligada e do teste de fumaça. -->
+        <env name="ASSINAVELOX_FEATURE_A" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_ADMIN_AUDIT" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_ADMIN_USERS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_AFFILIATES" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_ANTIFRAUD" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_API_INTEGRATIONS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_AUDIT_LOG" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_BATCH_SIGNING" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_BRANDING" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_BULK_GENERATION" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_CLOUD_IMPORT" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_CNPJ_LOOKUP" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_CONDITIONAL_STEPS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_CPF_FIELD" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_CPF_LOOKUP" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_CUSTOM_ROLES" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_DELEGATION" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_DOSSIER_EXPORT" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_EMBEDDED_SIGNING" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_EXTENDED_PAYMENTS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_FIELD_ANCHORS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_FISCAL_INVOICES" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_GOVBR_RETURN" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_HUBSPOT" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_IDENTITY_CAPTURE" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_IDENTITY_VIDEO" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_IMPERSONATION" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_IN_PERSON" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_MULTILINGUAL" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_MULTI_DOCUMENT" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_OCR" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_OPERATOR_TSA" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_OUTBOUND_WEBHOOKS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PADES_BT" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PADES_LTV" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PADES_LTV_ADVERTISE" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PARTICIPANT_A" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PARTICIPANT_ROLES" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PIN_AUTH" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_PUBLIC_FORMS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_REMINDERS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_REPORTS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_REST_HOOKS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_RETENTION_POLICIES" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_SENDER_DOMAINS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_SMS_WHATSAPP" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_SSO_OIDC" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_SSO_SAML" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_TAGS" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_TEMPLATES" value="false"/>
     </php>
 </phpunit>

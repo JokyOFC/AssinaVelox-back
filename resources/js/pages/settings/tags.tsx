@@ -66,7 +66,7 @@ export default function SettingsTags(props: SettingsTagsProps) {
             <>
                 <Head title="Etiquetas" />
                 <Phase2EmptyState
-                    title="Etiquetas estarão disponíveis na Fase 2"
+                    title="Etiquetas não estão ativadas para esta conta"
                     description="Organize documentos com etiquetas coloridas, filtre a lista por etiqueta e aplique em lote."
                     ctaHref={envelopesIndex.url()}
                 />

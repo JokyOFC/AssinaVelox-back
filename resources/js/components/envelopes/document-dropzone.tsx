@@ -156,7 +156,7 @@ export function DocumentDropzone({
 
         if (files && files.length > 1) {
             onReject?.(
-                'Envie um arquivo por documento. Vários arquivos em um só envelope chegam na Fase 2.',
+                'Envie um arquivo por documento. Vários arquivos em um só envelope não estão ativados para esta conta.',
             );
 
             return;

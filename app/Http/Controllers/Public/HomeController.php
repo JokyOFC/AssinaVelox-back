@@ -3,19 +3,24 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
-use Inertia\Inertia;
-use Inertia\Response;
+use App\Models\User;
+use App\Support\LandingRoute;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 /**
- * Home institucional mínima (ROUTES §1.3 home): hero + CTA login/cadastro.
+ * Entrada do site. Não há página institucional: o visitante vai direto para o login, e quem
+ * já está autenticado vai para onde o login o levaria (LandingRoute).
+ *
+ * A rota continua com o nome `home` porque o logo das cascas pública e de autenticação, as
+ * páginas de erro e os redirecionamentos de logout e de exclusão de conta apontam para ela.
  */
 class HomeController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): RedirectResponse
     {
-        return Inertia::render('marketing/home', [
-            'help_url' => (string) config('assinavelox.help_url'),
-            'support_email' => (string) config('assinavelox.support_email'),
-        ]);
+        $user = $request->user();
+
+        return redirect($user instanceof User ? LandingRoute::for($user) : route('login'));
     }
 }

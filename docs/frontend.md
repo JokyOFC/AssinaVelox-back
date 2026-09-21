@@ -28,7 +28,7 @@ resources/
       settings/layout.tsx     rail 200px (Minha conta: Perfil, Segurança da conta · Organização: Geral e segurança,
                               Padrões de assinatura, Notificações, Plano e cobrança); vira Select < md
       signer-layout.tsx       casca da página pública do signatário (sign/*): remetente + stepper em pills + "via AssinaVelox"
-      public-layout.tsx       casca de páginas públicas (verify/*, legal/*, marketing/*, errors/*)
+      public-layout.tsx       casca de páginas públicas (verify/*, legal/*, errors/*)
     components/
       ui/                     primitivos shadcn restilizados para os tokens (sem variantes dark:)
       status/                 EnvelopeStatusBadge, RecipientStatusBadge, SubscriptionStatusBadge, PaymentStatusBadge
@@ -89,7 +89,7 @@ Os arquivos ficam em minúsculas/kebab-case (não PascalCase como no `ROUTES_AND
 | `AppLayout`                    | `dashboard`, `envelopes/index`, `envelopes/wizard`, `envelopes/show`, `envelopes/evidence`, `recipients/index`, `members/index`, `organizations/create`, `templates/index`, `integrations/index`, `admin/organizations/index`, `admin/organizations/show`, `admin/placeholder` |
 | `AppLayout` + `SettingsLayout` | `settings/profile`, `settings/security`, `settings/general`, `settings/signing`, `settings/notifications`, `settings/billing`, `settings/plans`                                                                                                                                |
 | `SignerLayout`                 | `sign/show`                                                                                                                                                                                                                                                                    |
-| `PublicLayout`                 | `marketing/home`, `verify/index`, `verify/show`, `legal/terms`, `legal/privacy`, `errors/403`, `errors/404`, `errors/500`                                                                                                                                                      |
+| `PublicLayout`                 | `verify/index`, `verify/show`, `legal/terms`, `legal/privacy`, `errors/403`, `errors/404`, `errors/500`                                                                                                                                                                        |
 
 Cada página exporta a `interface <Nome>Props` fiel ao contrato de `ROUTES_AND_PAGES.md §2` com os renomes da RECONCILIACAO (`public_code` → `display_code`, `routing_mode` → `signing_order`, `document_number` → `tax_id`, `waiting/sent` → `pending/notified`, `EnvelopeEvent` → `AuditEvent`).
 

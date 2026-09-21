@@ -42,8 +42,8 @@ function assertBaselineSecurityHeaders(TestResponse $response): void
 test('a linha de base de cabeçalhos vale para toda rota pública, autenticada e de erro', function () {
     ['organization' => $organization, 'owner' => $owner] = createOrganizationWithOwner();
 
-    // Pública.
-    assertBaselineSecurityHeaders($this->get(route('home'))->assertOk());
+    // Pública (a entrada `/` só redireciona para o login — o redirecionamento também leva a linha de base).
+    assertBaselineSecurityHeaders($this->get(route('home'))->assertRedirect(route('login')));
     assertBaselineSecurityHeaders($this->get(route('verify.index'))->assertOk());
     assertBaselineSecurityHeaders($this->get(route('login'))->assertOk());
 
@@ -141,7 +141,7 @@ test('os cabeçalhos configuráveis podem ser desligados sem tocar no código', 
         'assinavelox.security_headers.permissions_policy' => '',
     ]);
 
-    $response = $this->get(route('home'))->assertOk();
+    $response = $this->get(route('login'))->assertOk();
 
     expect($response->headers->has('Cross-Origin-Opener-Policy'))->toBeFalse()
         ->and($response->headers->has('Cross-Origin-Resource-Policy'))->toBeFalse()

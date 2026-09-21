@@ -3,28 +3,24 @@ import type { ReactNode } from 'react';
 import AppLogo from '@/components/app-logo';
 import { FlashToaster } from '@/components/flash-toaster';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { dashboard, home, login, register } from '@/routes';
 import { privacy, terms } from '@/routes/legal';
 import { index as verifyIndex } from '@/routes/verify';
 
 export type PublicLayoutProps = {
     children: ReactNode;
-    /** Largura máxima do conteúdo (default 820px; marketing usa 1100). */
+    /** Largura máxima do conteúdo (default 820px). */
     maxWidth?: number;
-    /** Remove o padding/largura do conteúdo (marketing). */
-    fullBleed?: boolean;
 };
 
 /**
  * Casca das páginas públicas simples (Termos, Privacidade, Verificação,
- * Home mínima, erros): header branco com logo + links, conteúdo centralizado,
- * rodapé com links legais.
+ * erros): header branco com logo + links, conteúdo centralizado, rodapé com
+ * links legais.
  */
 export default function PublicLayout({
     children,
     maxWidth = 820,
-    fullBleed = false,
 }: PublicLayoutProps) {
     // Páginas de erro (errors/403|404|500) podem ser renderizadas por uma rota que nunca
     // casou — o grupo `web` (e portanto HandleInertiaRequests) não roda e NENHUMA prop
@@ -70,11 +66,8 @@ export default function PublicLayout({
                 </nav>
             </header>
             <main
-                className={cn(
-                    'flex w-full flex-1 flex-col',
-                    !fullBleed && 'mx-auto gap-5 px-4 py-8 md:px-6 md:py-10',
-                )}
-                style={fullBleed ? undefined : { maxWidth }}
+                className="mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-8 md:px-6 md:py-10"
+                style={{ maxWidth }}
             >
                 {children}
             </main>

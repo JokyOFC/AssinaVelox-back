@@ -309,7 +309,7 @@ Legenda de fase: **1** = MVP; **2** = extensão futura (placeholder na Fase 1); 
 | Recusar | POST | `/assinar/{token}/recusar` | `sign.refuse` | signer.verified | — | `Sign\RefusalController@store` | 1 |
 | Baixar cópia (após concluído) | GET | `/assinar/{token}/download/{type}` | `sign.download` | signer.verified | — (stream) | `Sign\DownloadController@show` | 1 |
 | Termos / Privacidade | GET | `/termos`, `/privacidade` | `legal.terms`, `legal.privacy` | public | `pages/legal/Terms.tsx`, `pages/legal/Privacy.tsx` | `LegalController@terms/@privacy` | 1 |
-| Home institucional | GET | `/` | `home` | public | `pages/marketing/Home.tsx` | `HomeController@index` | 1★ (mínimo: hero + CTA login/cadastro; mock `Home.dc.html` não fornecido) |
+| Entrada do site | GET | `/` | `home` | public | — (redireciona) | `HomeController@index` | 1 — visitante → `login`; autenticado → dashboard (ou painel interno, para o administrador da plataforma sem organização). A home institucional foi retirada em 2026-09-21, a pedido do proprietário. |
 
 ### 1.4 Verificação pública (sem mock — contrato na seção 4)
 

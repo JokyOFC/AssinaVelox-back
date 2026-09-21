@@ -6,9 +6,10 @@ use Illuminate\Support\Facades\Vite;
 |--------------------------------------------------------------------------
 | Smoke: CSP com nonce + assets do build de produção
 |--------------------------------------------------------------------------
-| Renderiza GET / e GET /login com o Vite REAL (sem withoutVite) para garantir
-| que o nonce da CSP chega às tags <script> e que o manifest do build resolve os
-| assets. Pulado quando public/build/manifest.json não existe (ambiente sem
+| Renderiza GET /login e GET /verificar com o Vite REAL (sem withoutVite) para
+| garantir que o nonce da CSP chega às tags <script> e que o manifest do build
+| resolve os assets. A entrada `/` só redireciona para o login, então não entra.
+| Pulado quando public/build/manifest.json não existe (ambiente sem
 | `npm run build`).
 */
 
@@ -62,4 +63,4 @@ test('páginas públicas saem com CSP com nonce e assets do build', function (st
         ->and($html)->toMatch('#/build/assets/app-[^"]+\.js#')
         ->and($html)->toMatch('#/build/assets/app-[^"]+\.css#')
         ->and($html)->not->toContain('@vite/client');
-})->with(['/', '/login']);
+})->with(['/login', '/verificar']);

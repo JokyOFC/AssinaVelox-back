@@ -117,6 +117,9 @@ const SMOKE_OVERRIDES = [
     'cloud_import.google.callback' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'integrations.hubspot.show' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'integrations.hubspot.callback' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // A entrada do site não tem página: visitante → login; autenticado → painel ou painel
+    // interno (tests/Feature/Auth/EntryPointTest.php).
+    'home' => ['*' => 302],
     // Cria um rascunho e redireciona para o wizard.
     'envelopes.create' => ['owner' => 302, 'admin' => 302, 'member' => 302],
     // Placeholders Fase 2: redirecionam para o índice (member cai no org.role → 403).

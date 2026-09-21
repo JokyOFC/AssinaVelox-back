@@ -5,8 +5,9 @@
 | Revisão de design — "✓ Validade jurídica" contradiz os próprios termos
 |--------------------------------------------------------------------------
 | O aside de `layouts/auth-layout.tsx` (login, cadastro, recuperação de senha,
-| 2FA, verificação de e-mail) e o hero de `pages/marketing/home.tsx` exibem
-| quatro selos de confiança, sem qualquer ressalva:
+| 2FA, verificação de e-mail) e o hero de `pages/marketing/home.tsx` — a home
+| institucional, retirada em 2026-09-21 — exibiam quatro selos de confiança,
+| sem qualquer ressalva:
 |
 |     ✓ Validade jurídica   ✓ Conforme LGPD
 |     ✓ Certificado A1 da operadora   ✓ Trilha de auditoria
@@ -32,18 +33,10 @@
 */
 
 it('não anuncia validade jurídica como característica garantida', function () {
-    $sources = [
-        resource_path('js/layouts/auth-layout.tsx'),
-        resource_path('js/pages/marketing/home.tsx'),
-    ];
+    $path = resource_path('js/layouts/auth-layout.tsx');
 
-    foreach ($sources as $path) {
-        expect(file_exists($path))->toBeTrue($path);
-
-        $source = (string) file_get_contents($path);
-
-        expect($source)->not->toContain('Validade jurídica');
-    }
+    expect(file_exists($path))->toBeTrue($path)
+        ->and((string) file_get_contents($path))->not->toContain('Validade jurídica');
 });
 
 it('os termos de uso continuam negando a garantia que a tela anuncia', function () {

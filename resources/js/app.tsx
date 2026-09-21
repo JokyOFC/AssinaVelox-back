@@ -20,7 +20,6 @@ void createInertiaApp({
                 return SignerLayout;
             case name.startsWith('verify/'):
             case name.startsWith('legal/'):
-            case name.startsWith('marketing/'):
             case name.startsWith('errors/'):
                 return PublicLayout;
             case name.startsWith('settings/'):

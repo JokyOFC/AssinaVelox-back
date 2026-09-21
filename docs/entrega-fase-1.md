@@ -640,7 +640,8 @@ Coberto por `tests/Feature/Review/RecipientsIndexIpMaskTest.php`.
 reescrito para o vocabulário que o produto entrega: "Evidências e verificação pública — o documento
 concluído recebe página de evidências e código de verificação pública. Quando há certificado A1 da
 operadora ativo, o arquivo final também recebe a assinatura criptográfica."
-Coberto por `tests/Feature/Review/HomeCertificatePromiseTest.php`.
+Coberto por `tests/Feature/Review/HomeCertificatePromiseTest.php`. (Em 2026-09-21 a home foi retirada
+e `/` passou a levar direto ao login; o teste agora vigia o aside do login, a nova porta de entrada.)
 
 **Os planos vendiam "Assinatura criptográfica da operadora" e nada lia a flag** (alta). Escolhida a
 semântica (b) do achado — o item é do plano — e implementada nas duas pontas. Criado

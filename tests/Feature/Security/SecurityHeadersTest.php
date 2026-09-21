@@ -62,7 +62,7 @@ test('a CSP pode ser desativada ou emitida em modo report-only pela configuraç�
 });
 
 test('rotas públicas respondem e o webhook do Mercado Pago aceita POST sem CSRF', function () {
-    $this->get(route('home'))->assertOk();
+    $this->get(route('home'))->assertRedirect(route('login'));
     $this->get(route('legal.terms'))->assertOk();
     $this->get(route('legal.privacy'))->assertOk();
     $this->get(route('verify.show', ['code' => 'ABCDEFGHJKLM']))->assertOk();

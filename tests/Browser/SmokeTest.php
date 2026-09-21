@@ -41,7 +41,7 @@ it('abre as telas públicas sem erro de JavaScript e sem inglês', function (str
 
     browserAssertNoEnglish($page, $path);
 })->with([
-    'início' => ['/', 'Assine documentos'],
+    'início (vai direto para o login)' => ['/', 'Acesse sua conta AssinaVelox.'],
     'termos' => ['/termos', 'Termos de uso'],
     'privacidade' => ['/privacidade', 'Política de Privacidade'],
     'verificação' => ['/verificar', 'Verificar documento'],

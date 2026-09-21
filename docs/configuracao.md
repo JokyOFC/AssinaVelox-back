@@ -64,16 +64,20 @@ Comandos úteis: `php artisan wayfinder:generate` (helpers TS de rotas), `php ar
 
 ## 3. Filas
 
-| Fila (`config('assinavelox.queues')`) | Conteúdo                                           | Supervisor (Horizon)                                  |
-| ------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
-| `default`                             | jobs gerais                                        | `supervisor-default` (com `notifications`, `billing`) |
-| `notifications`                       | e-mails/notificações (convites de membros, avisos) | idem                                                  |
-| `billing`                             | sincronização de pagamentos                        | idem                                                  |
-| `conversions`                         | DOCX/imagem → PDF (LibreOffice/pdftool)            | `supervisor-conversions`                              |
-| `finalization`                        | consolidação, evidências, assinatura A1            | `supervisor-finalization`                             |
+| Fila            | Configuração                       | Conteúdo                                                         | Supervisor (Horizon)                                  |
+| --------------- | ---------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
+| `default`       | `assinavelox.queues.default`       | jobs gerais                                                      | `supervisor-default` (com `notifications`, `billing`) |
+| `notifications` | `assinavelox.queues.notifications` | e-mails/notificações (código do signatário, convites, avisos)    | idem                                                  |
+| `billing`       | `assinavelox.queues.billing`       | sincronização de pagamentos                                      | idem                                                  |
+| `conversions`   | `assinavelox.queues.conversions`   | processamento de todo upload: inspeção do PDF, DOCX/imagem → PDF | `supervisor-conversions`                              |
+| `finalization`  | `assinavelox.queues.finalization`  | consolidação, evidências, assinatura A1                          | `supervisor-finalization`                             |
+| `anchors`       | `assinavelox.field_anchors.queue`  | busca de âncoras de campo (flag `field_anchors`)                 | nenhum ainda — `docs/fase-3/ancoras-e-ocr.md` §11     |
+| `ocr`           | `assinavelox.ocr.queue`            | OCR de páginas escaneadas para a busca de âncoras (flag `ocr`)   | nenhum ainda — idem                                   |
 
-- **Dev**: `QUEUE_CONNECTION=database` → `php artisan queue:work --queue=default,notifications,billing,conversions,finalization` (o script `composer run dev` executa `php artisan dev`; confira se o worker de fila está incluído na sua versão).
-- **Produção**: `QUEUE_CONNECTION=redis` → `php artisan horizon` sob supervisor do SO; `php artisan horizon:terminate` no deploy. Não há Redis local: Horizon não roda em dev.
+Lotes, webhooks, dossiê, renovação LTV e HubSpot usam `default`, a menos que `ASSINAVELOX_BULK_QUEUE`, `ASSINAVELOX_WEBHOOKS_QUEUE`, `ASSINAVELOX_DOSSIER_QUEUE`, `ASSINAVELOX_LTV_REFRESH_QUEUE` ou `ASSINAVELOX_HUBSPOT_QUEUE` deem outro nome. A lista completa, com essas chaves, é `App\Support\Queues`.
+
+- **Dev**: `QUEUE_CONNECTION=database`. O `composer run dev` (= `php artisan dev`) sobe um `queue:listen` em todas as filas de `App\Support\Queues`, em ordem de prioridade — `notifications,conversions,default,finalization,billing,anchors,ocr` com os nomes padrão; uma fila renomeada por variável entra sozinha. Sobe também o `schedule:work`, que faz o papel do cron. `php artisan dev:list` mostra os comandos.
+- **Produção**: `QUEUE_CONNECTION=redis` → `php artisan horizon` sob supervisor do SO; `php artisan horizon:terminate` no deploy. Não há Redis local: Horizon não roda em dev, e por isso o `composer run dev` troca o Horizon pelo `queue:listen` (`AppServiceProvider::configureDevProcesses`).
 - Testes: `QUEUE_CONNECTION=sync`.
 
 ## 4. Disco `documents` (privado)

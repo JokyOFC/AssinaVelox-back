@@ -198,10 +198,13 @@ return [
 
     /*
     | Horizon exige Redis (QUEUE_CONNECTION=redis) e só é usado em PRODUÇÃO.
-    | Em desenvolvimento a fila é 'database' (php artisan queue:work). As filas
-    | abaixo espelham config('assinavelox.queues'): default, conversions
-    | (DOCX→PDF, inspeção), notifications (e-mails/OTP), finalization (pipeline de
-    | conclusão, idempotente), billing (webhooks/sincronização Mercado Pago).
+    | Em desenvolvimento a fila é 'database' e o `composer run dev` põe um
+    | `queue:listen` em todas as filas no lugar do Horizon
+    | (AppServiceProvider::configureDevProcesses). As filas abaixo espelham
+    | config('assinavelox.queues'): default, conversions (DOCX→PDF, inspeção),
+    | notifications (e-mails/OTP), finalization (pipeline de conclusão,
+    | idempotente), billing (webhooks/sincronização Mercado Pago). As filas
+    | `anchors` e `ocr` ainda não têm supervisor (docs/fase-3/ancoras-e-ocr.md §11).
     */
     'defaults' => [
         'supervisor-default' => [

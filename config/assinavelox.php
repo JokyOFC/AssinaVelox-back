@@ -1360,7 +1360,9 @@ return [
         'receipt_path' => 'hardening/storage-verify.json',
     ],
 
-    // Filas usadas pelos jobs (Horizon em produção; driver database em dev).
+    // Filas usadas pelos jobs (Horizon em produção; driver database em dev). As filas por
+    // recurso (anchors, ocr, …) ficam na seção de cada recurso; a lista completa, que o
+    // `composer run dev` escuta, é App\Support\Queues.
     'queues' => [
         'default' => 'default',
         'conversions' => 'conversions',

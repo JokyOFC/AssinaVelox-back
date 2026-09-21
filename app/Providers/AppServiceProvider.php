@@ -13,8 +13,10 @@ use App\Services\Envelopes\Sending\InvitationDispatcher;
 use App\Services\Signing\Contracts\RevalidatesEnvelopeExpiration;
 use App\Services\Signing\Contracts\SignerNotifications;
 use App\Support\CurrentOrganization;
+use App\Support\Queues;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
@@ -64,6 +66,38 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAbsoluteUrls();
         $this->configureRateLimiting();
         $this->configureApi();
+        $this->configureDevProcesses();
+    }
+
+    /**
+     * Processos do `composer run dev` (= `php artisan dev`): servidor, Vite, fila e agendador.
+     *
+     * O pacote do Horizon se inscreve nesse comando e tira dele o worker de fila do framework.
+     * Só que o Horizon exige Redis, e em desenvolvimento a fila é `database`
+     * (docs/configuracao.md §3): ele caía na hora com RedisException e nenhum job rodava —
+     * upload parado em "processando", código do signatário sem envio, envelope sem
+     * finalizar. O worker do framework também não bastava, porque só escuta a fila `default`.
+     *
+     * No lugar dos dois entra um `queue:listen` em todas as filas (App\Support\Queues). O
+     * `listen` recarrega o código a cada job, então editar PHP não pede reinício; `--timeout=0`
+     * porque ele mata o processo do job no tempo dado (60 s por padrão) e a finalização pode
+     * levar até 600 s. Entra também o agendador, que em produção é o cron de minuto em minuto:
+     * sem ele, envio agendado, lembretes, expiração de prazo e novas tentativas de webhook
+     * nunca acontecem.
+     */
+    protected function configureDevProcesses(): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        // `except()` substitui a lista inteira: sai o Horizon e volta o nome `queue`, que o
+        // Horizon excluiu no `register()` dele. Registrado pela aplicação, este `queue` tem
+        // prioridade sobre o do framework.
+        DevCommands::except('horizon');
+
+        DevCommands::artisan('queue:listen --queue='.implode(',', Queues::all()).' --tries=1 --timeout=0', 'queue');
+        DevCommands::artisan('schedule:work', 'scheduler');
     }
 
     /**

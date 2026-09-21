@@ -144,12 +144,27 @@ npx playwright install chromium
 **8. Subir.**
 
 ```bash
-php artisan serve                 # http://localhost:8000
-npm run dev                       # Vite com HMR, em outro terminal
-php artisan queue:work --queue=default,conversions,notifications,finalization,billing
+composer run dev                  # http://localhost:8000
 ```
 
-Sem um _worker_ rodando, o upload de DOCX/imagem fica em "processando" e a finalização do envelope não avança — as duas etapas são assíncronas.
+Um terminal só sobe os quatro processos do desenvolvimento. `php artisan dev:list` mostra os comandos exatos.
+
+| Processo    | Comando                                          | Para quê                                                                                           |
+| ----------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `server`    | `php artisan serve`                              | a aplicação, em http://localhost:8000                                                              |
+| `vite`      | `npm run dev`                                    | assets com HMR em 127.0.0.1:5173 — não é para abrir no navegador                                   |
+| `queue`     | `php artisan queue:listen` em **todas** as filas | todo upload (até de PDF), todo e-mail (código do signatário, convites) e a finalização do envelope |
+| `scheduler` | `php artisan schedule:work`                      | faz o papel do cron de produção: envio agendado, lembretes, expiração, novas tentativas de webhook |
+
+Sem o _worker_, o upload fica em "processando", o signatário não recebe o código e o envelope não finaliza — e nenhum erro aparece na tela. O Horizon é só de produção (exige Redis), então em desenvolvimento o `composer run dev` põe um `queue:listen` no lugar dele, com a lista de filas de `App\Support\Queues` (`AppServiceProvider::configureDevProcesses`). O `listen` recarrega o código a cada job: editar PHP não pede reinício.
+
+Para rodar um processo à parte (reiniciar só a fila, por exemplo), use os comandos do `dev:list` em terminais separados. O _worker_ é este:
+
+```bash
+php artisan queue:listen --queue=notifications,conversions,default,finalization,billing,anchors,ocr --tries=1 --timeout=0
+```
+
+No Windows, o Ctrl+C encerra os processos à força e o Vite não chega a apagar o `public/hot`. O próximo `composer run dev` regrava o arquivo. Só apague o `public/hot` se for abrir a aplicação sem o Vite (depois de um `npm run build`), porque senão a página tenta carregar os assets de um servidor que já parou.
 
 ---
 
@@ -157,18 +172,18 @@ Sem um _worker_ rodando, o upload de DOCX/imagem fica em "processando" e a final
 
 ```bash
 # Servidor e front
+composer run dev                               # tudo junto: servidor, Vite, fila e agendador (php artisan dev:list)
 php artisan serve                              # http://localhost:8000
 npm run dev                                    # Vite (HMR)
 npm run build                                  # build de produção em public/build
-composer run dev                               # = php artisan dev (agrupa os processos de desenvolvimento;
-                                               #   confira se a fila está incluída na sua versão)
 
 # Fila (driver `database` em desenvolvimento; Horizon em produção)
-php artisan queue:work --queue=default,conversions,notifications,finalization,billing
+php artisan queue:listen --queue=notifications,conversions,default,finalization,billing,anchors,ocr --tries=1 --timeout=0
 php artisan queue:failed                       # jobs que falharam
 php artisan queue:retry all
 
 # Agendador (em produção, cron de minuto em minuto — ver docs/implantacao.md)
+php artisan schedule:work                      # em desenvolvimento (já vem no composer run dev)
 php artisan schedule:run
 php artisan schedule:list
 php artisan envelopes:expire                   # a cada 15 min

@@ -144,6 +144,7 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "scripts-descriptions": {
+        "dev": "Servidor, Vite, worker em todas as filas e agendador (php artisan dev:list mostra os comandos).",
         "test": "Pint + PHPStan + as três suítes Pest (Unit, Feature e Browser).",
         "test:browser": "Só a suíte de navegador (Playwright/Chromium).",
         "test:pdftool": "Só os testes Python do pdftool (cria o venv se faltar).",

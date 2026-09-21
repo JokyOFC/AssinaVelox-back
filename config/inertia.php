@@ -16,7 +16,10 @@ return [
     */
 
     'ssr' => [
-        'enabled' => true,
+        // Os testes desligam (phpunit.xml). Com o Vite de desenvolvimento no ar
+        // (`composer run dev`), o gateway mandaria cada página da suíte para o SSR
+        // do Vite em 127.0.0.1:5173 — requisição fora do Http::fake e resposta vazia.
+        'enabled' => (bool) env('INERTIA_SSR_ENABLED', true),
         'url' => 'http://127.0.0.1:13714',
         // 'bundle' => base_path('bootstrap/ssr/ssr.mjs'),
 

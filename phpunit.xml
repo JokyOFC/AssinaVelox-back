@@ -38,6 +38,10 @@
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <!-- Nunca o dev server: um public/hot (vivo ou obsoleto) não afeta a suíte. -->
         <env name="VITE_HOT_FILE" value="storage/framework/testing/vite.hot.never"/>
+        <!-- Nem o SSR dele: o dublê do withoutVite() ignora o VITE_HOT_FILE acima e volta a
+             ler o public/hot; com o `composer run dev` no ar, o Inertia mandava as páginas
+             para o SSR do Vite. -->
+        <env name="INERTIA_SSR_ENABLED" value="false"/>
         <!-- Flags de recurso sempre desligadas na suíte: os testes ligam o que precisam com
              config()->set(). Sem isto, um .env de desenvolvimento com recursos ligados
              muda o resultado dos testes de flag desligada e do teste de fumaça. -->

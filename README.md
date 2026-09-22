@@ -193,6 +193,7 @@ php artisan billing:dunning                    # diário, 03:20
 # Diagnóstico
 php artisan assinavelox:doctor                 # 25 verificações da instalação; nunca imprime segredos
 php artisan assinavelox:health                 # indicadores de fila, conversão, assinatura, e-mail, pagamento
+php artisan assinavelox:mail-test voce@exemplo.com  # envia um e-mail de teste pelo SMTP configurado e mostra o recibo
 php artisan storage:verify                     # disco de documentos: gravável, privado, cifrado em repouso
 php artisan audit:checkpoint --verify          # confere os checkpoints da trilha de auditoria
 php artisan pdftool:selftest                   # pipeline de PDF; --json para monitoramento

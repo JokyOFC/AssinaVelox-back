@@ -345,9 +345,26 @@ retentativa do mesmo job reaproveita a linha (incrementando `meta.retries`) e, s
 `sent`/`delivered`, **não reenvia**. Cada mensagem tem o seu `correlation_id` (a coluna é
 CHAR(26), um ULID), compartilhado com a linha correspondente da trilha.
 
-**Timeout**: o tempo-limite é o do transporte configurado (`mail.mailers.smtp.timeout`), não
-um relógio próprio deste código — impor um timeout por fora do `MailManager` exigiria
-reimplementar o transporte. Documentado como está.
+**Timeout**: o tempo-limite é o do transporte configurado (`mail.mailers.smtp.timeout`, 30 s
+por padrão, `MAIL_TIMEOUT`), não um relógio próprio deste código — impor um timeout por fora
+do `MailManager` exigiria reimplementar o transporte.
+
+**SMTP do proprietário** (decisão de 2026-09-21: o e-mail sai por SMTP puro, o mesmo desenho
+do metta-bank — host, porta 587, STARTTLS, usuário e senha; nenhuma API de envio). Três
+cuidados que o código toma:
+
+- `MAIL_SCHEME=tls` (ou o nome antigo `MAIL_ENCRYPTION=tls`) é o que todo `.env` antigo traz, e
+  o Laravel 13 só conhece `smtp`/`smtps`: o valor cru derrubaria todo envio com
+  `UnsupportedSchemeException`. `App\Support\SmtpTransportOptions` traduz — `tls` vira `smtp`
+  com **STARTTLS obrigatório** (`require_tls`), `ssl` vira `smtps`. Sem TLS obrigatório, um
+  servidor que não anuncie STARTTLS receberia link de convite e código em claro.
+- `php artisan assinavelox:doctor` confere, sem abrir conexão, servidor, presença de
+  credenciais (só o NOME das variáveis) e criptografia.
+- `php artisan assinavelox:mail-test destino@exemplo.com` envia uma mensagem de verdade pelo
+  mesmo `EmailProvider` e mostra o recibo. `sent` = o servidor aceitou, não "chegou".
+
+O que **não** veio do metta-bank, de propósito: a checagem de créditos na API da Disparo, o
+rodízio de contas Gmail e a detecção de destinatário na Hostgator são regras de negócio de lá.
 
 ### Canal de notificação
 
@@ -383,6 +400,16 @@ Todas em PT-BR, enfileiradas em `notifications`. As dirigidas ao remetente respe
 ASSINAVELOX_EMAIL_PROVIDER=laravel
 ASSINAVELOX_EMAIL_MAILER=          # vazio = mail.default
 ASSINAVELOX_EMAIL_LOG_CHANNEL=     # canal do LogEmailProvider (vazio = padrão)
+
+# SMTP do proprietário (produção)
+MAIL_MAILER=smtp
+MAIL_HOST=                         # servidor SMTP
+MAIL_PORT=587
+MAIL_SCHEME=tls                    # tls | ssl | smtp | vazio (MAIL_ENCRYPTION também é lido)
+MAIL_USERNAME=                     # segredo
+MAIL_PASSWORD=                     # segredo
+MAIL_FROM_ADDRESS=                 # normalmente a própria conta SMTP
+MAIL_TIMEOUT=30
 
 ASSINAVELOX_RESEND_THROTTLE_MINUTES=10
 ASSINAVELOX_MAX_RESENDS=5

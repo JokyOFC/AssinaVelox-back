@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Integrations\Pdf\LibreOfficeConverter;
 use App\Integrations\Pdf\PyHankoSigner;
 use App\Services\Pdf\PdfToolClient;
+use App\Support\SmtpTransportOptions;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Console\Scheduling\Schedule;
@@ -284,6 +285,62 @@ class DoctorCommand extends Command
 
         $this->add('E-mail', 'Remetente', $from === '' ? self::FAIL : self::OK,
             $from === '' ? 'MAIL_FROM_ADDRESS vazio: convites e códigos não sairiam.' : $from);
+
+        if ($transmits && config("mail.mailers.{$mailer}.transport") === 'smtp') {
+            $this->checkSmtp($mailer, $production);
+        }
+    }
+
+    /**
+     * SMTP do proprietário: o que dá para conferir sem abrir conexão. "Transporte ok" só diz
+     * que o mailer transmite; um `smtp` sem servidor, sem senha ou com esquema inexistente
+     * falha em todo envio, e o sintoma (recibos `failed`) aparece longe da causa.
+     * Para o teste de verdade, com entrega: `php artisan assinavelox:mail-test`.
+     */
+    private function checkSmtp(string $mailer, bool $production): void
+    {
+        /** @var array<string, mixed> $config */
+        $config = (array) config("mail.mailers.{$mailer}", []);
+        $host = trim((string) ($config['host'] ?? ''));
+        $port = (int) ($config['port'] ?? 0);
+        $scheme = is_string($config['scheme'] ?? null) ? $config['scheme'] : null;
+        $byUrl = trim((string) ($config['url'] ?? '')) !== '';
+        $placeholder = $host === '' || ($host === '127.0.0.1' && $port === 2525);
+
+        $this->add('E-mail', 'Servidor SMTP', match (true) {
+            $byUrl => self::OK,
+            $placeholder && $production => self::FAIL,
+            $placeholder => self::WARN,
+            default => self::OK,
+        }, match (true) {
+            $byUrl => 'Definido por MAIL_URL (valor não exibido).',
+            $placeholder => 'MAIL_HOST não foi definido (continua o padrão 127.0.0.1:2525): nenhum e-mail sairia.',
+            default => "{$host}:{$port}",
+        });
+
+        if (! $byUrl) {
+            $missing = array_keys(array_filter([
+                'MAIL_USERNAME' => trim((string) ($config['username'] ?? '')) === '',
+                'MAIL_PASSWORD' => (string) ($config['password'] ?? '') === '',
+            ]));
+
+            $this->add('E-mail', 'Credenciais SMTP', $missing === [] ? self::OK : self::WARN, $missing === []
+                ? 'MAIL_USERNAME e MAIL_PASSWORD definidos.'
+                : 'Ausente: '.implode(', ', $missing).'. Sem autenticação a maioria dos servidores recusa o envio.');
+        }
+
+        $encrypted = $scheme === 'smtps' || ($scheme === null && $port === 465);
+
+        $this->add('E-mail', 'Criptografia SMTP', match (true) {
+            ! SmtpTransportOptions::isSupported($scheme) => self::FAIL,
+            $encrypted, (bool) ($config['require_tls'] ?? false) => self::OK,
+            default => self::WARN,
+        }, match (true) {
+            ! SmtpTransportOptions::isSupported($scheme) => "MAIL_SCHEME=\"{$scheme}\" não existe: use tls, ssl, smtp, smtps ou deixe vazio. Como está, todo envio falha.",
+            $encrypted => 'TLS desde a conexão (smtps).',
+            (bool) ($config['require_tls'] ?? false) => 'STARTTLS obrigatório.',
+            default => 'STARTTLS só se o servidor oferecer: links de convite e códigos podem trafegar em claro. Defina MAIL_SCHEME=tls (ou MAIL_REQUIRE_TLS=true).',
+        });
     }
 
     private function checkPdftool(PdfToolClient $pdftool): void

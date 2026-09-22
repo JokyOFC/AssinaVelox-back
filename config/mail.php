@@ -1,5 +1,15 @@
 <?php
 
+use App\Support\SmtpTransportOptions;
+
+/*
+| SMTP do proprietário (o mesmo desenho do metta-bank: host, porta 587, STARTTLS, usuário e
+| senha). `MAIL_SCHEME` — ou o nome antigo `MAIL_ENCRYPTION` — aceita `tls`, `ssl`, `smtp`,
+| `smtps` ou vazio; o Symfony só conhece `smtp`/`smtps`, e SmtpTransportOptions faz a tradução
+| (com `tls` o STARTTLS passa a ser OBRIGATÓRIO). Ver docs/envio-e-convites.md §9.
+*/
+$smtp = SmtpTransportOptions::resolve(env('MAIL_SCHEME'), env('MAIL_ENCRYPTION'), env('MAIL_REQUIRE_TLS'));
+
 return [
 
     /*
@@ -39,13 +49,17 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            'scheme' => $smtp['scheme'],
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            // Único relógio do envio (docs/envio-e-convites.md §9): sem ele vale o padrão do
+            // PHP, e um servidor mudo prende o worker de notificações por um minuto inteiro.
+            'timeout' => (int) env('MAIL_TIMEOUT', 30),
+            // Recusa entregar em claro quando o servidor não oferece STARTTLS.
+            'require_tls' => $smtp['require_tls'],
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 

@@ -66,6 +66,7 @@ export default function VerifyEmail({ status }: Props) {
                     href={logout()}
                     method="post"
                     as="button"
+                    viewTransition
                     className="text-primary font-semibold hover:underline"
                 >
                     Sair e entrar com outra conta

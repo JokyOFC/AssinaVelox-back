@@ -1,4 +1,5 @@
 import { createInertiaApp } from '@inertiajs/react';
+import AuthTransitionRoot from '@/components/auth-transition/auth-transition-root';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -9,32 +10,42 @@ import SignerLayout from '@/layouts/signer-layout';
 
 const appName = import.meta.env.VITE_APP_NAME || 'AssinaVelox';
 
+/** Casca(s) da página pelo nome do componente; `null` = página sem casca. */
+function pageLayouts(name: string) {
+    switch (true) {
+        case name.startsWith('auth/'):
+        case name.startsWith('invitations/'):
+            return [AuthLayout];
+        case name.startsWith('sign/'):
+            return [SignerLayout];
+        case name.startsWith('verify/'):
+        case name.startsWith('legal/'):
+        case name.startsWith('errors/'):
+            return [PublicLayout];
+        case name.startsWith('settings/'):
+            return [AppLayout, SettingsLayout];
+        // Fase 2, onda B (C-FORM): páginas públicas do formulário, com casca própria
+        // (`PublicFormShell`). Sem esta regra, o `layout = (page) => page` da página é lido
+        // pelo Inertia 3 como resolvedor de props e cai no AppLayout (topbar da conta).
+        case name === 'public-forms/fill':
+        case name === 'public-forms/confirm':
+        // Fase 3 §3.9 (G-EMBED): o widget embutido roda no iframe de outro site, sem casca.
+        case name === 'embed/sign':
+            return null;
+        default:
+            return [AppLayout];
+    }
+}
+
 void createInertiaApp({
     title: (title) => (title ? `${title} · ${appName}` : appName),
     layout: (name) => {
-        switch (true) {
-            case name.startsWith('auth/'):
-            case name.startsWith('invitations/'):
-                return AuthLayout;
-            case name.startsWith('sign/'):
-                return SignerLayout;
-            case name.startsWith('verify/'):
-            case name.startsWith('legal/'):
-            case name.startsWith('errors/'):
-                return PublicLayout;
-            case name.startsWith('settings/'):
-                return [AppLayout, SettingsLayout];
-            // Fase 2, onda B (C-FORM): páginas públicas do formulário, com casca própria
-            // (`PublicFormShell`). Sem esta regra, o `layout = (page) => page` da página é lido
-            // pelo Inertia 3 como resolvedor de props e cai no AppLayout (topbar da conta).
-            case name === 'public-forms/fill':
-            case name === 'public-forms/confirm':
-            // Fase 3 §3.9 (G-EMBED): o widget embutido roda no iframe de outro site, sem casca.
-            case name === 'embed/sign':
-                return null;
-            default:
-                return AppLayout;
-        }
+        const layouts = pageLayouts(name);
+
+        // `AuthTransitionRoot` vem antes de qualquer casca e é sempre o mesmo componente na
+        // mesma posição, então o React o mantém montado de uma página para a outra — é o que
+        // deixa a transição de entrada e saída perceber que `auth.user` mudou.
+        return layouts && [AuthTransitionRoot, ...layouts];
     },
     strictMode: true,
     withApp(app) {

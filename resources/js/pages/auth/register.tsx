@@ -116,6 +116,8 @@ export default function Register({ invitation = null }: Props) {
     const submit = (event: FormEvent) => {
         event.preventDefault();
         form.post(store.url(), {
+            // Entrada suave da transição de autenticação (auth-transition).
+            viewTransition: true,
             onFinish: () => form.reset('password', 'password_confirmation'),
         });
     };

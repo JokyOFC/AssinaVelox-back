@@ -235,3 +235,40 @@
 @utility tabular {
     font-variant-numeric: tabular-nums;
 }
+
+/*
+ * Transição de autenticação (resources/js/components/auth-transition).
+ *
+ * Entrada da cortina, onde o navegador tem View Transitions: a foto da página antiga fica
+ * parada e a cortina navy cresce sobre ela a partir do ponto do clique ("Entrar", "Sair").
+ * O atributo e as coordenadas são postos no <html> pela própria cortina, no commit da troca
+ * de página; visita sem `viewTransition` ou navegador sem suporte caem no corte seco. As
+ * demais View Transitions do app (nenhuma, hoje) continuam com o padrão do navegador.
+ */
+html[data-auth-transition]::view-transition-old(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+html[data-auth-transition]::view-transition-new(root) {
+    animation: authCurtainIn 0.48s cubic-bezier(0.3, 0.55, 0.3, 1) both;
+    mix-blend-mode: normal;
+}
+
+@keyframes authCurtainIn {
+    from {
+        clip-path: circle(0 at var(--av-origin-x, 50%) var(--av-origin-y, 50%));
+    }
+    to {
+        clip-path: circle(
+            var(--av-reach, 150vmax) at var(--av-origin-x, 50%)
+                var(--av-origin-y, 50%)
+        );
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-auth-transition]::view-transition-new(root) {
+        animation: none;
+    }
+}

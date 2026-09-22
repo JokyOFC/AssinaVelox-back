@@ -49,6 +49,7 @@ export default function SsoRequired({ organization, connection }: Props) {
                 <Link
                     href={logout()}
                     as="button"
+                    viewTransition
                     className="underline-offset-4 hover:underline"
                 >
                     Sair

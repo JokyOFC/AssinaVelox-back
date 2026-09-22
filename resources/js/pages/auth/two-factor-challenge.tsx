@@ -47,6 +47,7 @@ export default function TwoFactorChallenge() {
                 className="flex flex-col gap-4"
                 resetOnError
                 resetOnSuccess={!showRecoveryInput}
+                options={{ viewTransition: true }}
             >
                 {({ errors, processing, clearErrors }) => (
                     <>

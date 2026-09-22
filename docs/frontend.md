@@ -21,7 +21,8 @@ resources/
   css/app.css                 tokens (light-only), @theme inline, utilitários focus-ring/tabular
   views/app.blade.php         shell HTML (lang pt-BR, título AssinaVelox, favicon, @fonts, @vite; sem dark mode, sem rastreadores)
   js/
-    app.tsx                   createInertiaApp: título "Página · AssinaVelox", layouts por prefixo do nome da página, Toaster
+    app.tsx                   createInertiaApp: título "Página · AssinaVelox", layouts por prefixo do nome da página
+                              (sempre atrás do AuthTransitionRoot), Toaster
     layouts/
       app-layout.tsx          shell autenticado: Sidebar (offcanvas, Sheet < md) + topbar sticky + conteúdo p-6 gap-5
       auth-layout.tsx         split navy 44% (min 360px, oculto < lg) + formulário 400px (auth/*, invitations/*)
@@ -40,6 +41,8 @@ resources/
                               receipt-card, terminal-card
       signature/              captura da representação visual: signature-capture, initials-capture,
                               signature-pad-canvas (signature_pad), signature-image (normalização PNG)
+      auth-transition/        transição de entrada e saída: auth-transition-root (raiz das cascas), -overlay (cortina),
+                              login-scene, logout-scene, timeline (relógio), interaction-origin (ponto do clique)
       app-sidebar.tsx         sidebar client|admin (modo derivado da URL /admin/*), 256px, grupos, badge âmbar, tags Fase 2
       app-topbar.tsx          header sticky translúcido: trigger, breadcrumb, ⌘K, ajuda, sino, slot extra, pill admin
       org-switcher.tsx        switcher de organização + dialog "Criar nova organização" (POST organizations.store)
@@ -158,7 +161,35 @@ Page.layout = { breadcrumbs: [{ title: 'Documentos', href: envelopesIndex() }] }
 Page.layout = (props: Props) => ({ breadcrumbs: [...], topbarExtra: <span>…</span>, hideSearch: true });
 ```
 
-`AppLayout` aceita `breadcrumbs`, `topbarExtra`, `hideSearch`, `fullBleed`, `contentClassName`. `AuthLayout` aceita `title`, `description`, `hideHeader`, `maxWidth`. `SignerLayout` aceita `sender`, `step`, `steps`. `PublicLayout` aceita `maxWidth`, `fullBleed`. Para props dinâmicas dentro do componente use `setLayoutProps()` do Inertia (ex.: `auth/two-factor-challenge`).
+`AppLayout` aceita `breadcrumbs`, `topbarExtra`, `hideSearch`, `fullBleed`, `contentClassName`. `AuthLayout` aceita `title`, `description`, `hideHeader`, `maxWidth`. `SignerLayout` aceita `sender`, `step`, `steps`. `PublicLayout` aceita `maxWidth`. Para props dinâmicas dentro do componente use `setLayoutProps()` do Inertia (ex.: `auth/two-factor-challenge`).
+
+## Transição de entrada e saída (`components/auth-transition/`)
+
+Entrar e sair da conta trocam a página por baixo de uma cortina navy animada, com o vocabulário visual do produto:
+
+- **Entrada** (`login-scene.tsx`): o nome de quem entrou (nome e último sobrenome) é escrito à mão sobre a linha de assinatura, a caneta fecha com um floreio e o cartão confirma "Acesso autenticado ✓". É o mesmo cartão de vidro do aside do login.
+- **Saída** (`logout-scene.tsx`): o documento desce para dentro do envelope, a aba fecha e um selo com cadeado lacra. "Envelope" é o nome que o produto dá ao processo de assinatura.
+
+**Como dispara.** `AuthTransitionRoot` é a primeira casca de toda página (`app.tsx`). Por ser sempre o mesmo componente na mesma posição, o React o mantém montado de uma página para a outra, e é ele que percebe `auth.user` aparecer (entrou) ou sumir (saiu). O estado é derivado **no render**, não num efeito: a cortina nasce no mesmo commit da troca de página, e a página nova nunca pisca antes dela. Vale para qualquer caminho que troque a conta sem recarregar o navegador — login, desafio de dois fatores, cadastro, convite aceito, "Sair", exclusão da conta, sessão expirada. Não anima: trocar de um usuário para outro ("acessar como"), carga completa do navegador (retorno do SSO, link do e-mail) e páginas sem a raiz (as de casca própria e as sem casca).
+
+**Entrada suave.** Onde o navegador tem View Transitions, a cortina cresce em íris a partir do ponto do clique ("Entrar", "Sair") sobre a foto da página antiga. Isso depende de duas coisas: a visita pedir `viewTransition: true` e o CSS `html[data-auth-transition]::view-transition-*` de `resources/css/app.css` (o atributo e as coordenadas são postos pela própria cortina, dentro do commit da troca). Sem suporte, ou numa visita sem a opção, a cortina aparece inteira de uma vez — o resto é igual. O Inertia desliga a View Transition quando a mesma página volta com erros, então senha errada não anima nada. **Ao criar um caminho novo de login ou de saída, passe `viewTransition: true` na visita** (hoje: `auth/login`, `auth/two-factor-challenge`, `auth/register`, `account-menu`, `auth/verify-email`, `auth/sso-required`, `invitations/accept`).
+
+**Relógio único.** Todo valor animado é função pura do tempo (`timeline.ts`); cada cena expõe `update(t)` e a cortina roda um só `requestAnimationFrame`. Caneta, tinta, selo e saída não dessincronizam, e qualquer quadro é reproduzível. A cena dura ~2,3 s e termina com um furo que se abre a partir do selo, revelando a página que já está pronta por baixo. Clique, toque, Esc, Enter ou espaço pulam direto para a saída (0,5 s). Um temporizador garante que a cortina nunca fique presa — aba em segundo plano não roda `requestAnimationFrame`.
+
+**Acessibilidade.** A cortina inteira é `aria-hidden`; quem anuncia é um `role="status"` que vive no `AuthTransitionRoot` (já existe antes de o texto mudar, como leitor de tela precisa): "Acesso autenticado. Boas-vindas, Maria." / "Sessão encerrada. Até logo, Maria.". Com `prefers-reduced-motion` a cena aparece pronta, sem escrita, sem íris e sem furo, e sai num fade curto (1,35 s no total).
+
+**Vocabulário.** A entrada diz só "Acesso autenticado". O login por senha não entra em trilha de auditoria, então nada ali fala em registro, e o nome escrito à mão é uma saudação — não uma assinatura do acesso.
+
+**Ver sem entrar nem sair (só em desenvolvimento).** No console do navegador:
+
+```js
+window.__avAuthTransition('login'); // toca a entrada
+window.__avAuthTransition('logout', { name: 'Joaquim Fernandes' }); // toca a saída
+window.__avAuthTransition('login', { at: 1100 }); // congela o quadro de 1100 ms
+window.__avAuthTransition(null); // tira a cortina congelada
+```
+
+O gancho existe sob `import.meta.env.DEV` e não vai para o build de produção. Teste: `tests/Browser/AuthTransitionTest.php`. Para inspecionar a íris: View Transitions não rodam com o documento oculto (aba em segundo plano), e o screenshot do Playwright termina a transição antes de fotografar — pause por script as animações cujo `effect.pseudoElement` começa com `::view-transition` e leia o `clip-path` computado.
 
 ## Como adicionar uma página
 

@@ -39,7 +39,8 @@ export function AccountMenu() {
 
     const handleLogout = () => {
         router.flushAll();
-        router.post(logout.url());
+        // `viewTransition`: entrada suave da transição de saída (auth-transition).
+        router.post(logout.url(), {}, { viewTransition: true });
     };
 
     return (

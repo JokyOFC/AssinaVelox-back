@@ -32,9 +32,11 @@ export default function Login({ status, canResetPassword }: Props) {
                 </div>
             )}
 
+            {/* `viewTransition`: entrada suave da transição de autenticação (auth-transition). */}
             <Form
                 {...store.form()}
                 resetOnSuccess={['password']}
+                options={{ viewTransition: true }}
                 className="flex flex-col gap-4"
             >
                 {({ processing, errors }) => (

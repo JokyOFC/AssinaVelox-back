@@ -156,7 +156,13 @@ export default function InvitationAccept({
                         <Button
                             size="lg"
                             variant="outline"
-                            onClick={() => router.post(logout.url())}
+                            onClick={() =>
+                                router.post(
+                                    logout.url(),
+                                    {},
+                                    { viewTransition: true },
+                                )
+                            }
                         >
                             <LogOut className="size-4" />
                             Sair e entrar com {invitation.email}

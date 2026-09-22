@@ -16,6 +16,7 @@ use App\Models\Recipient;
 use App\Models\SigningField;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Identity\IdentityFeatures;
+use App\Services\Identity\IdentityVerifications;
 use App\Services\Signing\Channels\ChannelAvailability;
 use App\Services\Signing\Channels\SenderPins;
 use Illuminate\Support\Carbon;
@@ -87,6 +88,18 @@ final class ConsentText
 
     /** Revisão adversarial da onda B: consulta cadastral, canal simulado, fotos sem prazo. */
     public const WAVE_B_REVIEW_VERSION_SUFFIX = '+b2';
+
+    /*
+     * Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): com a verificação facial com documento
+     * exigida, a cláusula das fotos muda — elas SÃO enviadas a um provedor externo, que compara a
+     * foto tirada na hora com a foto do documento e devolve um resultado guardado como evidência.
+     * O sufixo troca o da onda B (`+vf1` no lugar de `+b1`, `+vf2` no lugar de `+b2`), com 4
+     * caracteres para caber nos 32 de `terms_version` junto da variante mais longa. PENDENTE DE
+     * REVISÃO JURÍDICA (LGPD art. 11, RIPD), como as demais variantes.
+     */
+    public const VERIFICATION_VERSION_SUFFIX = '+vf1';
+
+    public const VERIFICATION_REVIEW_VERSION_SUFFIX = '+vf2';
 
     /**
      * Versão vigente do texto.
@@ -499,7 +512,10 @@ final class ConsentText
      * O que muda nos textos para este participante. `null` = só e-mail, sem PIN, sem CPF e
      * sem foto exigida: os textos são exatamente os de antes.
      *
-     * @return array{channel: DeliveryChannel, pin: bool, cpf: bool, cpf_lookup: bool, photos: list<string>, simulated: bool, retention_disabled: bool}|null
+     * `verification` (Fase 4 §4.1): nome do provedor externo que vai comparar as fotos, quando a
+     * verificação facial com documento está exigida (e a flag ligada); senão null.
+     *
+     * @return array{channel: DeliveryChannel, pin: bool, cpf: bool, cpf_lookup: bool, photos: list<string>, simulated: bool, retention_disabled: bool, verification: string|null}|null
      */
     private static function waveB(?Recipient $recipient): ?array
     {
@@ -524,6 +540,14 @@ final class ConsentText
             }
         }
 
+        // Fase 4 §4.1: a flag é conferida antes da consulta — desligada, nada muda.
+        $verification = null;
+
+        if ($photos !== [] && IdentityFeatures::identityVerification($organization)) {
+            $verifications = app(IdentityVerifications::class);
+            $verification = $verifications->requirement($recipient) !== null ? $verifications->provider()->label() : null;
+        }
+
         if ($channel === DeliveryChannel::Email && ! $pin && ! $cpf && $photos === []) {
             return null;
         }
@@ -540,13 +564,16 @@ final class ConsentText
             'photos' => $photos,
             'simulated' => $simulated,
             'retention_disabled' => $photos !== [] && (int) config('assinavelox.capture.retention_days', 180) <= 0,
+            'verification' => $verification,
         ];
     }
 
     /**
      * Sufixo da versão para os complementos da onda B. `+b1`: textos da integração I-2B.
      * `+b2` (revisão adversarial): consulta cadastral do CPF, canal simulado ou fotos sem
-     * prazo de exclusão — mudou uma palavra, nova versão. PENDENTE DE REVISÃO JURÍDICA.
+     * prazo de exclusão — mudou uma palavra, nova versão. Com a verificação facial exigida
+     * (Fase 4 §4.1) a cláusula das fotos é outra: `+vf1`/`+vf2` no lugar. PENDENTE DE REVISÃO
+     * JURÍDICA.
      */
     private static function waveBSuffix(?Recipient $recipient): string
     {
@@ -556,9 +583,13 @@ final class ConsentText
             return '';
         }
 
-        return $wave['cpf_lookup'] || $wave['simulated'] || $wave['retention_disabled']
-            ? self::WAVE_B_REVIEW_VERSION_SUFFIX
-            : self::WAVE_B_VERSION_SUFFIX;
+        $review = $wave['cpf_lookup'] || $wave['simulated'] || $wave['retention_disabled'];
+
+        if ($wave['verification'] !== null) {
+            return $review ? self::VERIFICATION_REVIEW_VERSION_SUFFIX : self::VERIFICATION_VERSION_SUFFIX;
+        }
+
+        return $review ? self::WAVE_B_REVIEW_VERSION_SUFFIX : self::WAVE_B_VERSION_SUFFIX;
     }
 
     private static function simulatedNote(DeliveryChannel $channel): string
@@ -621,7 +652,19 @@ final class ConsentText
             );
         }
 
-        if ($wave['photos'] !== []) {
+        if ($wave['photos'] !== [] && $wave['verification'] !== null) {
+            // Fase 4 §4.1: as fotos saem da plataforma — para um provedor nomeado, que compara e
+            // responde; o que fica é a resposta dele. PENDENTE DE REVISÃO JURÍDICA (LGPD art. 11).
+            $text = str_replace(
+                ', e esta declaração.',
+                sprintf(
+                    ', as fotos que enviei nesta tela (%s), encaminhadas ao provedor externo %s, que compara a foto tirada na hora com a foto do documento e devolve um resultado — o resultado informado pelo provedor fica guardado como evidência deste aceite e as fotos seguem o prazo de guarda informado no aviso de privacidade —, e esta declaração.',
+                    implode(', ', $wave['photos']),
+                    $wave['verification'],
+                ),
+                $text,
+            );
+        } elseif ($wave['photos'] !== []) {
             $text = str_replace(
                 ', e esta declaração.',
                 sprintf(', as fotos que enviei nesta tela (%s), guardadas como registro, sem verificação de identidade, e esta declaração.', implode(', ', $wave['photos'])),
@@ -671,13 +714,25 @@ final class ConsentText
 
             // `retention_days <= 0` desliga a exclusão automática (CapturePurge): prometer
             // "apagadas 0 dias depois" seria falso. Diz o que de fato acontece.
-            $registered .= sprintf(
-                '; as fotos que você enviar (%s), guardadas como registro do aceite, sem comparação de rostos, sem análise da imagem e sem leitura do documento, e %s',
-                implode(', ', $wave['photos']),
-                $retentionDays > 0
-                    ? sprintf('apagadas %d dias depois', $retentionDays)
-                    : 'guardadas enquanto o documento existir na conta da remetente',
-            );
+            $retention = $retentionDays > 0
+                ? sprintf('apagadas %d dias depois', $retentionDays)
+                : 'guardadas enquanto o documento existir na conta da remetente';
+
+            // Fase 4 §4.1: com a verificação exigida as fotos são compartilhadas com um provedor
+            // nomeado (LGPD art. 9º e 11 — informar o compartilhamento e a finalidade). PENDENTE
+            // DE REVISÃO JURÍDICA.
+            $registered .= $wave['verification'] !== null
+                ? sprintf(
+                    '; as fotos que você enviar (%s), encaminhadas ao provedor externo %s só para comparar a foto tirada na hora com a foto do documento (a plataforma não compara as imagens: ela envia as fotos e registra a resposta do provedor, que fica guardada como evidência do aceite), e %s',
+                    implode(', ', $wave['photos']),
+                    $wave['verification'],
+                    $retention,
+                )
+                : sprintf(
+                    '; as fotos que você enviar (%s), guardadas como registro do aceite, sem comparação de rostos, sem análise da imagem e sem leitura do documento, e %s',
+                    implode(', ', $wave['photos']),
+                    $retention,
+                );
         }
 
         $text = preg_replace(

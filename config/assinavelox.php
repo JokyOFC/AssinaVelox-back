@@ -59,6 +59,11 @@ return [
         // plano). Aceite complementado por vídeo curto, sem som. Desligada até a decisão
         // jurídica da viabilidade §4.4 item 20 (LGPD art. 11, RIPD). Parâmetros em `capture_video`.
         'identity_video' => filter_var(env('ASSINAVELOX_FEATURE_IDENTITY_VIDEO', false), FILTER_VALIDATE_BOOLEAN),
+        // Fase 4 §4.1 — verificação facial com documento por provedor externo (Verifiky;
+        // docs/fase-4/verificacao-facial.md). Organização (esta chave E plano) e só junto com
+        // `identity_capture`: as fotos que o provedor compara são as da captura. Desligada até
+        // a decisão jurídica (LGPD art. 11, RIPD). Parâmetros em `identity_verification`.
+        'identity_verification' => filter_var(env('ASSINAVELOX_FEATURE_IDENTITY_VERIFICATION', false), FILTER_VALIDATE_BOOLEAN),
         // Fase 2, onda B — presencial em tablet e assinatura em lote (C-PRES,
         // docs/fase-2/presencial-e-lote.md).
         'in_person' => filter_var(env('ASSINAVELOX_FEATURE_IN_PERSON', false), FILTER_VALIDATE_BOOLEAN),
@@ -494,6 +499,41 @@ return [
     'cpf_lookup' => [
         'driver' => env('ASSINAVELOX_CPF_LOOKUP_DRIVER', 'disabled'),
         'purpose' => 'Conferência cadastral do CPF informado no documento (finalidade pendente de validação jurídica).',
+    ],
+
+    /*
+    | Fase 4 §4.1 — verificação facial com documento (docs/fase-4/verificacao-facial.md,
+    | docs/integracoes/verifiky.md). Quem compara a foto tirada na hora com a do documento é o
+    | PROVEDOR; a plataforma envia as imagens da captura e registra o que ele respondeu.
+    |
+    |  - `disabled` (padrão): nenhuma chamada; o resultado é "inconclusivo — não configurado".
+    |  - `fake`: simulador IDENTIFICADO (só com `channels.allow_simulated` e fora de produção).
+    |  - `verifiky`: a API da Verifiky, integrada como no metta-bank — mesmos nomes de variável
+    |    (`VERIFIKY_*`), mesmo endpoint de envio, mesmo webhook assinado.
+    |
+    | Diferenças deliberadas em relação ao metta-bank: `verify_ssl` nasce LIGADO e um webhook
+    | sem segredo configurado é recusado (lá, sem segredo, qualquer POST era aceito).
+    */
+    'identity_verification' => [
+        'driver' => env('ASSINAVELOX_IDENTITY_VERIFICATION_DRIVER', 'disabled'),
+        'queue' => env('ASSINAVELOX_IDENTITY_VERIFICATION_QUEUE') ?: 'default',
+        // Envios por participante. Esgotados, só o remetente destrava (novo convite ou retirar a exigência).
+        'max_attempts' => (int) env('ASSINAVELOX_IDENTITY_VERIFICATION_MAX_ATTEMPTS', 3),
+        // Sem resposta do provedor depois disto, a tentativa vira "inconclusiva" e pode ser refeita.
+        'pending_timeout_minutes' => (int) env('ASSINAVELOX_IDENTITY_VERIFICATION_PENDING_MINUTES', 20),
+        // Tipos de documento aceitos (os da rota de envio por foto da Verifiky). Todos pedem frente e verso.
+        'document_types' => ['rg', 'cnh', 'passaporte'],
+        'verifiky' => [
+            'api_url' => env('VERIFIKY_API_URL', 'https://app.verifiky.com'),
+            'api_key' => env('VERIFIKY_API_KEY'),
+            // HMAC-SHA256 do corpo do webhook (cabeçalho X-Verifiky-Signature).
+            'webhook_secret' => env('VERIFIKY_WEBHOOK_SECRET'),
+            // Segredo SEPARADO, das leituras assinadas (GET /verificacoes/{id}). Nunca reaproveitar o do webhook.
+            'hmac_secret' => env('VERIFIKY_HMAC_SECRET'),
+            // O processamento (OCR + comparação) pode levar minutos: roda em fila, nunca na requisição.
+            'timeout' => (int) env('VERIFIKY_TIMEOUT', 180),
+            'verify_ssl' => filter_var(env('VERIFIKY_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN),
+        ],
     ],
 
     /*

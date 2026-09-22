@@ -92,6 +92,9 @@ const SMOKE_WAVE_B_STUBS_404 = [
     // Fase 3 §3.3 (F-FLOW, docs/fase-3/etapas-e-delegacao.md §5): estado da delegação do
     // participante — token sintético e flag `delegation` desligada (o padrão) respondem 404.
     'sign.delegation.show',
+    // Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): estado da verificação facial com
+    // documento — token sintético e flag `identity_verification` desligada (o padrão): 404.
+    'sign.identity_verification.show',
     // Fase 2 §2.2 (C-FORM): token sintético de formulário público e de confirmação. Token
     // desconhecido, rascunho, revogado ou flag desligada recebem o mesmo 404
     // (docs/fase-2/formulario-publico.md §5).
@@ -189,6 +192,9 @@ const SMOKE_OVERRIDES = [
     // desligada — o padrão — a lista de vídeos e o arquivo respondem 404 (antes da assinatura).
     'envelopes.identity_videos.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     'envelopes.identity_videos.file' => ['owner' => 404, 'admin' => 404, 'member' => 404],
+    // Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): com a flag `identity_verification`
+    // desligada — o padrão — o JSON das verificações do envelope responde 404.
+    'envelopes.identity_verifications.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
     // Fase 3 §3.1 (F-BULK, docs/fase-3/geracao-em-lote.md): com a flag `bulk_generation`
     // desligada — o padrão — todas as telas do lote respondem 404.
     'bulk_generations.index' => ['owner' => 404, 'admin' => 404, 'member' => 404],
@@ -258,6 +264,9 @@ function smokeRouteParameters(string $name, array $ctx): array
         // Fase 3 §3.3 (F-FLOW): token sintético (404) e o envelope em andamento do seeder (flags desligadas, 404).
         'sign.delegation.show' => ['token' => str_repeat('b', 43)],
         'envelopes.flow.show' => ['envelope' => $envelope->ulid],
+        // Fase 4 §4.1: token sintético (404) e o envelope em andamento do seeder (flag desligada, 404).
+        'sign.identity_verification.show' => ['token' => str_repeat('b', 43)],
+        'envelopes.identity_verifications.index' => ['envelope' => $envelope->ulid],
         'sign.page' => ['token' => str_repeat('b', 43), 'page' => 1],
         'sign.download' => ['token' => str_repeat('b', 43), 'type' => 'signed'],
         'verify.show' => ['code' => 'ABCD-EFGH-JKLM'],

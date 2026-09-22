@@ -44,6 +44,7 @@ use App\Services\Envelopes\Reminders\ReminderProps;
 use App\Services\Envelopes\Sending\CancelEnvelope;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Identity\IdentityFeatures;
+use App\Services\Identity\IdentityVerifications;
 use App\Services\Organizations\EnvelopeVisibility;
 use App\Services\Retention\LegalHolds;
 use App\Services\Retention\RetentionPresenter;
@@ -385,6 +386,16 @@ class EnvelopeController extends Controller
             // a flag `identity_capture`, senão null.
             'capture_requirements' => IdentityFeatures::identityCapture($organization)
                 ? app(IdentityCaptures::class)->requirementsForEnvelope($envelope)
+                : null,
+            // Fase 4 §4.1: verificação facial com documento exigida por participante
+            // (`{ulid: true}`) e se o recurso vale para esta organização; só com a flag
+            // `identity_verification` (com `identity_capture`), senão `false`/null.
+            'verification_enabled' => $verificationEnabled = IdentityFeatures::identityVerification($organization),
+            'verification_requirements' => $verificationEnabled
+                ? app(IdentityVerifications::class)->requirementsForEnvelope($envelope)
+                : null,
+            'verification_provider_label' => $verificationEnabled
+                ? app(IdentityVerifications::class)->provider()->label()
                 : null,
         ]);
     }

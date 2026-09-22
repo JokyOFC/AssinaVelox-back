@@ -165,6 +165,8 @@ export interface Features {
     pades_ltv_advertise?: boolean;
     /** Fase 3 §3.3 — vídeo curto no aceite (captura, não verificação; global E plano). */
     identity_video?: boolean;
+    /** Fase 4 §4.1 — verificação facial com documento por provedor externo (global E plano; exige `identity_capture`). */
+    identity_verification?: boolean;
     /** Fase 3 §3.1 — geração documental em lote a partir de modelo + planilha (global E plano). */
     bulk_generation?: boolean;
     /** Fase 3 §3.2 — "Detectar campos" por âncoras (sugestões revisadas no editor; global E plano). */

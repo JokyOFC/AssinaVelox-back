@@ -183,6 +183,11 @@
                     {{-- Fase 3 §3.3 (F-VIDEO): só a citação (tipo, SHA-256, origem declarada); o vídeo não é embutido. --}}
                     <br><span class="muted">{{ $participant['identity_video_label'] }}</span>
                 @endif
+                @if (! empty($participant['identity_verification_label']))
+                    {{-- Fase 4 §4.1: o que o PROVEDOR informou da verificação facial com documento; a plataforma só registrou. --}}
+                    <br><span class="muted">{{ $participant['identity_verification_label'] }}</span>
+                    <br><span class="small muted">{{ $participant['identity_verification_notice'] ?? '' }}</span>
+                @endif
                 @if (! empty($participant['display_locale_label']))
                     {{-- Fase 3 §3.3 (F-I18N): idioma em que a página foi exibida; o texto aceito é o de referência (PT-BR). --}}
                     <br><span class="muted">{{ $participant['display_locale_label'] }}</span>

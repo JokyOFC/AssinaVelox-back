@@ -144,6 +144,14 @@ class DemoOrganizationSeeder extends Seeder
      */
     private const PHASE3_WAVE_G_PLAN_FEATURES = ['embedded_signing', 'sso_oidc', 'sso_saml', 'cloud_import', 'hubspot'];
 
+    /**
+     * Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): verificação facial com documento por
+     * provedor externo — item de PLANO, ligado na Horizonte e desligado na Vega. Só vale junto
+     * com `identity_capture` (já na onda B) e com o interruptor global ligado; o adaptador real
+     * ainda depende das credenciais da Verifiky no `.env`.
+     */
+    private const PHASE4_PLAN_FEATURES = ['identity_verification'];
+
     /** Origem de EXEMPLO do widget na Horizonte (domínio reservado `.example`: não é um site real). */
     public const DEMO_EMBED_ORIGIN = 'https://portal.imobiliaria-horizonte.example';
 
@@ -191,8 +199,8 @@ class DemoOrganizationSeeder extends Seeder
         // os itens da onda A; o da Vega (Grátis) não. O recurso só aparece quando o
         // interruptor GLOBAL também está ligado (`ASSINAVELOX_FEATURE_*` no .env) — desligado,
         // que é o padrão e o que os testes usam, a demonstração é exatamente a da Fase 1.
-        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_G_PLAN_FEATURES, true))])->save();
-        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_G_PLAN_FEATURES, false))])->save();
+        $professional->forceFill(['features' => array_replace((array) $professional->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, true), array_fill_keys(self::PHASE3_WAVE_G_PLAN_FEATURES, true), array_fill_keys(self::PHASE4_PLAN_FEATURES, true))])->save();
+        $free->forceFill(['features' => array_replace((array) $free->features, array_fill_keys(self::PHASE2_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_PART1_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_F_PLAN_FEATURES, false), array_fill_keys(self::PHASE3_WAVE_G_PLAN_FEATURES, false), array_fill_keys(self::PHASE4_PLAN_FEATURES, false))])->save();
 
         DB::transaction(function () use ($free, $professional): void {
             $hasPlatformCertificate = CertificateReference::query()

@@ -191,6 +191,9 @@ class HandleInertiaRequests extends Middleware
             ...FlowFeatures::forOrganization($organization),
             // Fase 3 §3.3 (F-VIDEO): vídeo curto no aceite — global E plano, desligada (T8).
             'identity_video' => IdentityFeatures::identityVideo($organization),
+            // Fase 4 §4.1: verificação facial com documento por provedor externo — global E plano,
+            // e só junto com `identity_capture` (as fotos vêm da captura). Desligada (T8).
+            'identity_verification' => IdentityFeatures::identityVerification($organization),
             // Fase 3 §3.1 (F-BULK): geração em lote — global E plano (exige `templates`), desligada (T8).
             'bulk_generation' => BulkGenerationFeature::enabled($organization),
             // Fase 3 §3.2 (F-ANCHOR): âncoras e OCR — global E plano (`ocr` exige `field_anchors`).

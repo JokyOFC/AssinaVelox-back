@@ -21,7 +21,26 @@ final class CaptureStep
         .'Elas não são usadas para verificar sua identidade: não há comparação entre rostos, '
         .'análise da imagem nem leitura automática do documento.';
 
-    public function __construct(private readonly IdentityCaptures $captures) {}
+    /**
+     * Fase 4 §4.1: para quem tem a verificação facial com documento exigida, o aviso acima
+     * seria falso — as fotos SÃO enviadas a um provedor externo, que compara a foto tirada na
+     * hora com a foto do documento. Este é o aviso usado nesse caso (`%s` = nome do provedor);
+     * a constante original fica intacta para todo mundo que não tem a exigência.
+     */
+    public const VERIFICATION_NOTICE = 'Estas fotos ficam anexadas ao registro do seu aceite e, porque quem enviou o '
+        .'documento exigiu a verificação facial com documento, são enviadas ao provedor %s, que compara a foto '
+        .'tirada na hora com a foto do documento e devolve um resultado. A plataforma não compara as imagens: ela '
+        .'envia as fotos e registra a resposta do provedor.';
+
+    public function __construct(
+        private readonly IdentityCaptures $captures,
+        private readonly IdentityVerifications $verifications,
+    ) {}
+
+    public static function verificationNotice(string $providerLabel): string
+    {
+        return sprintf(self::VERIFICATION_NOTICE, $providerLabel);
+    }
 
     /**
      * @return array<string, mixed>|null
@@ -62,7 +81,11 @@ final class CaptureStep
             'accept' => ['image/jpeg', 'image/png'],
             'max_upload_kb' => (int) config('assinavelox.capture.max_upload_kb', 8192),
             'retention_days' => (int) config('assinavelox.capture.retention_days', 180),
-            'notice' => self::NOTICE,
+            // Fase 4 §4.1: com a verificação facial exigida, as fotos saem para o provedor — e o
+            // aviso diz isso. Sem a exigência (ou com a flag desligada), o aviso de sempre.
+            'notice' => $this->verifications->requiredFor($context)
+                ? self::verificationNotice($this->verifications->provider()->label())
+                : self::NOTICE,
         ];
     }
 }

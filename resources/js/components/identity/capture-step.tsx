@@ -6,6 +6,7 @@ import {
     type CapturedImage,
 } from '@/components/identity/camera-capture-dialog';
 import { postJson } from '@/components/identity/http';
+import type { IdentityVerificationStep } from '@/components/identity/verification-types';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,12 @@ import type { IdentityCaptureItem, IdentityCaptureStep } from '@/types/models';
 
 interface UploadResponse {
     identity_capture?: IdentityCaptureStep | null;
+    /**
+     * Fase 4 §4.1: com a verificação facial com documento exigida, cada foto nova também
+     * devolve o bloco da etapa (é assim que `captures_complete` e `captures_changed` mudam
+     * sem recarregar a página). Ausente quando não se aplica.
+     */
+    identity_verification?: IdentityVerificationStep | null;
     message?: string;
     errors?: { image?: string[] };
     code?: string;
@@ -31,14 +38,19 @@ export const CAPTURE_EVIDENCE_NOTE =
  * Cada foto exigida pelo remetente é tirada com a câmera ou escolhida do aparelho e enviada
  * na hora (`POST sign.capture.store`, multipart). A resposta traz o bloco atualizado, que
  * substitui o local. O aceite só habilita com `complete` — o servidor exige o mesmo.
+ *
+ * `onVerificationChange` (Fase 4 §4.1): quando a mesma resposta traz o bloco da verificação
+ * facial com documento, ele é repassado para a etapa seguinte se atualizar na hora.
  */
 export function CaptureStepCard({
     step,
     onChange,
+    onVerificationChange,
     className,
 }: {
     step: IdentityCaptureStep;
     onChange: (next: IdentityCaptureStep) => void;
+    onVerificationChange?: (next: IdentityVerificationStep) => void;
     className?: string;
 }) {
     const i18n = useI18n();
@@ -72,6 +84,11 @@ export function CaptureStepCard({
 
         if (response.ok && response.body?.identity_capture) {
             onChange(response.body.identity_capture);
+
+            if (response.body.identity_verification) {
+                onVerificationChange?.(response.body.identity_verification);
+            }
+
             setActive(null);
             toast.success(t('capture.saved', { label: item.label }));
 

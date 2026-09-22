@@ -16,6 +16,7 @@ use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Envelopes\Sending\AccessLinks;
 use App\Services\Envelopes\Sending\InvitationDispatcher;
 use App\Services\Identity\Models\IdentityCaptureRequirement;
+use App\Services\Identity\Models\IdentityVerificationRequirement;
 use App\Services\Identity\Models\IdentityVideoRequirement;
 use App\Services\Signing\SignerAudit;
 use App\Services\Signing\SignerSessions;
@@ -129,6 +130,7 @@ final class DelegationExecutor
 
             $this->copyCaptureRequirement($original, $delegate);
             $this->copyVideoRequirement($original, $delegate);
+            $this->copyVerificationRequirement($original, $delegate);
 
             // `delegated` não é transição da máquina genérica (RecipientStatus): este é o único
             // caminho, e o estado de origem acabou de ser conferido sob lock.
@@ -270,6 +272,31 @@ final class DelegationExecutor
             'recipient_id' => $delegate->getKey(),
             'max_seconds' => $requirement->max_seconds,
             'updated_by_user_id' => $requirement->updated_by_user_id,
+        ])->save();
+    }
+
+    /**
+     * Fase 4 §4.1: a exigência de verificação facial com documento também passa ao delegado —
+     * nunca uma exigência menor. As fotos exigidas (copiadas acima) já incluem as três; a
+     * verificação é do delegado, com consentimento e tentativas próprias.
+     */
+    private function copyVerificationRequirement(Recipient $original, Recipient $delegate): void
+    {
+        /** @var IdentityVerificationRequirement|null $requirement */
+        $requirement = IdentityVerificationRequirement::query()->withoutGlobalScopes()
+            ->where('recipient_id', $original->getKey())
+            ->first();
+
+        if ($requirement === null) {
+            return;
+        }
+
+        $copy = new IdentityVerificationRequirement;
+        $copy->forceFill([
+            'organization_id' => $requirement->organization_id,
+            'envelope_id' => $requirement->envelope_id,
+            'recipient_id' => $delegate->getKey(),
+            'created_by_user_id' => $requirement->created_by_user_id,
         ])->save();
     }
 

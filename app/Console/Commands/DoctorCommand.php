@@ -21,8 +21,8 @@ use Throwable;
  *
  * Regra absoluta deste comando: **nenhum segredo é impresso**. Ele responde "está
  * definido?", "é válido?", "vence quando?" — nunca "vale quanto". Chave de aplicação,
- * senha do PKCS#12, token do Mercado Pago e segredo do webhook aparecem apenas como
- * `definido` / `ausente`, com o NOME da variável.
+ * senha do PKCS#12, token do Mercado Pago, segredos dos webhooks e chave da Verifiky aparecem
+ * apenas como `definido` / `ausente`, com o NOME da variável.
  *
  * Cada item tem um estado: `ok`, `aviso` (funciona, mas há um risco ou uma funcionalidade
  * desligada) ou `falha` (a instalação não está em condições). O código de saída é 1 quando
@@ -57,6 +57,7 @@ class DoctorCommand extends Command
         $this->checkLibreOffice($libreOffice);
         $this->checkCertificate($signer, $pdftool);
         $this->checkMercadoPago();
+        $this->checkIdentityVerification();
         $this->checkAuditCheckpoints();
 
         $failures = $this->countBy(self::FAIL);
@@ -510,6 +511,81 @@ class DoctorCommand extends Command
         }, $hasWebhookSecret
             ? 'MERCADOPAGO_WEBHOOK_SECRET definido (valor nunca exibido).'
             : 'Ausente: sem ele nenhuma notificação é aceita — e ativação de plano só acontece por webhook autenticado.');
+    }
+
+    /**
+     * Fase 4 §4.1 — verificação facial com documento por provedor externo (Verifiky;
+     * docs/fase-4/verificacao-facial.md). Como nas demais integrações: "está definido?", nunca
+     * "vale quanto". Só o interruptor GLOBAL é lido (o plano é por organização).
+     */
+    private function checkIdentityVerification(): void
+    {
+        $group = 'Verificação facial';
+        $production = app()->isProduction();
+
+        if (! (bool) config('assinavelox.features.identity_verification', false)) {
+            $this->add($group, 'Estado', self::OK,
+                'Desligada (ASSINAVELOX_FEATURE_IDENTITY_VERIFICATION=false): nenhuma foto sai da plataforma. Não é defeito.');
+
+            return;
+        }
+
+        $driver = (string) config('assinavelox.identity_verification.driver', 'disabled');
+
+        if ($driver === 'disabled') {
+            $this->add($group, 'Estado', self::WARN,
+                'Ligada, mas ASSINAVELOX_IDENTITY_VERIFICATION_DRIVER=disabled: toda tentativa responde "inconclusivo — não configurado" '
+                .'e nenhum aceite com a exigência conclui.');
+
+            return;
+        }
+
+        if ($driver === 'fake') {
+            $allowed = (bool) config('assinavelox.channels.allow_simulated', false) && ! $production;
+
+            $this->add($group, 'Estado', $production ? self::FAIL : self::WARN, match (true) {
+                $production => 'Simulador em produção: recusado pela fábrica (verificação desabilitada). Use `verifiky` ou desligue a flag.',
+                $allowed => 'Simulador identificado: nenhuma imagem é analisada e todo resultado sai rotulado "(simulado)".',
+                default => 'Driver `fake` sem ASSINAVELOX_CHANNELS_ALLOW_SIMULATED: a fábrica cai no desligado ("inconclusivo — não configurado").',
+            });
+
+            return;
+        }
+
+        if ($driver !== 'verifiky') {
+            $this->add($group, 'Estado', self::FAIL,
+                "ASSINAVELOX_IDENTITY_VERIFICATION_DRIVER=\"{$driver}\" não existe: use disabled, fake ou verifiky.");
+
+            return;
+        }
+
+        $apiUrl = trim((string) config('assinavelox.identity_verification.verifiky.api_url', ''));
+        $hasKey = trim((string) config('assinavelox.identity_verification.verifiky.api_key', '')) !== '';
+        $hasWebhookSecret = trim((string) config('assinavelox.identity_verification.verifiky.webhook_secret', '')) !== '';
+        $hasHmacSecret = trim((string) config('assinavelox.identity_verification.verifiky.hmac_secret', '')) !== '';
+        $verifySsl = (bool) config('assinavelox.identity_verification.verifiky.verify_ssl', true);
+
+        $this->add($group, 'Credenciais', $hasKey && $apiUrl !== '' ? self::OK : self::FAIL, match (true) {
+            $apiUrl === '' => 'VERIFIKY_API_URL vazia: nenhum envio é possível.',
+            $hasKey => "VERIFIKY_API_KEY definida (valor nunca exibido), driver=verifiky, {$apiUrl}.",
+            default => 'VERIFIKY_API_KEY ausente: toda tentativa responde "inconclusivo — não configurado".',
+        });
+
+        $this->add($group, 'Segredo do webhook', $hasWebhookSecret ? self::OK : self::WARN, $hasWebhookSecret
+            ? 'VERIFIKY_WEBHOOK_SECRET definido (valor nunca exibido); a URL /webhooks/verifiky precisa estar cadastrada no painel da Verifiky.'
+            : 'VERIFIKY_WEBHOOK_SECRET ausente: nenhum webhook é aceito — sem ele o resultado só chega pela resposta do envio ou por consulta.');
+
+        $this->add($group, 'Segredo das consultas', $hasHmacSecret ? self::OK : self::WARN, $hasHmacSecret
+            ? 'VERIFIKY_HMAC_SECRET definido (valor nunca exibido): as consultas de resultado saem assinadas.'
+            : 'VERIFIKY_HMAC_SECRET ausente: as consultas de resultado saem só com a chave da conta (aceito pela Verifiky; opcional).');
+
+        $this->add($group, 'TLS do provedor', match (true) {
+            $verifySsl => self::OK,
+            $production => self::FAIL,
+            default => self::WARN,
+        }, $verifySsl
+            ? 'VERIFIKY_VERIFY_SSL=true: o certificado do provedor é conferido.'
+            : 'VERIFIKY_VERIFY_SSL=false: as fotos sairiam para um servidor sem certificado conferido.'.($production ? ' Proibido em produção.' : ''));
     }
 
     private function checkStorageEncryption(): void

@@ -27,6 +27,7 @@ use App\Services\Envelopes\Steps\StepProgression;
 use App\Services\Identity\CpfLookup;
 use App\Services\Identity\CpfNumber;
 use App\Services\Identity\IdentityCaptures;
+use App\Services\Identity\IdentityVerifications;
 use App\Services\Signing\Exceptions\SigningRejectedException;
 use App\Support\Locale\SignerLocales;
 use Illuminate\Database\QueryException;
@@ -92,6 +93,8 @@ final class RecordAcceptance
         private readonly CpfLookup $cpfLookup,
         // Fase 2 §2.8 (C-BRAND): carimbo visual congelado no aceite.
         private readonly StampImages $stamps,
+        // Fase 4 §4.1: verificação facial com documento por provedor externo.
+        private readonly IdentityVerifications $verifications,
     ) {}
 
     /**
@@ -177,6 +180,11 @@ final class RecordAcceptance
         // órfão no disco quando o aceite é recusado aqui.
         $this->captures->assertComplete($context, $session);
 
+        // Fase 4 §4.1: com a verificação facial exigida, o provedor precisa ter APROVADO a última
+        // tentativa, feita sobre as fotos desta sessão. Só o prazo é conferido aqui — nenhuma
+        // chamada externa dentro da requisição do aceite.
+        $this->verifications->assertApproved($context, $session);
+
         // Aprovador não tem representação visual: nada do que vier em `signature` é gravado.
         $visual = $action->requiresVisualSignature()
             ? $this->resolveVisual($context, $payload, $fields)
@@ -188,6 +196,8 @@ final class RecordAcceptance
         // externa, então fora da transação; nenhum resultado bloqueia o aceite.
         $cpfChecks = $this->cpfLookup->checkFields($fields, $values, $context, $correlationId);
         $captures = $this->captures->snapshotFor($context, $session);
+        // Fase 4 §4.1: resumo da verificação aprovada pelo provedor (vazio sem a exigência).
+        $verification = $this->verifications->snapshotFor($context, $session);
 
         // Fase 2 §2.8 (C-BRAND): o carimbo visual é congelado AQUI, no aceite de quem tem o
         // campo (I/O fora da transação). Marca desligada ou sem marca: null, campo vazio no PDF.
@@ -213,6 +223,7 @@ final class RecordAcceptance
                 $cpfChecks,
                 $captures,
                 $stampPath,
+                $verification,
             );
         } catch (\Throwable $exception) {
             // A imagem foi normalizada e gravada ANTES da transação (para não segurar o
@@ -278,6 +289,7 @@ final class RecordAcceptance
      * @param  array<string, mixed>  $snapshot
      * @param  array<string, array<string, mixed>>  $cpfChecks  resultado da consulta cadastral por ULID do campo (C-ID)
      * @param  list<array{capture_ulid: string, kind: string, sha256: string, width: int, height: int, captured_at: string}>  $captures  fotos referenciadas pelo aceite (C-ID)
+     * @param  array<string, mixed>  $verification  resumo da verificação facial aprovada pelo provedor (Fase 4 §4.1; vazio sem a exigência)
      */
     private function persist(
         SignerContext $context,
@@ -296,10 +308,11 @@ final class RecordAcceptance
         array $cpfChecks = [],
         array $captures = [],
         ?string $stampPath = null,
+        array $verification = [],
     ): SignatureAcceptance {
         try {
             return DB::transaction(function () use (
-                $context, $session, $version, $sent, $action, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId, $cpfChecks, $captures, $stampPath
+                $context, $session, $version, $sent, $action, $fields, $values, $visual, $snapshot, $consentText, $request, $now, $correlationId, $cpfChecks, $captures, $stampPath, $verification
             ): SignatureAcceptance {
                 /** @var Envelope|null $envelope */
                 $envelope = Envelope::withoutOrganizationScope()
@@ -342,19 +355,23 @@ final class RecordAcceptance
                     'display_locale' => SignerLocales::current($request)?->value,
                     'consent_statement' => $consentText,
                     'document_sha256' => $version->sha256,
-                    // `identity_captures` só existe quando houve foto exigida (C-ID): sem ela o
-                    // snapshot é exatamente o de antes.
+                    // `identity_captures` só existe quando houve foto exigida (C-ID) e
+                    // `identity_verification` só com a verificação facial exigida (Fase 4 §4.1):
+                    // sem elas o snapshot é exatamente o de antes.
                     'fields_snapshot' => $snapshot
                         + ['values' => $this->snapshotValues($fields, $values, $visual, $cpfChecks)]
-                        + ($captures === [] ? [] : ['identity_captures' => $captures]),
+                        + ($captures === [] ? [] : ['identity_captures' => $captures])
+                        + ($verification === [] ? [] : ['identity_verification' => $verification]),
                     'signature_kind' => $visual['kind'],
                     'signature_image_path' => $visual['image_path'],
                     'typed_name' => $visual['typed_name'],
                     'typed_font' => $visual['typed_font'],
                 ]);
 
-                // Fotos da captura simples passam a pertencer a este aceite (C-ID).
+                // Fotos da captura simples passam a pertencer a este aceite (C-ID); a verificação
+                // aprovada pelo provedor também (Fase 4 §4.1).
                 $this->captures->attachToAcceptance($acceptance, $captures);
+                $this->verifications->attachToAcceptance($acceptance, $verification);
 
                 foreach ($fields as $field) {
                     $value = $values[$field->ulid] ?? ['text' => null, 'bool' => null];

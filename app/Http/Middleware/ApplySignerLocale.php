@@ -29,7 +29,8 @@ use Symfony\Component\HttpFoundation\Response;
  *    SignerPageController monta a prop `i18n` e o aceite grava `display_locale`;
  * 2. fora do PT-BR, traduz pelo catálogo, na FRONTEIRA, as mensagens que os serviços escreveram
  *    em PT-BR: os avisos da sessão (`success`, `info`…), a sacola de erros (e o `errors` do
- *    Inertia) e as respostas JSON (`message`, `errors`, blocos `identity_capture`/`identity_video`).
+ *    Inertia) e as respostas JSON (`message`, `errors`, blocos `identity_capture`/`identity_video`/
+ *    `identity_verification`).
  *
  * O idioma da aplicação NÃO é trocado (ver o comentário em `handle`).
  */
@@ -170,6 +171,10 @@ class ApplySignerLocale
 
         if (array_key_exists('identity_video', $data)) {
             $data['identity_video'] = SignerPropsLocalizer::videoBlock($data['identity_video'], $locale);
+        }
+
+        if (array_key_exists('identity_verification', $data)) {
+            $data['identity_verification'] = SignerPropsLocalizer::verificationBlock($data['identity_verification'], $locale);
         }
 
         $response->setData($data);

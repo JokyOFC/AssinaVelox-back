@@ -70,6 +70,7 @@
         <env name="ASSINAVELOX_FEATURE_GOVBR_RETURN" value="false"/>
         <env name="ASSINAVELOX_FEATURE_HUBSPOT" value="false"/>
         <env name="ASSINAVELOX_FEATURE_IDENTITY_CAPTURE" value="false"/>
+        <env name="ASSINAVELOX_FEATURE_IDENTITY_VERIFICATION" value="false"/>
         <env name="ASSINAVELOX_FEATURE_IDENTITY_VIDEO" value="false"/>
         <env name="ASSINAVELOX_FEATURE_IMPERSONATION" value="false"/>
         <env name="ASSINAVELOX_FEATURE_IN_PERSON" value="false"/>

@@ -26,6 +26,7 @@ import { DossierButton } from '@/components/dossier/dossier-buttons';
 import { useEnvelopeLegalHold } from '@/components/envelopes/use-envelope-legal-hold';
 import { EnvelopeFlowPanel } from '@/components/envelopes/steps/flow-panel';
 import { EnvelopeLegalHoldPanel } from '@/components/retention/envelope-legal-hold-panel';
+import { IdentityVerificationPanel } from '@/components/identity/identity-verification-panel';
 import { IdentityVideoPanel } from '@/components/identity/identity-video-panel';
 import { PreservedBadge } from '@/components/retention/preserved-badge';
 import type { EnvelopeLegalHold } from '@/components/retention/types';
@@ -1168,6 +1169,12 @@ export default function EnvelopeShow({
 
             {/* Fase 3 §3.3 (F-VIDEO): sem a flag `identity_video` ou sem vídeo, não renderiza nada. */}
             <IdentityVideoPanel envelopeId={envelope.id} />
+
+            {/* Fase 4 §4.1: sem a flag `identity_verification` ou sem exigência, não renderiza nada. */}
+            <IdentityVerificationPanel
+                envelopeId={envelope.id}
+                recipients={recipients}
+            />
 
             <ConfirmDialog
                 open={cancelOpen}

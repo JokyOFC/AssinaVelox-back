@@ -11,6 +11,7 @@ use App\Services\Identity\CaptureStep;
 use App\Services\Identity\Exceptions\CaptureRejectedException;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Identity\IdentityVideos;
+use App\Services\Identity\VerificationStep;
 use App\Services\Identity\VideoStep;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -89,6 +90,11 @@ class CaptureController extends Controller
         }
 
         if ($request->expectsJson()) {
+            // Fase 4 §4.1: com a verificação facial exigida, a resposta traz também o bloco da
+            // etapa (a tela descobre `captures_complete` sem recarregar). Sem a exigência, a
+            // chave nem aparece — a resposta é exatamente a de antes.
+            $verification = app(VerificationStep::class)->props($context, $session);
+
             return response()->json([
                 'capture' => [
                     'id' => $capture->ulid,
@@ -98,7 +104,7 @@ class CaptureController extends Controller
                     'height' => $capture->height,
                 ],
                 'identity_capture' => $this->step->props($context, $session),
-            ], 201);
+            ] + ($verification === null ? [] : ['identity_verification' => $verification]), 201);
         }
 
         return redirect()

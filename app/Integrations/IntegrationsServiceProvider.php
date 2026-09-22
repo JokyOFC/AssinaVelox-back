@@ -5,6 +5,7 @@ namespace App\Integrations;
 use App\Integrations\Contracts\CpfVerificationProvider;
 use App\Integrations\Contracts\EmailProvider;
 use App\Integrations\Contracts\FiscalInvoiceProvider;
+use App\Integrations\Contracts\IdentityVerificationProvider;
 use App\Integrations\Contracts\PaymentGateway;
 use App\Integrations\Contracts\PdfConverter;
 use App\Integrations\Contracts\PdfSigner;
@@ -21,6 +22,8 @@ use App\Integrations\Email\LogEmailProvider;
 use App\Integrations\Email\SenderDomainVerification;
 use App\Integrations\Exceptions\IntegrationException;
 use App\Integrations\Fiscal\FakeFiscalInvoiceProvider;
+use App\Integrations\Identity\FakeIdentityVerificationProvider;
+use App\Integrations\Identity\IdentityVerificationFactory;
 use App\Integrations\Payments\CheckoutProGateway;
 use App\Integrations\Payments\FakePaymentGateway;
 use App\Integrations\Payments\MercadoPagoGateway;
@@ -182,5 +185,10 @@ class IntegrationsServiceProvider extends ServiceProvider
         // CPF cadastral: quem escolhe o adaptador é a fábrica do C-ID (`cpf_lookup.driver`).
         $this->app->singleton(FakeCpfVerificationProvider::class);
         $this->app->bindIf(CpfVerificationProvider::class, fn (Application $app): CpfVerificationProvider => $app->make(CpfVerificationFactory::class)->make());
+
+        // Fase 4 §4.1 — verificação facial com documento (Verifiky). Mesmo desenho do CPF: a
+        // fábrica escolhe por `identity_verification.driver`; `bindIf` deixa o teste pôr um dublê.
+        $this->app->singleton(FakeIdentityVerificationProvider::class);
+        $this->app->bindIf(IdentityVerificationProvider::class, fn (Application $app): IdentityVerificationProvider => $app->make(IdentityVerificationFactory::class)->make());
     }
 }

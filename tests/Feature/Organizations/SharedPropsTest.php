@@ -96,6 +96,8 @@ test('props compartilhadas do owner são coerentes com o contrato', function () 
             'pades_ltv_advertise' => false,
             // Fase 3, parte 2, onda F (F-VIDEO): vídeo curto no aceite, desligado por padrão (T8).
             'identity_video' => false,
+            // Fase 4 §4.1: verificação facial com documento por provedor externo, desligada por padrão (T8).
+            'identity_verification' => false,
             // Fase 3, parte 2, onda F (F-BULK): geração documental em lote, desligada por padrão (T8).
             'bulk_generation' => false,
             // Fase 3, parte 2 — F-FLOW (etapas condicionais e delegação), desligadas por padrão (T8).

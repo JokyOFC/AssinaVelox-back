@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Envelopes\EnvelopeAudit;
 use App\Services\Envelopes\Sending\AccessLinks;
 use App\Services\Identity\IdentityCaptures;
+use App\Services\Identity\IdentityVerifications;
 use App\Services\Signing\SignerContext;
 use App\Services\Signing\SignerTokens;
 use Illuminate\Database\QueryException;
@@ -44,6 +45,7 @@ final class EmbeddedSessionIssuer
         private readonly AccessLinks $links,
         private readonly EmbeddedContextResolver $contexts,
         private readonly IdentityCaptures $captures,
+        private readonly IdentityVerifications $verifications,
     ) {}
 
     public static function defaultTtlSeconds(): int
@@ -93,6 +95,14 @@ final class EmbeddedSessionIssuer
         if ($context === null || $context->state !== SignerContext::STATE_ACTIVE) {
             throw new EmbedRejected('recipient-not-active', 'Não é a vez deste participante ou ele já respondeu.', 409, [
                 'recipient_status' => $recipient->status->value,
+            ]);
+        }
+
+        // Fase 4 §4.1: a verificação facial com documento implica as três fotos, então vem
+        // ANTES da checagem das fotos — o motivo devolvido é o mais específico.
+        if ($this->verifications->requiredFor($context)) {
+            throw new EmbedRejected('embedded-unsupported', 'Quem enviou exigiu a verificação facial com documento deste participante; as fotos e o envio ao provedor não são feitos pelo widget. Use o link enviado por e-mail.', 409, [
+                'requirement' => 'identity_verification',
             ]);
         }
 

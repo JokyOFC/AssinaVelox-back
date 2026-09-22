@@ -66,6 +66,8 @@ return [
     'extras' => [
         'cpf_lookup' => ', el resultado de la consulta registral del CPF que informé, realizada a un servicio utilizado por AssinaVelox (la consulta no confirma que yo sea el titular del CPF)',
         'photos' => ', las fotos que envié en esta pantalla (:photos), guardadas como registro, sin verificación de identidad',
+        // Fase 4 §4.1: con la verificación facial con documento exigida, las fotos van al proveedor nombrado.
+        'photos_verification' => ', las fotos que envié en esta pantalla (:photos), enviadas al proveedor externo :provider, que compara la foto tomada en el momento con la foto del documento y devuelve un resultado — el resultado informado por el proveedor queda guardado como evidencia de esta aceptación y las fotos siguen el plazo de conservación indicado en el aviso de privacidad —',
     ],
     'item4' => [
         'certificate' => [
@@ -162,6 +164,8 @@ return [
         'cpf_lookup' => '; el CPF que usted escriba en el documento, que no se comprueba solo por los dígitos: también se envía a un servicio de consulta registral utilizado por AssinaVelox, solo para comprobar la situación del número en la base de ese servicio, y el resultado de la consulta queda registrado con la aceptación (la consulta no confirma que usted sea el titular del CPF)',
         'cpf' => '; el CPF que usted escriba en el documento, comprobado solo por los dígitos (esto no confirma la titularidad)',
         'photos' => '; las fotos que usted envíe (:photos), guardadas como registro de la aceptación, sin comparación de rostros, sin análisis de la imagen y sin lectura del documento, y :retention',
+        // Fase 4 §4.1: el envío al proveedor nombrado y la finalidad (LGPD art. 9 y 11).
+        'photos_verification' => '; las fotos que usted envíe (:photos), enviadas al proveedor externo :provider solo para comparar la foto tomada en el momento con la foto del documento (la plataforma no compara las imágenes: envía las fotos y registra la respuesta del proveedor, que queda guardada como evidencia de la aceptación), y :retention',
         'retention_days' => 'eliminadas :days días después',
         'retention_kept' => 'guardadas mientras el documento exista en la cuenta de quien lo envió',
     ],

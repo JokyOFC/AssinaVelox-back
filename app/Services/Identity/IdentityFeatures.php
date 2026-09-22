@@ -54,6 +54,29 @@ final class IdentityFeatures
         return self::enabled(self::IDENTITY_VIDEO, $organization);
     }
 
+    /**
+     * Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): verificação facial com documento por
+     * PROVEDOR EXTERNO (Verifiky). Só vale com as DUAS flags ligadas para a organização —
+     * `identity_verification` E `identity_capture`, cada uma global E plano —, porque as fotos
+     * que o provedor compara são as da captura simples: sem captura não há o que enviar. Fora de
+     * {@see self::FLAGS} e de {@see self::forOrganization()} pelo mesmo motivo do vídeo;
+     * `HandleInertiaRequests` compartilha `identity_verification` numa linha própria.
+     */
+    public const IDENTITY_VERIFICATION = 'identity_verification';
+
+    public static function identityVerification(?Organization $organization): bool
+    {
+        // Os interruptores globais primeiro: desligados, nenhuma consulta ao plano.
+        if ($organization === null || ! self::global(self::IDENTITY_VERIFICATION) || ! self::global(self::IDENTITY_CAPTURE)) {
+            return false;
+        }
+
+        $plan = self::planOf($organization);
+
+        return self::enabled(self::IDENTITY_VERIFICATION, $organization, $plan)
+            && self::enabled(self::IDENTITY_CAPTURE, $organization, $plan);
+    }
+
     public static function cpfField(?Organization $organization): bool
     {
         return self::enabled(self::CPF_FIELD, $organization);

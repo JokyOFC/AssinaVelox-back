@@ -9,6 +9,7 @@ import receipt from './receipt';
 import refusal from './refusal';
 import sign from './sign';
 import signature from './signature';
+import verification from './verification';
 
 /**
  * Dicionário de REFERÊNCIA (PT-BR). As chaves daqui são a lista fechada:
@@ -25,6 +26,7 @@ export const ptBR = {
     ...receipt,
     ...refusal,
     ...capture,
+    ...verification,
     ...signature,
     ...pdf,
 } as const;

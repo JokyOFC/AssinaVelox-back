@@ -43,6 +43,8 @@ use App\Http\Controllers\Envelopes\RecipientLocaleController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\Identity\CaptureRequirementController;
 use App\Http\Controllers\Identity\CnpjLookupController;
+use App\Http\Controllers\Identity\VerificationRequirementController;
+use App\Http\Controllers\Identity\VerificationResultsController;
 use App\Http\Controllers\Identity\VideoPlaybackController;
 use App\Http\Controllers\Identity\VideoRequirementController;
 use App\Http\Controllers\InPerson\InPersonHostController;
@@ -88,6 +90,7 @@ use App\Http\Controllers\Sign\DownloadController as SignDownloadController;
 use App\Http\Controllers\Sign\ExternalSignatureController;
 use App\Http\Controllers\Sign\ExternalSimulatorController;
 use App\Http\Controllers\Sign\GovBrReturnController as SignGovBrReturnController;
+use App\Http\Controllers\Sign\IdentityVerificationController as SignIdentityVerificationController;
 use App\Http\Controllers\Sign\LocaleController as SignLocaleController;
 use App\Http\Controllers\Sign\OtpController;
 use App\Http\Controllers\Sign\RefusalController;
@@ -102,6 +105,7 @@ use App\Http\Controllers\Templates\TemplateUseController;
 use App\Http\Controllers\Tsa\TsaController;
 use App\Http\Controllers\Webhooks\MercadoPagoController;
 use App\Http\Controllers\Webhooks\SmsStatusWebhookController;
+use App\Http\Controllers\Webhooks\VerifikyWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppStatusWebhookController;
 use App\Http\Middleware\ApplySignerLocale;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -193,6 +197,15 @@ Route::prefix('assinar/{token}')
         Route::post('captura-video', [SignCaptureController::class, 'storeVideo'])
             ->middleware('signer.verified')
             ->name('capture.video.store');
+        // Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): verificação facial com documento por
+        // provedor externo. JSON; 404 com a flag `identity_verification` desligada ou verificação
+        // não exigida. As tentativas por participante ficam no serviço; este é o freio por IP.
+        Route::post('verificacao-facial', [SignIdentityVerificationController::class, 'store'])
+            ->middleware(['signer.verified', 'throttle:10,10,sign-identity-verification-store'])
+            ->name('identity_verification.store');
+        Route::get('verificacao-facial', [SignIdentityVerificationController::class, 'show'])
+            ->middleware(['signer.verified', 'throttle:60,1,sign-identity-verification-show'])
+            ->name('identity_verification.show');
         // Sem `signer.verified`: o aceite consome a sessão e o comprovante é pedido logo
         // depois. A autorização é feita no controller (aceite registrado ou sessão viva).
         Route::get('download/{type}', [SignDownloadController::class, 'show'])->whereIn('type', ['signed', 'evidence'])->name('download');
@@ -277,6 +290,14 @@ Route::post('webhooks/mercadopago', [MercadoPagoController::class, 'handle'])
     ->middleware('throttle:webhook')
     ->name('webhooks.mercadopago');
 
+// -- Webhook Verifiky (Fase 4 §4.1, docs/integracoes/verifiky.md) -------------------------
+// Sem CSRF (exceção em bootstrap/app.php, como o do Mercado Pago): autenticado por HMAC-SHA256
+// do corpo cru com VERIFIKY_WEBHOOK_SECRET. Sem segredo configurado, nenhum aviso é aceito.
+Route::post('webhooks/verifiky', [VerifikyWebhookController::class, 'handle'])
+    ->middleware('throttle:webhook')
+    ->withoutMiddleware([PreventRequestForgery::class])
+    ->name('webhooks.verifiky');
+
 // -- Webhooks de status de SMS/WhatsApp (Fase 2 §2.9, C-CAN) ------------------------------
 // Sem CSRF: autenticados por HMAC + carimbo de tempo (App\Services\Signing\Channels\StatusWebhooks).
 // Com o provedor desabilitado (hoje, em produção) respondem 503 com o motivo.
@@ -344,6 +365,11 @@ Route::middleware(['auth', 'verified', 'org', 'org.2fa'])->group(function (): vo
         // Fase 3 §3.3 (F-VIDEO): exigência de vídeo curto (só rascunho) e reprodução por URL
         // assinada e curta para quem vê o envelope. 404 com a flag `identity_video` desligada.
         Route::put('{envelope}/participantes/{recipient}/video', [VideoRequirementController::class, 'update'])->name('recipients.identity_video');
+        // Fase 4 §4.1 (docs/fase-4/verificacao-facial.md): exigência de verificação facial com
+        // documento (só rascunho; liga as três fotos) e, para quem vê o envelope, o que o
+        // provedor informou de cada tentativa. 404 com a flag `identity_verification` desligada.
+        Route::put('{envelope}/participantes/{recipient}/verificacao-facial', [VerificationRequirementController::class, 'update'])->name('recipients.identity_verification');
+        Route::get('{envelope}/verificacoes-faciais', [VerificationResultsController::class, 'index'])->name('identity_verifications.index');
         // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §3): idioma e fuso de cada participante
         // (JSON; alteração só no rascunho). 404 com a flag `multilingual` desligada.
         Route::get('{envelope}/idiomas', [RecipientLocaleController::class, 'index'])->name('recipients.locales');

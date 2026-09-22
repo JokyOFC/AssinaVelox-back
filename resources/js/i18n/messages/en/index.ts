@@ -10,6 +10,7 @@ import receipt from './receipt';
 import refusal from './refusal';
 import sign from './sign';
 import signature from './signature';
+import verification from './verification';
 
 /** English. Legal texts shown on the page are courtesy translations (see `consent.*`). */
 export const en: Messages = {
@@ -22,6 +23,7 @@ export const en: Messages = {
     ...receipt,
     ...refusal,
     ...capture,
+    ...verification,
     ...signature,
     ...pdf,
 };

@@ -65,6 +65,8 @@ return [
     'extras' => [
         'cpf_lookup' => ', the result of the registry lookup of the CPF I entered, made through a service used by AssinaVelox (the lookup does not confirm that I am the holder of the CPF)',
         'photos' => ', the photos I sent on this screen (:photos), kept as a record, with no identity verification',
+        // Phase 4 §4.1: with document face verification required, the photos go to the named provider.
+        'photos_verification' => ', the photos I sent on this screen (:photos), forwarded to the external provider :provider, which compares the photo taken on the spot with the photo on the document and returns a result — the result reported by the provider is kept as evidence of this acceptance and the photos follow the retention period stated in the privacy notice —',
     ],
     'item4' => [
         'certificate' => [
@@ -161,6 +163,8 @@ return [
         'cpf_lookup' => '; the CPF you enter in the document, which is not checked only by its digits: it is also sent to a registry lookup service used by AssinaVelox, only to check the status of the number in that service\'s database, and the result of the lookup is recorded with the acceptance (the lookup does not confirm that you are the holder of the CPF)',
         'cpf' => '; the CPF you enter in the document, checked only by its digits (this does not confirm who holds it)',
         'photos' => '; the photos you send (:photos), kept as a record of the acceptance, with no face comparison, no image analysis and no reading of the document, and :retention',
+        // Phase 4 §4.1: sharing with the named provider and the purpose (LGPD art. 9 and 11).
+        'photos_verification' => '; the photos you send (:photos), forwarded to the external provider :provider only to compare the photo taken on the spot with the photo on the document (the platform does not compare the images: it sends the photos and records the provider\'s answer, which is kept as evidence of the acceptance), and :retention',
         'retention_days' => 'deleted :days days later',
         'retention_kept' => 'kept while the document exists in the sender\'s account',
     ],

@@ -14,6 +14,7 @@ use App\Models\SigningSessionDocument;
 use App\Models\User;
 use App\Services\Branding\BrandingPresenter;
 use App\Services\Identity\CaptureStep;
+use App\Services\Identity\VerificationStep;
 use App\Services\Identity\VideoStep;
 use App\Services\Signing\Certificates\ParticipantCertificateService;
 use App\Services\Signing\Channels\SignerAuthProps;
@@ -179,6 +180,17 @@ final class SignerPageProps
 
         if ($video !== null) {
             $props['identity_video'] = $video;
+        }
+
+        // Fase 4 §4.1: etapa de verificação facial com documento. A chave só existe quando a
+        // verificação foi exigida desta pessoa com a flag `identity_verification` ligada — sem
+        // ela, props idênticas (mesma regra do vídeo).
+        $verification = in_array($screen, ['identify', 'sign'], true)
+            ? app(VerificationStep::class)->props($context, $screen === 'sign' ? $session : null)
+            : null;
+
+        if ($verification !== null) {
+            $props['identity_verification'] = $verification;
         }
 
         if ($screen === 'sign' && $session !== null && $version !== null) {

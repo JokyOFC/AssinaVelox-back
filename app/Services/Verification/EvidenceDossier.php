@@ -13,6 +13,7 @@ use App\Models\Envelope;
 use App\Models\Recipient;
 use App\Services\Documents\EnvelopeDocuments;
 use App\Services\Identity\CaptureEvidence;
+use App\Services\Identity\VerificationEvidence;
 use App\Services\InPerson\InPersonEvidence;
 use App\Services\Signing\Channels\ChannelInvitations;
 use App\Services\Signing\Channels\SenderPins;
@@ -53,9 +54,12 @@ final class EvidenceDossier
         $captures = app(CaptureEvidence::class)->forEnvelope($envelope)['recipients'];
         $inPerson = collect(InPersonEvidence::forEnvelope($envelope))->keyBy('recipient_id');
         $pins = app(SenderPins::class);
+        // Fase 4 §4.1: tentativas de verificação facial com documento por participante (o que o
+        // PROVEDOR informou). Sem nenhuma, as chaves nem aparecem.
+        $verifications = collect(app(VerificationEvidence::class)->forEnvelope($envelope)['items'])->groupBy('recipient_id');
 
         return array_values($envelope->recipients
-            ->map(function (Recipient $recipient) use ($envelope, $firstByType, $captures, $inPerson, $pins): array {
+            ->map(function (Recipient $recipient) use ($envelope, $firstByType, $captures, $inPerson, $pins, $verifications): array {
                 $acceptance = $recipient->acceptance;
                 $key = (int) $recipient->getKey();
 
@@ -85,6 +89,10 @@ final class EvidenceDossier
                     'delivery_channel' => (ChannelInvitations::channelOf($recipient) ?? DeliveryChannel::Email)->value,
                     // Fase 2 §2.10: "imagem capturada pelo participante" — nunca verificação.
                     'identity_captures' => $captures[$recipient->ulid] ?? [],
+                    // Fase 4 §4.1: só para quem enviou fotos a um provedor externo. Para esse
+                    // participante o aviso das fotos é o alternativo (as imagens FORAM comparadas
+                    // — pelo provedor); a chave `identity_verification_notice` diz quem comparou.
+                    ...self::verificationKeys($verifications->get($recipient->ulid)),
                     // Fase 2 §2.6: aceite registrado no dispositivo presencial.
                     'in_person' => $inPerson->get($recipient->ulid),
                     'signature_kind' => $acceptance?->signature_kind?->value,
@@ -216,6 +224,30 @@ final class EvidenceDossier
             'not_a_certificate' => 'Esta página não é um certificado digital nem é emitida por '
                 .'autoridade certificadora, e não substitui a análise das partes sobre a validade do '
                 .'ato documentado.',
+        ];
+    }
+
+    /**
+     * Fase 4 §4.1: chaves do participante que enviou fotos a um provedor externo. Para ele o
+     * aviso das fotos é o alternativo (as imagens FORAM comparadas — pelo provedor, nomeado);
+     * `identity_verification_notice` diz quem comparou. Sem tentativa, nenhuma chave.
+     *
+     * @param  Collection<int, array<string, mixed>>|null  $attempts
+     * @return array<string, mixed>
+     */
+    private static function verificationKeys(?Collection $attempts): array
+    {
+        if ($attempts === null || $attempts->isEmpty()) {
+            return [];
+        }
+
+        $last = $attempts->last();
+        $providerLabel = is_string($last['provider_label'] ?? null) ? $last['provider_label'] : '';
+
+        return [
+            'identity_verifications' => $attempts->values()->all(),
+            'identity_verification_notice' => VerificationEvidence::NOTICE,
+            'identity_capture_notice' => CaptureEvidence::verificationNotice($providerLabel),
         ];
     }
 

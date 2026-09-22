@@ -30,6 +30,23 @@ final class CaptureEvidence
         .'arquivo do dispositivo) é a informada pelo navegador do participante e não é verificada.';
 
     /**
+     * Fase 4 §4.1: para o participante com verificação facial com documento exigida, o aviso
+     * acima seria falso — as imagens foram encaminhadas a um provedor externo, que as comparou.
+     * Este é o aviso desse participante (`%s` = nome do provedor); a constante original fica
+     * intacta para os demais. Quem comparou foi o provedor: a plataforma enviou e registrou.
+     */
+    public const VERIFICATION_NOTICE = 'As imagens abaixo foram enviadas pelo próprio participante durante o aceite e, por '
+        .'exigência de quem enviou o documento, encaminhadas ao provedor externo %s para a verificação facial com '
+        .'documento. Quem comparou as imagens foi o provedor; a plataforma enviou as fotos da captura e registrou a '
+        .'resposta, sem comparar rostos, analisar a imagem ou ler o documento fotografado por conta própria. A origem '
+        .'de cada imagem (câmera ou arquivo do dispositivo) é a informada pelo navegador do participante e não é verificada.';
+
+    public static function verificationNotice(string $providerLabel): string
+    {
+        return sprintf(self::VERIFICATION_NOTICE, $providerLabel);
+    }
+
+    /**
      * Rótulo completo do item: o meio e a origem declarada pelo navegador.
      */
     public static function label(?string $source): string

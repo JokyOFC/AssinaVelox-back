@@ -49,6 +49,9 @@ final class EnvelopePurger
      * @var list<string>
      */
     private const ENVELOPE_TABLES = [
+        // Fase 4 §4.1: tentativas e exigência da verificação facial (sem arquivo no disco).
+        'identity_verifications',
+        'identity_verification_requirements',
         'identity_captures',
         'identity_capture_requirements',
         'recipient_pins',

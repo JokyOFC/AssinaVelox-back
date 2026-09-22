@@ -41,12 +41,14 @@ Confira com `php -m`.
 
 ### Opcionais / por ambiente
 
-| Item                     | Quando                                                                                                                                          |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **LibreOffice** headless | Necessário para aceitar **DOCX**. Sem ele, `LIBREOFFICE_BIN` fica vazio, o conversor responde "não configurado" e só PDF e imagens são aceitos. |
-| **Redis**                | **Só em produção** (fila + Horizon + cache). Em desenvolvimento, fila e cache usam o driver `database`.                                         |
-| **Certificado A1**       | Opcional. Sem ele o envelope conclui como aceite eletrônico com evidências (`signature_status = none`).                                         |
-| Playwright + Chromium    | Só para a suíte `Browser` (`npx playwright install chromium`).                                                                                  |
+| Item                     | Quando                                                                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LibreOffice** headless | Necessário para aceitar **DOCX**. Sem ele, `LIBREOFFICE_BIN` fica vazio, o conversor responde "não configurado" e só PDF e imagens são aceitos.          |
+| **Redis**                | **Só em produção** (fila + Horizon + cache). Em desenvolvimento, fila e cache usam o driver `database`.                                                  |
+| **Certificado A1**       | Opcional. Sem ele o envelope conclui como aceite eletrônico com evidências (`signature_status = none`).                                                  |
+| Playwright + Chromium    | Só para a suíte `Browser` (`npx playwright install chromium`).                                                                                           |
+| **Conta na Verifiky**    | Só para a verificação facial com documento (flag `identity_verification`). Sem ela o recurso responde "não configurado". `docs/integracoes/verifiky.md`. |
+| **SMTP do proprietário** | Em produção (`MAIL_MAILER=smtp`, porta 587, `MAIL_SCHEME=tls`). Em desenvolvimento `log` basta. Teste com `php artisan assinavelox:mail-test`.           |
 
 ---
 

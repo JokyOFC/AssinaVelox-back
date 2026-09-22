@@ -123,6 +123,12 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
     // Só acréscimos (T7).
     $identityVideo = ['identity_video.requirement_updated', 'identity_video.recorded', 'identity_video.accessed'];
 
+    // Fase 4 §4.1 — verificação facial com documento por provedor externo
+    // (docs/fase-4/verificacao-facial.md). Só acréscimos (T7).
+    $identityVerification = [
+        'identity_verification.requirement_updated', 'identity_verification.submitted', 'identity_verification.completed',
+    ];
+
     // Fase 3, parte 2, onda F — etapas condicionais e delegação (F-FLOW,
     // docs/fase-3/etapas-e-delegacao.md §6). Só acréscimos (T7).
     $flow = [
@@ -153,8 +159,8 @@ it('contém todos os tipos de evento de auditoria da reconciliação', function 
     $embed = ['embedded_session.created', 'embedded_session.opened', 'embedded_session.revoked', 'embed_origins.updated'];
 
     expect(AuditEventType::values())
-        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api, ...$identityVideo, ...$flow, ...$i18n, ...$sso, ...$connectors, ...$embed])
-        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api) + count($identityVideo) + count($flow) + count($i18n) + count($sso) + count($connectors) + count($embed));
+        ->toEqualCanonicalizing([...$expected, ...$billing, ...$review, ...$phase2, ...$identity, ...$channels, ...$presence, ...$publicForms, ...$participantA1, ...$api, ...$identityVideo, ...$identityVerification, ...$flow, ...$i18n, ...$sso, ...$connectors, ...$embed])
+        ->toHaveCount(45 + 31 + count($identity) + count($channels) + count($presence) + count($publicForms) + count($participantA1) + count($api) + count($identityVideo) + count($identityVerification) + count($flow) + count($i18n) + count($sso) + count($connectors) + count($embed));
 
     // A lista da reconciliação continua inteira: nada foi renomeado nem removido.
     expect(array_intersect($expected, AuditEventType::values()))->toHaveCount(35);

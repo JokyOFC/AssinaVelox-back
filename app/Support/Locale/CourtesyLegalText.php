@@ -14,6 +14,7 @@ use App\Models\Recipient;
 use App\Models\SigningField;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Identity\IdentityFeatures;
+use App\Services\Identity\IdentityVerifications;
 use App\Services\Signing\Channels\ChannelAvailability;
 use App\Services\Signing\Channels\SenderPins;
 use App\Services\Signing\ConsentText;
@@ -208,7 +209,13 @@ final class CourtesyLegalText
             $extras .= self::text($locale, 'extras.cpf_lookup');
         }
 
-        if ($wave['photos'] !== []) {
+        if ($wave['photos'] !== [] && $wave['verification'] !== null) {
+            // Fase 4 §4.1: as fotos saem para o provedor nomeado (mesma leitura de ConsentText).
+            $extras .= self::text($locale, 'extras.photos_verification', [
+                'photos' => self::photos($locale, $wave['photos']),
+                'provider' => $wave['verification'],
+            ]);
+        } elseif ($wave['photos'] !== []) {
             $extras .= self::text($locale, 'extras.photos', ['photos' => self::photos($locale, $wave['photos'])]);
         }
 
@@ -244,8 +251,10 @@ final class CourtesyLegalText
         if ($wave['photos'] !== []) {
             $days = (int) config('assinavelox.capture.retention_days', 180);
 
-            $text .= self::text($locale, 'registered.photos', [
+            // Fase 4 §4.1: com a verificação exigida, a cláusula das fotos nomeia o provedor.
+            $text .= self::text($locale, $wave['verification'] !== null ? 'registered.photos_verification' : 'registered.photos', [
                 'photos' => self::photos($locale, $wave['photos']),
+                'provider' => (string) $wave['verification'],
                 'retention' => $days > 0
                     ? self::text($locale, 'registered.retention_days', ['days' => (string) $days])
                     : self::text($locale, 'registered.retention_kept'),
@@ -294,7 +303,10 @@ final class CourtesyLegalText
      * Mesma leitura de {@see ConsentText::waveB()} (privado lá): o que muda nos textos para este
      * participante. `null` = só e-mail, sem PIN, sem CPF e sem foto exigida.
      *
-     * @return array{channel: DeliveryChannel, pin: bool, cpf: bool, cpf_lookup: bool, photos: list<string>, simulated: bool}|null
+     * `verification` (Fase 4 §4.1): nome do provedor externo quando a verificação facial com
+     * documento está exigida (e a flag ligada); senão null.
+     *
+     * @return array{channel: DeliveryChannel, pin: bool, cpf: bool, cpf_lookup: bool, photos: list<string>, simulated: bool, verification: string|null}|null
      */
     private static function waveB(?Recipient $recipient): ?array
     {
@@ -318,6 +330,13 @@ final class CourtesyLegalText
             }
         }
 
+        $verification = null;
+
+        if ($photos !== [] && IdentityFeatures::identityVerification($organization)) {
+            $verifications = app(IdentityVerifications::class);
+            $verification = $verifications->requirement($recipient) !== null ? $verifications->provider()->label() : null;
+        }
+
         if ($channel === DeliveryChannel::Email && ! $pin && ! $cpf && $photos === []) {
             return null;
         }
@@ -330,6 +349,7 @@ final class CourtesyLegalText
             'photos' => $photos,
             'simulated' => $channel !== DeliveryChannel::Email
                 && (app(ChannelAvailability::class)->provider($channel)?->isSimulated() ?? false),
+            'verification' => $verification,
         ];
     }
 

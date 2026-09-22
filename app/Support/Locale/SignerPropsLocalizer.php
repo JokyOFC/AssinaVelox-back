@@ -149,6 +149,10 @@ final class SignerPropsLocalizer
             $props['identity_video'] = self::videoBlock($props['identity_video'], $locale);
         }
 
+        if (array_key_exists('identity_verification', $props)) {
+            $props['identity_verification'] = self::verificationBlock($props['identity_verification'], $locale);
+        }
+
         if (is_array($props['signer_auth'] ?? null)) {
             foreach (['method_label', 'channel_label', 'unavailable_reason', 'notice'] as $key) {
                 $props['signer_auth'][$key] = $t($props['signer_auth'][$key] ?? null);
@@ -213,6 +217,42 @@ final class SignerPropsLocalizer
         }
 
         $block['consent_reviewed'] = self::reviewed($locale);
+
+        return $block;
+    }
+
+    /**
+     * Bloco `identity_verification` (Fase 4 §4.1) — nas props e nas respostas JSON da etapa. O
+     * nome do provedor, o tipo de documento e o motivo informado pelo provedor viajam dentro das
+     * mensagens como partes variáveis do catálogo; a versão do consentimento (`consent.version`)
+     * continua sendo o SHA-256 do texto de referência.
+     */
+    public static function verificationBlock(mixed $block, SignerLocale $locale): mixed
+    {
+        if ($locale->isReference() || ! is_array($block)) {
+            return $block;
+        }
+
+        foreach (['status_label', 'message', 'provider_message', 'notice'] as $key) {
+            if (is_string($block[$key] ?? null)) {
+                $block[$key] = SignerMessageCatalog::translate($block[$key], $locale);
+            }
+        }
+
+        if (is_array($block['consent'] ?? null) && is_string($block['consent']['text'] ?? null)) {
+            $block['consent']['text'] = SignerMessageCatalog::translate($block['consent']['text'], $locale);
+            $block['consent']['reviewed'] = self::reviewed($locale);
+        }
+
+        if (is_array($block['document_types'] ?? null)) {
+            $block['document_types'] = array_map(static function (mixed $type) use ($locale): mixed {
+                if (is_array($type) && is_string($type['label'] ?? null)) {
+                    $type['label'] = SignerMessageCatalog::translate($type['label'], $locale);
+                }
+
+                return $type;
+            }, $block['document_types']);
+        }
 
         return $block;
     }

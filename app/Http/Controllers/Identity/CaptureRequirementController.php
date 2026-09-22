@@ -8,6 +8,7 @@ use App\Models\Recipient;
 use App\Services\Identity\CaptureKind;
 use App\Services\Identity\IdentityCaptures;
 use App\Services\Identity\IdentityFeatures;
+use App\Services\Identity\IdentityVerifications;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -53,6 +54,9 @@ class CaptureRequirementController extends Controller
             ! $envelope->status->isDraftLike() => 'A exigência de fotos só pode ser alterada antes do envio.',
             ! $recipient->participates() && $kinds !== [] => 'Visualizadores só recebem cópia: não registram aceite nem enviam fotos.',
             in_array(CaptureKind::DocumentBack->value, $kinds, true) && ! in_array(CaptureKind::DocumentFront->value, $kinds, true) => 'O verso do documento só pode ser exigido junto com a frente.',
+            // Fase 4 §4.1: a verificação facial com documento precisa das três fotos; enquanto
+            // ela estiver exigida, nenhuma delas pode sair da lista.
+            $this->verificationRequires($recipient) && array_diff(CaptureKind::photoValues(), $kinds) !== [] => 'Este participante tem a verificação facial com documento exigida: as três fotos continuam obrigatórias. Retire a verificação antes de mudar as fotos.',
             default => null,
         };
 
@@ -73,5 +77,15 @@ class CaptureRequirementController extends Controller
         return back()->with('success', $saved === []
             ? 'Fotos não serão exigidas deste participante.'
             : 'Fotos exigidas antes do aceite atualizadas.');
+    }
+
+    /**
+     * A verificação facial com documento (Fase 4 §4.1) está exigida deste participante e vale
+     * (flag ligada)? Sem a flag, a exigência gravada não conta e as fotos ficam livres.
+     */
+    private function verificationRequires(Recipient $recipient): bool
+    {
+        return IdentityFeatures::identityVerification(CurrentOrganization::instance()->get())
+            && app(IdentityVerifications::class)->requirement($recipient) !== null;
     }
 }

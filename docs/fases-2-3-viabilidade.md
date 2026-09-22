@@ -22,6 +22,7 @@ Item com classe composta (ex.: **A + B**) tem partes com destinos diferentes; a 
 
 1. **E-mail, SMS, WhatsApp, consulta de CPF e liveness/face match** são serviços próprios do proprietário e não têm documentação disponível. Por isso ficam em **B** (contrato + fake) e **nunca são substituídos por terceiros**. Isso vale para SERPRO Consulta CPF, provedores de SMS, Evolution/WPPConnect/Baileys e quaisquer outros. O envio de e-mail por SMTP da Fase 1 continua como está; o que fica em B é qualquer uso da **API** do provedor de e-mail, como verificação de domínio e status de entrega.
 2. **Biometria** (liveness/face match) é backlog futuro e **não será implementada**. A captura simples de foto e vídeo (§2.10, §3.3) não é biometria e nunca recebe esse rótulo.
+    > **Revisão de 2026-09-21 (decisão do proprietário).** O proprietário passou a ter um provedor documentado — a **Verifiky**, já integrada no metta-bank — e pediu a comparação facial com documento. As condições de entrada do roadmap §4 foram cumpridas (contrato com fake, resultado guardado como o provedor declarou, interface que só repete o provedor, retenção mínima) e o item virou a **Fase 4 §4.1** (`docs/fase-4/verificacao-facial.md`). A regra continua valendo no que importa: a **plataforma** não faz biometria — envia imagens a um terceiro nomeado e registra a resposta — e o rótulo continua proibido na interface (T1). A flag nasce desligada; base legal (LGPD art. 11), RIPD e texto de consentimento seguem sendo decisão jurídica antes de ligar.
 3. **e-Notariado** só entra com integração oficial disponível para o nosso caso.
 4. **gov.br** não pode presumir acesso comercial à API.
 5. **Carimbo ICP-Brasil** depende de contratar uma ACT credenciada.
@@ -79,10 +80,10 @@ Colunas: item | classificação | dependências externas | pacotes necessários 
 
 ### 1.3 Backlog (§4 do roadmap), confirmado
 
-| Item                        | Classe              | Motivo                                                |
-| --------------------------- | ------------------- | ----------------------------------------------------- |
-| Liveness / face match       | **Não implementar** | Regra fixa 2; o serviço próprio não tem documentação. |
-| IA, app offline, whitelabel | Fora de fase        | Sem mudança em relação ao roadmap §4.                 |
+| Item                        | Classe                                                 | Motivo                                                                                 |
+| --------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| Liveness / face match       | ~~Não implementar~~ → **A, por provedor** (2026-09-21) | Verifiky, integrada como no metta-bank: Fase 4 §4.1. Desligada até a decisão jurídica. |
+| IA, app offline, whitelabel | Fora de fase                                           | Sem mudança em relação ao roadmap §4.                                                  |
 
 ### 1.4 Contagem
 
@@ -186,7 +187,7 @@ Só o proprietário pode fornecer o que está abaixo. Entre colchetes, os itens 
 2. **SMS**: documentação (endpoint, autenticação, erros, limites, status), credenciais de homologação e custo por mensagem [§2.9].
 3. **WhatsApp Business**: documentação, templates pré-aprovados por finalidade, webhook de status com assinatura e credenciais; decisão entre número da operadora e número do cliente [§2.18, §2.9].
 4. **Consulta de CPF**: documentação (entradas exigidas, campos, códigos, SLA, custo) e credenciais [§2.11].
-5. **Identidade (liveness/face match)**: nada agora; permanece backlog [§4 do roadmap].
+5. **Identidade (comparação facial com documento)**: desde 2026-09-21, conta e chave na **Verifiky** (`VERIFIKY_API_KEY`), segredo do webhook (`VERIFIKY_WEBHOOK_SECRET`) com a URL `/webhooks/verifiky` cadastrada no painel, plano com créditos, e a decisão jurídica (base legal, RIPD, consentimento) — `docs/integracoes/verifiky.md` §7.
 
 ### 4.2 Contratos, contas e credenciais de terceiros
 

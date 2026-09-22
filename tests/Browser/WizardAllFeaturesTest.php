@@ -17,8 +17,8 @@ require_once __DIR__.'/../Feature/Support/OrganizationHelpers.php';
 | combinação "tudo ligado ao mesmo tempo" — interruptor global E plano — só apareceu na máquina
 | do proprietário. Este teste a reproduz nos dois primeiros passos do wizard (documento e
 | participantes, que concentram os recursos: modelos, vários arquivos, lembretes, papéis,
-| canais, PIN, captura, vídeo, idioma, etapas e delegação) e afirma que a página monta sem erro
-| de JavaScript e sem texto em inglês.
+| canais, PIN, captura, verificação facial com documento, vídeo, idioma, etapas e delegação) e
+| afirma que a página monta sem erro de JavaScript e sem texto em inglês.
 |
 | Sem documento o passo 2 é rebaixado ao passo 1 (`wizardStep()`), por isso o arquivo é enviado
 | pela rota real com o cliente de teste, como em PreparationTest — o plugin não atende multipart.
@@ -43,7 +43,7 @@ beforeEach(function () {
     // As mesmas chaves de plano que o seeder de demonstração liga na Horizonte.
     $keys = [];
     $seeder = new ReflectionClass(DemoOrganizationSeeder::class);
-    foreach (['PHASE2_PLAN_FEATURES', 'PHASE3_PART1_PLAN_FEATURES', 'PHASE3_WAVE_F_PLAN_FEATURES', 'PHASE3_WAVE_G_PLAN_FEATURES'] as $constant) {
+    foreach (['PHASE2_PLAN_FEATURES', 'PHASE3_PART1_PLAN_FEATURES', 'PHASE3_WAVE_F_PLAN_FEATURES', 'PHASE3_WAVE_G_PLAN_FEATURES', 'PHASE4_PLAN_FEATURES'] as $constant) {
         $keys = array_merge($keys, (array) $seeder->getConstant($constant));
     }
 
@@ -90,4 +90,12 @@ it('abre a nova solicitação com todos os recursos ligados sem erro de JavaScri
     $page->assertSee('Ordem de assinatura')
         ->assertNoJavaScriptErrors();
     browserAssertNoEnglish($page, 'wizard com tudo ligado · participantes');
+
+    // Um participante novo monta todos os controles por participante de uma vez: fotos,
+    // verificação facial com documento (Fase 4 §4.1), vídeo, PIN e idioma.
+    $page->click('internal:role=button[name="Adicionar signatário"s]');
+    $page->assertSee('Fotos antes do aceite')
+        ->assertSee('Verificação facial com documento pelo provedor')
+        ->assertNoJavaScriptErrors();
+    browserAssertNoEnglish($page, 'wizard com tudo ligado · participante novo');
 });

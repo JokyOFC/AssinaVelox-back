@@ -107,6 +107,16 @@ export interface WizardProps {
      * participante, `{ [recipientUlid]: kinds[] }`. Só usada com `features.identity_capture`.
      */
     capture_requirements?: Record<string, CaptureKind[]> | null;
+    /**
+     * Fase 4 §4.1 (`IdentityFeatures::identityVerification`): verificação facial com documento
+     * disponível para esta organização (flag global E plano, com `identity_capture`).
+     * Ausente ou `false` = passo 2 sem o controle.
+     */
+    verification_enabled?: boolean;
+    /** `{ [recipientUlid]: true }` (`IdentityVerifications::requirementsForEnvelope`); `null` sem a flag. */
+    verification_requirements?: Record<string, true> | null;
+    /** Nome do provedor que compara as fotos ('Verifiky' | 'Simulador' | 'Não configurado'); `null` sem a flag. */
+    verification_provider_label?: string | null;
     recipients: WizardRecipient[];
     fields: WizardField[];
     folders: FolderRef[];
@@ -262,6 +272,9 @@ export default function EnvelopeWizard({
     reminders,
     channels = null,
     capture_requirements = null,
+    verification_enabled = false,
+    verification_requirements = null,
+    verification_provider_label = null,
     recipients: serverRecipients,
     fields: serverFields,
     folders,
@@ -290,6 +303,11 @@ export default function EnvelopeWizard({
     const [captureRequirements, setCaptureRequirements] = useState<
         Record<string, CaptureKind[]>
     >(capture_requirements ?? {});
+    // Fase 4 §4.1: o servidor já decidiu pela organização (flag global E plano, com captura).
+    const verificationEnabled = verification_enabled === true;
+    const [verificationRequirements, setVerificationRequirements] = useState<
+        Record<string, true>
+    >(verification_requirements ?? {});
 
     const [metadata, setMetadata] = useState<WizardMetadata>({
         title: envelope.title,
@@ -1145,6 +1163,25 @@ export default function EnvelopeWizard({
                                 ...current,
                                 [recipientId]: kinds,
                             }))
+                        }
+                        verificationEnabled={verificationEnabled}
+                        verificationRequirements={verificationRequirements}
+                        verificationProviderLabel={verification_provider_label}
+                        onVerificationRequirementChange={(
+                            recipientId,
+                            required,
+                        ) =>
+                            setVerificationRequirements((current) => {
+                                const next = { ...current };
+
+                                if (required) {
+                                    next[recipientId] = true;
+                                } else {
+                                    delete next[recipientId];
+                                }
+
+                                return next;
+                            })
                         }
                     />
                 )}

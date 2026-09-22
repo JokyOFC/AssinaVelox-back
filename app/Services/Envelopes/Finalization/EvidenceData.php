@@ -17,6 +17,7 @@ use App\Services\Branding\BrandingPresenter;
 use App\Services\Branding\Stamp\StampEvidence;
 use App\Services\Envelopes\Finalization\Support\QrCode;
 use App\Services\Envelopes\Steps\FlowEvidence;
+use App\Services\Identity\VerificationEvidence;
 use App\Services\Identity\VideoEvidence;
 use App\Services\InPerson\InPersonEvidence;
 use App\Services\Signing\Channels\SenderPins;
@@ -240,6 +241,8 @@ class EvidenceData
         $inPerson = collect(InPersonEvidence::forEnvelope($envelope))->keyBy('recipient_id')->all();
         // Fase 3 §3.3 (F-VIDEO): o vídeo curto é só CITADO (tipo, SHA-256, origem declarada); nunca embutido.
         $videos = app(VideoEvidence::class)->pdfLines($envelope);
+        // Fase 4 §4.1: o que o PROVEDOR informou da verificação facial com documento vinculada ao aceite.
+        $verifications = app(VerificationEvidence::class)->pdfLines($envelope, $timezone);
         // Fase 3 §3.3 (F-FLOW): delegação e etapa pulada por participante (sem elas, vazio).
         $flowNotes = FlowEvidence::participantNotes($envelope, $timezone);
 
@@ -274,6 +277,12 @@ class EvidenceData
                 'in_person_label' => $inPerson[$recipient->ulid]['label'] ?? null,
                 // F-VIDEO: a chave só existe para quem enviou vídeo (sem vídeo, dados idênticos).
                 ...(isset($videos[$recipient->ulid]) ? ['identity_video_label' => $videos[$recipient->ulid]] : []),
+                // Fase 4 §4.1: as chaves só existem para quem teve a verificação facial aprovada e
+                // vinculada ao aceite (sem ela, dados idênticos). O aviso diz quem comparou.
+                ...(isset($verifications[$recipient->ulid]) ? [
+                    'identity_verification_label' => $verifications[$recipient->ulid],
+                    'identity_verification_notice' => VerificationEvidence::NOTICE,
+                ] : []),
                 // F-I18N: a chave só existe quando o aceite registrou o idioma exibido (flag ligada).
                 ...($acceptance?->display_locale !== null ? ['display_locale_label' => SignerLocale::evidenceLabel($acceptance->display_locale)] : []),
                 // F-FLOW: a chave só existe para quem delegou, recebeu por delegação ou ficou numa etapa pulada.

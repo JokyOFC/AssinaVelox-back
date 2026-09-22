@@ -93,6 +93,9 @@ class OrganizationPurge
         'impersonations',
         // Fase 2, onda B (antes dos envelopes, destinatários, aceites e modelos que referenciam).
         // `identity_captures` e `identity_capture_requirements` são RESTRICT na organização.
+        // Fase 4 §4.1: as tentativas e a exigência da verificação facial também (sem arquivo).
+        'identity_verifications',
+        'identity_verification_requirements',
         'identity_captures',
         'identity_capture_requirements',
         'recipient_pins',

@@ -102,9 +102,11 @@ return Application::configure(basePath: dirname(__DIR__))
             EnforceOrganizationSso::class,
         ]);
 
-        // Webhook do Mercado Pago: sem CSRF (autenticado por assinatura do provedor).
+        // Webhooks do Mercado Pago e da Verifiky (Fase 4 §4.1): sem CSRF (autenticados pela
+        // assinatura do provedor; sem segredo configurado, nenhum aviso é aceito).
         $middleware->validateCsrfTokens(except: [
             'webhooks/mercadopago',
+            'webhooks/verifiky',
         ]);
 
         $middleware->alias([

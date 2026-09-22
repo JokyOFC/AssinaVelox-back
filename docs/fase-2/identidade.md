@@ -196,8 +196,13 @@ imagem nem o caminho. `source` é o que o navegador declarou (`camera` | `upload
 
 ## 6. Biometria — futuro
 
-`IdentityVerificationProvider` continua reservado e sem implementação. Liveness e face match são backlog
-(regra fixa 2); o serviço próprio não tem documentação.
+Até 2026-09-21, `IdentityVerificationProvider` era um contrato reservado, sem implementação. Nessa data o
+proprietário pediu a comparação facial com documento pela **Verifiky** (já integrada no metta-bank) e o
+contrato ganhou adaptador real, simulador e fábrica: **Fase 4 §4.1**, `docs/fase-4/verificacao-facial.md`.
+
+O que NÃO mudou: a captura simples desta seção continua sendo só captura quando o remetente não exige a
+verificação; e o vocabulário proibido (§1) vale também lá — quem compara é o provedor, e a interface só
+repete o que ele informou.
 
 ## 7. Contrato de props para o front
 

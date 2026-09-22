@@ -18,6 +18,12 @@ import {
     CaptureStepPreview,
 } from '@/components/identity/capture-step';
 import {
+    useVerificationStep,
+    VerificationStepCard,
+    VerificationStepPreview,
+} from '@/components/identity/verification-step';
+import type { IdentityVerificationStep } from '@/components/identity/verification-types';
+import {
     useVideoStep,
     VideoCaptureStepCard,
 } from '@/components/identity/video-capture-step';
@@ -291,6 +297,11 @@ export interface SignShowProps {
     identity_capture?: IdentityCaptureStep | null;
     /** Fase 3 §3.3 (F-VIDEO): só existe quando o vídeo curto foi exigido desta pessoa. */
     identity_video?: IdentityVideoStep | null;
+    /**
+     * Fase 4 §4.1 (`VerificationStep::props`): só existe quando a verificação facial com
+     * documento foi exigida desta pessoa. Sem sessão (tela `identify`) vem sem URLs.
+     */
+    identity_verification?: IdentityVerificationStep | null;
     limits?: {
         otp_length?: number;
         otp_ttl_minutes?: number;
@@ -467,6 +478,7 @@ export default function SignShow(props: SignShowProps) {
         copy = null,
         identity_capture = null,
         identity_video = null,
+        identity_verification = null,
     } = props;
 
     const i18n = useI18n();
@@ -497,6 +509,13 @@ export default function SignShow(props: SignShowProps) {
 
     // Fase 3 §3.3 (F-VIDEO): vídeo curto exigido; o servidor recusa o aceite sem ele.
     const videoCapture = useVideoStep(identity_video);
+
+    /*
+     * Fase 4 §4.1: verificação facial com documento exigida. O bloco muda pela resposta de cada
+     * foto (`CaptureController@store`), de cada envio e de cada consulta ao resultado; o
+     * servidor recusa o aceite sem "aprovado" do provedor (`identity_verification_required`).
+     */
+    const verification = useVerificationStep(identity_verification);
 
     const stampOwner = {
         brand: sender.brand ?? null,
@@ -805,6 +824,10 @@ export default function SignShow(props: SignShowProps) {
     });
     // Fotos exigidas (§2.10): o servidor recusa o aceite sem elas (`identity_capture_missing`).
     const captureReady = captureStep === null || captureStep.complete;
+    // Verificação facial com documento (Fase 4 §4.1): só "aprovado" do provedor sobre as fotos
+    // atuais libera; o servidor recusa com `identity_verification_required` e a mensagem chega
+    // em `errors.signature`, como a das fotos.
+    const verificationReady = verification.ready;
 
     const canSubmit =
         accepted &&
@@ -813,6 +836,7 @@ export default function SignShow(props: SignShowProps) {
         !cpfInvalid &&
         captureReady &&
         videoCapture.ready &&
+        verificationReady &&
         (!needsSignature || signature !== null) &&
         (!needsInitials || initials !== null) &&
         !submitting;
@@ -1168,10 +1192,20 @@ export default function SignShow(props: SignShowProps) {
                             }
                             auth={auth}
                             extra={
-                                identity_capture ? (
-                                    <CaptureStepPreview
-                                        step={identity_capture}
-                                    />
+                                identity_capture || identity_verification ? (
+                                    <div className="flex flex-col gap-2">
+                                        {identity_capture && (
+                                            <CaptureStepPreview
+                                                step={identity_capture}
+                                            />
+                                        )}
+                                        {/* Fase 4 §4.1: sem sessão só o aviso, nomeando o provedor. */}
+                                        {identity_verification && (
+                                            <VerificationStepPreview
+                                                step={identity_verification}
+                                            />
+                                        )}
+                                    </div>
                                 ) : undefined
                             }
                         />
@@ -1519,6 +1553,16 @@ export default function SignShow(props: SignShowProps) {
                             <CaptureStepCard
                                 step={captureStep}
                                 onChange={setCaptureStep}
+                                onVerificationChange={verification.setStep}
+                                className="border-border border-t pt-4"
+                            />
+                        )}
+
+                        {/* Fase 4 §4.1: logo abaixo das fotos, que são as que vão ao provedor. */}
+                        {verification.step && (
+                            <VerificationStepCard
+                                step={verification.step}
+                                onChange={verification.setStep}
                                 className="border-border border-t pt-4"
                             />
                         )}
@@ -1606,6 +1650,11 @@ export default function SignShow(props: SignShowProps) {
                                         .map((item) => item.label.toLowerCase())
                                         .join(', '),
                                 })}
+                            </p>
+                        )}
+                        {!verificationReady && (
+                            <p className="text-warning text-[12.5px]">
+                                {t('verification.warn', { verb })}
                             </p>
                         )}
                         {(localError ||

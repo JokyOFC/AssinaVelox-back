@@ -190,6 +190,17 @@ enum AuditEventType: string
     case IdentityVideoRecorded = 'identity_video.recorded';
     case IdentityVideoAccessed = 'identity_video.accessed';
 
+    // Fase 4 §4.1 (docs/fase-4/verificacao-facial.md) — verificação facial com documento por
+    // PROVEDOR EXTERNO. Gravados no envelope. Payload só com ULIDs, provedor, tipo de documento,
+    // status e código de motivo devolvidos pelo provedor, número da tentativa e versão do
+    // consentimento — nunca imagem, caminho no disco, dado lido do documento ou segredo.
+    // `submitted`: o participante autorizou e as fotos entraram na fila de envio (ator: participante).
+    // `completed`: o provedor respondeu (na hora, por webhook ou por consulta) — ator `system`,
+    // porque quem afirma o resultado é o provedor; a plataforma só o registra.
+    case IdentityVerificationRequirementUpdated = 'identity_verification.requirement_updated';
+    case IdentityVerificationSubmitted = 'identity_verification.submitted';
+    case IdentityVerificationCompleted = 'identity_verification.completed';
+
     // Fase 3 §3.3 (F-I18N, docs/fase-3/multilingue.md §8) — idioma do participante. Gravados no
     // envelope. Payload só com o ULID do participante e os códigos de idioma (lista fechada).
     // `recipient.locale_updated`: o remetente definiu o idioma dos e-mails e da página.
@@ -277,6 +288,9 @@ enum AuditEventType: string
             self::IdentityVideoRequirementUpdated => 'Exigência de vídeo curto do participante alterada',
             self::IdentityVideoRecorded => 'Vídeo curto enviado pelo participante',
             self::IdentityVideoAccessed => 'Vídeo curto do participante reproduzido ou baixado',
+            self::IdentityVerificationRequirementUpdated => 'Exigência de verificação facial com documento do participante alterada',
+            self::IdentityVerificationSubmitted => 'Fotos enviadas pelo participante ao provedor de verificação facial com documento',
+            self::IdentityVerificationCompleted => 'Provedor de verificação facial com documento respondeu',
             self::ParticipantCertificateRequested => 'Participante optou por assinar com o próprio certificado',
             self::ParticipantCertificateWithdrawn => 'Participante desistiu de assinar com o próprio certificado',
             self::ParticipantCertificateSubmitted => 'Certificado do participante conferido e autorizado para uso',

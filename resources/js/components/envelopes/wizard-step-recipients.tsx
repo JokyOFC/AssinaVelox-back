@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { CaptureRequirementControl } from '@/components/envelopes/capture-requirement-control';
+import { VerificationRequirementControl } from '@/components/identity/verification-requirement-control';
 import { VideoRequirementControl } from '@/components/identity/video-requirement-control';
 import { RecipientLocaleControl } from '@/components/envelopes/recipient-locale-control';
 import {
@@ -95,6 +96,10 @@ export function roleOf(recipient: {
  *   com o motivo quando SMS/WhatsApp estão indisponíveis e o selo "simulado" no simulador;
  * - `channels.pin.enabled` (§2.9, `pin_auth`): PIN do remetente por participante;
  * - `captureEnabled` (§2.10, `identity_capture`): fotos exigidas antes do aceite.
+ *
+ * Fase 4 §4.1 — `verificationEnabled` (`identity_verification`, que exige `identity_capture`):
+ * verificação facial com documento pelo provedor nomeado; ligar torna as três fotos obrigatórias
+ * e o controle das fotos é atualizado com a resposta do servidor.
  */
 export function WizardStepRecipients({
     recipients,
@@ -111,6 +116,10 @@ export function WizardStepRecipients({
     captureEnabled = false,
     captureRequirements = {},
     onCaptureRequirementChange,
+    verificationEnabled = false,
+    verificationRequirements = {},
+    verificationProviderLabel = null,
+    onVerificationRequirementChange,
 }: {
     recipients: WizardRecipient[];
     signingOrder: SigningOrder;
@@ -129,6 +138,15 @@ export function WizardStepRecipients({
     onCaptureRequirementChange?: (
         recipientId: string,
         kinds: CaptureKind[],
+    ) => void;
+    verificationEnabled?: boolean;
+    /** `{ [recipientUlid]: true }` (`IdentityVerifications::requirementsForEnvelope`). */
+    verificationRequirements?: Record<string, true>;
+    /** Nome do provedor que vai comparar as fotos ('Verifiky' | 'Simulador' | …). */
+    verificationProviderLabel?: string | null;
+    onVerificationRequirementChange?: (
+        recipientId: string,
+        required: boolean,
     ) => void;
 }) {
     const channelsEnabled = channels?.enabled === true;
@@ -598,6 +616,43 @@ export function WizardStepRecipients({
                                     }
                                     disabled={disabled}
                                     onSaved={(kinds) =>
+                                        recipient.id &&
+                                        onCaptureRequirementChange?.(
+                                            recipient.id,
+                                            kinds,
+                                        )
+                                    }
+                                />
+                            </div>
+                        )}
+
+                        {/* Fase 4 §4.1: só com `verification_enabled` (flag da organização) e para quem registra aceite. */}
+                        {verificationEnabled && envelopeId && !viewer && (
+                            <div className="border-muted border-t pt-3">
+                                <VerificationRequirementControl
+                                    envelopeId={envelopeId}
+                                    recipientId={recipient.id}
+                                    recipientName={recipient.name}
+                                    providerLabel={
+                                        verificationProviderLabel ??
+                                        'Não configurado'
+                                    }
+                                    required={
+                                        recipient.id
+                                            ? verificationRequirements[
+                                                  recipient.id
+                                              ] === true
+                                            : false
+                                    }
+                                    disabled={disabled}
+                                    onSaved={(required) =>
+                                        recipient.id &&
+                                        onVerificationRequirementChange?.(
+                                            recipient.id,
+                                            required,
+                                        )
+                                    }
+                                    onCaptureKindsChange={(kinds) =>
                                         recipient.id &&
                                         onCaptureRequirementChange?.(
                                             recipient.id,

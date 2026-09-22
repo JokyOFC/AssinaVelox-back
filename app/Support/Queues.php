@@ -21,6 +21,9 @@ final class Queues
         'assinavelox.queues.notifications',
         'assinavelox.queues.conversions',
         'assinavelox.queues.default',
+        // Fase 4 §4.1: o participante espera na tela o resultado do provedor de verificação
+        // facial — logo depois das filas de tela, antes do trabalho longo (padrão: `default`).
+        'assinavelox.identity_verification.queue',
         'assinavelox.queues.finalization',
         'assinavelox.queues.billing',
         'assinavelox.field_anchors.queue',

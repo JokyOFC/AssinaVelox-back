@@ -70,6 +70,8 @@ return [
     'extras' => [
         'cpf_lookup' => ', o resultado da consulta cadastral do CPF que informei, feita a um serviço usado pela AssinaVelox (a consulta não confirma que sou o titular do CPF)',
         'photos' => ', as fotos que enviei nesta tela (:photos), guardadas como registro, sem verificação de identidade',
+        // Fase 4 §4.1: com a verificação facial com documento exigida, as fotos saem para o provedor nomeado.
+        'photos_verification' => ', as fotos que enviei nesta tela (:photos), encaminhadas ao provedor externo :provider, que compara a foto tirada na hora com a foto do documento e devolve um resultado — o resultado informado pelo provedor fica guardado como evidência deste aceite e as fotos seguem o prazo de guarda informado no aviso de privacidade —',
     ],
     'item4' => [
         'certificate' => [
@@ -168,6 +170,8 @@ return [
         'cpf_lookup' => '; o CPF que você digitar no documento, que não é conferido apenas pelos dígitos: ele também é enviado a um serviço de consulta cadastral usado pela AssinaVelox, só para conferir a situação do número na base desse serviço, e o resultado da consulta fica registrado com o aceite (a consulta não confirma que você é o titular do CPF)',
         'cpf' => '; o CPF que você digitar no documento, conferido apenas pelos dígitos (isso não confirma a titularidade)',
         'photos' => '; as fotos que você enviar (:photos), guardadas como registro do aceite, sem comparação de rostos, sem análise da imagem e sem leitura do documento, e :retention',
+        // Fase 4 §4.1: compartilhamento com o provedor nomeado e a finalidade (LGPD art. 9º e 11).
+        'photos_verification' => '; as fotos que você enviar (:photos), encaminhadas ao provedor externo :provider só para comparar a foto tirada na hora com a foto do documento (a plataforma não compara as imagens: ela envia as fotos e registra a resposta do provedor, que fica guardada como evidência do aceite), e :retention',
         'retention_days' => 'apagadas :days dias depois',
         'retention_kept' => 'guardadas enquanto o documento existir na conta da remetente',
     ],

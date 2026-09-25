@@ -193,6 +193,8 @@ export interface Features {
 
 export interface SharedProps {
     name: string;
+    /** Site institucional (assinavelox.com.br): destino do logo nas cascas pública e de autenticação. */
+    site_url: string;
     auth: { user: AuthUser | null };
     organization: CurrentOrganization | null;
     organizations: OrganizationSummary[];

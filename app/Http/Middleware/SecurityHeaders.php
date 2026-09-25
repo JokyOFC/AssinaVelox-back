@@ -109,7 +109,9 @@ class SecurityHeaders
     {
         // Fase 2, onda B: dispositivo presencial (C-PRES) e formulário público (C-FORM) também
         // carregam segredo na sessão ou token na URL.
-        return $request->is('assinar', 'assinar/*', 'verificar', 'verificar/*', 'presencial', 'presencial/*', 'formulario/*');
+        // A consulta em JSON para o site institucional (docs/site-institucional.md) responde sobre
+        // o mesmo código impresso no documento: mesmos cabeçalhos da página /verificar.
+        return $request->is('assinar', 'assinar/*', 'verificar', 'verificar/*', 'api/site/verificar/*', 'presencial', 'presencial/*', 'formulario/*');
     }
 
     protected function policy(string $nonce): string

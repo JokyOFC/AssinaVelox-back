@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import AppLogo from '@/components/app-logo';
 import { FlashToaster } from '@/components/flash-toaster';
 import { Button } from '@/components/ui/button';
-import { dashboard, home, login, register } from '@/routes';
+import { useSiteUrl } from '@/hooks/use-site-url';
+import { dashboard, login, register } from '@/routes';
 import { privacy, terms } from '@/routes/legal';
 import { index as verifyIndex } from '@/routes/verify';
 
@@ -29,13 +30,14 @@ export default function PublicLayout({
         ReturnType<typeof usePage>['props']
     >;
     const user = auth?.user ?? null;
+    const siteUrl = useSiteUrl();
 
     return (
         <div className="bg-background text-foreground flex min-h-svh flex-col text-[14px]">
             <header className="border-border flex h-[60px] items-center gap-4 border-b bg-white px-4 md:px-6">
-                <Link href={home()} className="inline-block">
+                <a href={siteUrl} className="inline-block">
                     <AppLogo height={28} />
-                </Link>
+                </a>
                 <nav className="ml-auto flex items-center gap-2 text-[13.5px]">
                     <Link
                         href={verifyIndex()}

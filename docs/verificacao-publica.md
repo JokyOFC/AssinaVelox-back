@@ -96,6 +96,14 @@ negação de serviço.
   `/verificar/*`, aplicados por `App\Http\Middleware\SecurityHeaders` — **inclusive na resposta de
   "não encontrado"**, que é justamente a que um buscador ou um proxy encontraria.
 
+### 1.7 Consulta pelo site institucional
+
+O site em assinavelox.com.br oferece a mesma verificação em `GET /api/site/verificar/{code}`
+(`Site\VerificationController`, `routes/site.php`): o `result` é o mesmo de
+`PublicVerification::result()`, com a mesma resposta uniforme e os mesmos cabeçalhos
+`noindex`/`no-referrer`. Nada é decidido lá sobre o que pode sair — ver
+`docs/site-institucional.md` §2.2.
+
 ---
 
 ## 2. Conferência de arquivo

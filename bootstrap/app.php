@@ -45,6 +45,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // (sem sessão do app, sem cookie, sem CSRF — autenticação pelo token no cabeçalho).
         then: function (): void {
             Route::group([], __DIR__.'/../routes/embed.php');
+            // API do site institucional (docs/site-institucional.md): `/api/site/*`, também FORA
+            // do grupo `web` e fora da pilha `api` (sem token): consultas públicas, sem sessão.
+            Route::group([], __DIR__.'/../routes/site.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

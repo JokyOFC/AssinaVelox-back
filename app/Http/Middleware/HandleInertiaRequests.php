@@ -74,6 +74,9 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            // Site institucional (docs/site-institucional.md): destino do logo nas cascas de
+            // autenticação e pública — o app não tem página inicial própria.
+            'site_url' => (string) config('assinavelox.site_url'),
             'auth' => [
                 'user' => fn () => $this->authUser($request->user()),
             ],

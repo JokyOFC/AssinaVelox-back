@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import AppLogo from '@/components/app-logo';
 import { FlashToaster } from '@/components/flash-toaster';
-import { home } from '@/routes';
+import { useSiteUrl } from '@/hooks/use-site-url';
 import { privacy, terms } from '@/routes/legal';
 
 export type AuthLayoutProps = {
@@ -45,6 +45,10 @@ export default function AuthLayout({
     hideHeader = false,
     maxWidth = 400,
 }: AuthLayoutProps) {
+    // O app não tem página inicial: `home` redireciona para o próprio login. O logo leva ao
+    // site institucional (assinavelox.com.br), como em qualquer produto.
+    const siteUrl = useSiteUrl();
+
     return (
         <div className="bg-background text-foreground flex min-h-svh text-[14px]">
             <aside className="bg-navy relative hidden min-w-[360px] flex-[0_0_44%] flex-col justify-between overflow-hidden px-12 py-10 text-white lg:flex">
@@ -56,9 +60,9 @@ export default function AuthLayout({
                             'radial-gradient(circle, rgba(46,123,239,.35), rgba(46,123,239,0) 70%)',
                     }}
                 />
-                <Link href={home()} className="relative inline-block w-fit">
+                <a href={siteUrl} className="relative inline-block w-fit">
                     <AppLogo inverted height={34} />
-                </Link>
+                </a>
 
                 <div className="relative">
                     <p className="text-on-navy-muted mb-4 text-[11px] font-semibold tracking-[.24em] uppercase">
@@ -127,12 +131,9 @@ export default function AuthLayout({
                     className="flex w-full flex-col gap-6"
                     style={{ maxWidth }}
                 >
-                    <Link
-                        href={home()}
-                        className="inline-block w-fit lg:hidden"
-                    >
+                    <a href={siteUrl} className="inline-block w-fit lg:hidden">
                         <AppLogo height={30} />
-                    </Link>
+                    </a>
                     {!hideHeader && (title || description) && (
                         <div>
                             {title && (

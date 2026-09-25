@@ -1524,6 +1524,10 @@ return [
     'help_url' => env('ASSINAVELOX_HELP_URL', 'https://ajuda.assinavelox.com.br'),
     'support_email' => env('ASSINAVELOX_SUPPORT_EMAIL', 'suporte@assinavelox.com.br'),
 
+    // Site institucional (docs/site-institucional.md). O app vive em app.assinavelox.com.br e
+    // não tem página inicial própria: o logo das cascas pública e de autenticação leva para cá.
+    'site_url' => rtrim((string) env('ASSINAVELOX_SITE_URL', 'https://assinavelox.com.br'), '/'),
+
     /*
     |--------------------------------------------------------------------------
     | Fase 2, onda C §2.12 — assinatura com o certificado A1 do PRÓPRIO participante (K-A1)

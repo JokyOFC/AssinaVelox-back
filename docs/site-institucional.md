@@ -73,13 +73,12 @@ oferta. Cada item:
 
 `features` são os rótulos de `PlanController::featureLabels()` — inclusive a regra de só anunciar
 a assinatura criptográfica da operadora quando há certificado ativo. `cta` é `register` (o botão
-abre o cadastro do app) ou `contact` (plano Empresarial: conversa comercial, no próprio site).
-`highlighted` marca o plano Profissional.
+abre o cadastro do app); `contact` fica reservado para um plano futuro sem preço público (o site
+o renderiza como "Sob consulta" com botão para o contato). `highlighted` marca o plano Profissional.
 
-Em produção, com o catálogo do seeder, só o plano Grátis é anunciado até que os planos pagos
-sejam marcados como públicos e não sandbox — pela tela Painel interno › Planos
-(`docs/cobranca.md` §18), não por código. O site completa a grade com um cartão "Empresarial · sob consulta" quando o catálogo não
-traz o plano Empresarial, porque esse cartão é um convite à conversa, não um preço.
+O catálogo anunciado é o da tabela `plans` (Painel interno › Planos, `docs/cobranca.md` §16 e
+§18): hoje Básico, Profissional e Empresarial; o Grátis é privado e não sai aqui. Se a API falhar ou vier vazia, o site mostra o catálogo de referência embutido nele
+(`FALLBACK_PLANS` em `src/pages/Planos.jsx`) com um aviso — mantenha-o igual ao seeder.
 
 ### 2.2 Verificação por código
 

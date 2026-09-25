@@ -18,8 +18,8 @@ use Illuminate\Http\JsonResponse;
  * valor que a própria plataforma diz ser fictício.
  *
  * Não há sessão nem organização: nada aqui depende de quem consulta. O site decide para onde
- * cada botão leva a partir de `cta` (`register` abre o cadastro do app; `contact` é a conversa
- * comercial, no próprio site).
+ * cada botão leva a partir de `cta` (`register` abre o cadastro do app; `contact`, reservado,
+ * seria a conversa comercial no próprio site).
  */
 class PlanCatalogController extends Controller
 {
@@ -70,7 +70,9 @@ class PlanCatalogController extends Controller
             'highlighted' => $plan->code === Plan::CODE_PROFESSIONAL,
             'is_sandbox' => $sandbox,
             'price_is_placeholder' => $sandbox && ! $plan->isFree(),
-            'cta' => $plan->code === Plan::CODE_ENTERPRISE ? 'contact' : 'register',
+            // Todos os planos têm preço público e abrem o cadastro; `contact` fica reservado para
+            // um plano futuro "sob consulta" (o site já o renderiza assim).
+            'cta' => 'register',
             'register_url' => route('register'),
         ];
     }

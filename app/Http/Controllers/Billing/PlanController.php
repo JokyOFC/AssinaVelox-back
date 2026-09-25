@@ -104,9 +104,10 @@ class PlanController extends Controller
             'price_is_placeholder' => $sandbox && ! $plan->isFree(),
             'is_public' => (bool) $plan->is_public,
             'highlighted' => $plan->code === Plan::CODE_PROFESSIONAL,
+            // Todos os planos têm preço e são contratados no checkout; `contact` fica reservado
+            // para um plano futuro sem preço público (a interface já o entende).
             'cta' => match (true) {
                 $plan->code === $currentCode => 'current',
-                $plan->code === Plan::CODE_ENTERPRISE => 'contact',
                 $plan->sort_order > $currentSort => 'upgrade',
                 default => 'downgrade',
             },

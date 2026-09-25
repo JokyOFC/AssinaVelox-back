@@ -538,21 +538,27 @@ Fila: `billing` (Horizon em produção, driver `database` em dev). Agendamento:
 
 ---
 
-## 16. Planos e preços fictícios
+## 16. Catálogo inicial e planos sandbox
 
-O `PlanSeeder` marca **todos** os planos pagos como `is_sandbox = true` e
-`is_public = false`: os preços (`R$ 49,00` e `R$ 399,00`) são placeholders de
-desenvolvimento, **não** uma oferta comercial.
+O `PlanSeeder` cria a oferta comercial (setembro/2026): **Básico** R$ 149 (5 documentos/mês,
+código por e-mail), **Profissional** R$ 249 (50 documentos/mês, código por e-mail) e
+**Empresarial** R$ 349 (100 documentos/mês, e-mail e WhatsApp), todos mensais, públicos e
+sem cota de usuários. O plano **Grátis** continua existindo — é o plano inicial de toda
+organização nova (`CreateOrganization`) — mas privado (`is_public = false`): não é anunciado.
+O WhatsApp do Empresarial só funciona com o interruptor global
+`ASSINAVELOX_FEATURE_SMS_WHATSAPP` ligado e o provedor configurado (docs/fase-2/canais-e-pin.md).
+
+Depois do primeiro seed, a fonte de verdade é a tela **Painel interno › Planos** (§18); o
+seeder é idempotente (`updateOrCreate` por `code`) e rodá-lo de novo sobrescreve o que a tela
+alterou.
+
+`is_sandbox` continua disponível para marcar um plano de desenvolvimento com preço fictício:
 
 - **Visibilidade**: em produção só entram planos ativos **e** públicos. Planos sandbox
   aparecem apenas em `local`/`testing`.
 - **Rotulagem**: `PlanController` envia `is_sandbox` e o sinônimo explícito
   `price_is_placeholder`. A interface marca o card com o selo "Sandbox", escreve "Valor
   fictício de desenvolvimento — não é oferta" e mostra o aviso do topo da página.
-
-Antes de anunciar qualquer plano como oferta real, é preciso definir os preços comerciais
-e trocar `is_sandbox` para `false` e `is_public` para `true` — pela tela **Painel interno ›
-Planos** (§18), que é a fonte de verdade do catálogo; o seeder só cria o catálogo inicial.
 
 ---
 

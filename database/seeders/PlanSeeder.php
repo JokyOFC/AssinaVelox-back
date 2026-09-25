@@ -7,12 +7,19 @@ use App\Models\Plan;
 use Illuminate\Database\Seeder;
 
 /**
- * Planos base. Os planos pagos são placeholders de desenvolvimento (is_sandbox=true,
- * is_public=false): preços e limites reais são configuração comercial, não oferta.
- * Idempotente (updateOrCreate por code).
+ * Catálogo inicial de planos (docs/cobranca.md §16 e §18). Idempotente (updateOrCreate por
+ * `code`): rodar de novo atualiza os atributos e não duplica nem apaga.
+ *
+ * A oferta comercial: Básico R$ 149, Profissional R$ 249 e Empresarial R$ 349 por mês. O
+ * plano Grátis continua existindo porque é o plano inicial de toda organização nova
+ * (`CreateOrganization`), mas fica privado (`is_public = false`): não é anunciado.
+ *
+ * Depois do primeiro seed, a fonte de verdade é a tela Painel interno › Planos — este
+ * arquivo só descreve como o catálogo nasce.
  */
 class PlanSeeder extends Seeder
 {
+    /** Mantida para os testes e para marcar um plano de desenvolvimento pela tela. */
     public const SANDBOX_DESCRIPTION = 'Plano de desenvolvimento — preços fictícios.';
 
     public function run(): void
@@ -21,7 +28,7 @@ class PlanSeeder extends Seeder
             [
                 'code' => Plan::CODE_FREE,
                 'name' => 'Grátis',
-                'description' => 'Para experimentar: 5 documentos por mês e 1 usuário.',
+                'description' => 'Plano inicial de toda conta nova.',
                 'price_cents' => 0,
                 'currency' => 'BRL',
                 'billing_period' => PlanBillingPeriod::Monthly,
@@ -31,7 +38,25 @@ class PlanSeeder extends Seeder
                     'email_otp' => true,
                     'evidence_page' => true,
                     'company_signature' => false,
-                    'folders' => false,
+                ],
+                'is_active' => true,
+                'is_public' => false,
+                'is_sandbox' => false,
+                'sort_order' => 0,
+            ],
+            [
+                'code' => Plan::CODE_BASIC,
+                'name' => 'Básico',
+                'description' => 'Para quem está começando',
+                'price_cents' => 14_900,
+                'currency' => 'BRL',
+                'billing_period' => PlanBillingPeriod::Monthly,
+                'envelope_quota' => 5,
+                'user_quota' => null,
+                'features' => [
+                    'email_otp' => true,
+                    'evidence_page' => true,
+                    'company_signature' => false,
                 ],
                 'is_active' => true,
                 'is_public' => true,
@@ -41,42 +66,40 @@ class PlanSeeder extends Seeder
             [
                 'code' => Plan::CODE_PROFESSIONAL,
                 'name' => 'Profissional',
-                'description' => self::SANDBOX_DESCRIPTION,
-                'price_cents' => 4_900,
+                'description' => 'Para profissionais e pequenas equipes',
+                'price_cents' => 24_900,
                 'currency' => 'BRL',
                 'billing_period' => PlanBillingPeriod::Monthly,
-                'envelope_quota' => 500,
-                'user_quota' => 10,
+                'envelope_quota' => 50,
+                'user_quota' => null,
                 'features' => [
                     'email_otp' => true,
                     'evidence_page' => true,
-                    'company_signature' => true,
-                    'folders' => true,
+                    'company_signature' => false,
                 ],
                 'is_active' => true,
-                'is_public' => false,
-                'is_sandbox' => true,
+                'is_public' => true,
+                'is_sandbox' => false,
                 'sort_order' => 2,
             ],
             [
                 'code' => Plan::CODE_ENTERPRISE,
                 'name' => 'Empresarial',
-                'description' => self::SANDBOX_DESCRIPTION,
-                'price_cents' => 39_900,
+                'description' => 'Para operações com alto volume',
+                'price_cents' => 34_900,
                 'currency' => 'BRL',
                 'billing_period' => PlanBillingPeriod::Monthly,
-                'envelope_quota' => 3_000,
-                'user_quota' => 50,
+                'envelope_quota' => 100,
+                'user_quota' => null,
                 'features' => [
                     'email_otp' => true,
                     'evidence_page' => true,
-                    'company_signature' => true,
-                    'folders' => true,
-                    'priority_support' => true,
+                    'sms_whatsapp' => true,
+                    'company_signature' => false,
                 ],
                 'is_active' => true,
-                'is_public' => false,
-                'is_sandbox' => true,
+                'is_public' => true,
+                'is_sandbox' => false,
                 'sort_order' => 3,
             ],
         ];

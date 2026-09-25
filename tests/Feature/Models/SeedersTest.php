@@ -12,17 +12,27 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\PlanSeeder;
 use Database\Seeders\PlatformAdminSeeder;
 
-it('PlanSeeder é idempotente e cria os três planos', function () {
+it('PlanSeeder é idempotente e cria o catálogo comercial: Grátis privado + Básico, Profissional e Empresarial', function () {
     $this->seed(PlanSeeder::class);
     $this->seed(PlanSeeder::class);
 
-    expect(Plan::query()->count())->toBe(3)
+    $plan = fn (string $code): ?Plan => Plan::query()->where('code', $code)->first();
+
+    expect(Plan::query()->count())->toBe(4)
         ->and(Plan::free()?->envelope_quota)->toBe(5)
         ->and(Plan::free()?->user_quota)->toBe(1)
         ->and(Plan::free()?->price_cents)->toBe(0)
-        ->and(Plan::query()->where('code', 'professional')->first()?->is_sandbox)->toBeTrue()
-        ->and(Plan::query()->where('code', 'professional')->first()?->is_public)->toBeFalse()
-        ->and(Plan::query()->where('code', 'enterprise')->first()?->description)->toBe(PlanSeeder::SANDBOX_DESCRIPTION);
+        ->and(Plan::free()?->is_public)->toBeFalse()
+        ->and($plan('basic')?->price_cents)->toBe(14_900)
+        ->and($plan('basic')?->envelope_quota)->toBe(5)
+        ->and($plan('professional')?->price_cents)->toBe(24_900)
+        ->and($plan('professional')?->envelope_quota)->toBe(50)
+        ->and($plan('professional')?->is_sandbox)->toBeFalse()
+        ->and($plan('professional')?->is_public)->toBeTrue()
+        ->and($plan('enterprise')?->price_cents)->toBe(34_900)
+        ->and($plan('enterprise')?->envelope_quota)->toBe(100)
+        ->and($plan('enterprise')?->features['sms_whatsapp'])->toBeTrue()
+        ->and($plan('basic')?->features['sms_whatsapp'] ?? false)->toBeFalse();
 });
 
 it('DatabaseSeeder popula admin e organizações demo em testing', function () {

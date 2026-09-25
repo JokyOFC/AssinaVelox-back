@@ -36,6 +36,8 @@ class Plan extends Model
 
     public const CODE_FREE = 'free';
 
+    public const CODE_BASIC = 'basic';
+
     public const CODE_PROFESSIONAL = 'professional';
 
     public const CODE_ENTERPRISE = 'enterprise';

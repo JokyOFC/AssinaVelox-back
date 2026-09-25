@@ -39,7 +39,7 @@ test('o site recebe os planos ativos em ordem, com rótulos de recursos e o dest
         ->and($professional['price_is_placeholder'])->toBeTrue()
         ->and($professional['cta'])->toBe('register');
 
-    expect($enterprise['cta'])->toBe('contact')
+    expect($enterprise['cta'])->toBe('register')
         ->and($enterprise['highlighted'])->toBeFalse();
 });
 

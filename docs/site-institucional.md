@@ -31,11 +31,11 @@ token Bearer e é a API v1 das organizações). O prefixo `api/` faz os erros sa
 framework (`paths: api/*`, qualquer origem, sem credenciais): as respostas são públicas por
 definição, então uma origem aberta não expõe nada que a página do app já não exponha.
 
-| Rota                                          | Nome                     | Limite                            | O que devolve                                                                                        |
-| --------------------------------------------- | ------------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `GET /api/site/planos`                        | `site.plans`             | `throttle:public` (60/min por IP) | `{ data: [plano…] }` — ver §2.1. `Cache-Control: public, max-age=300`.                                |
-| `GET /api/site/verificar/{code}`              | `site.verify.show`       | + `20/min` por IP                 | `{ code, found, result }` — o mesmo `result` da página `/verificar` (§2.2). `Cache-Control: no-store`. |
-| `POST /api/site/verificar/{code}/conferir`    | `site.verify.check_file` | + `10/min` por IP                 | `{ code, file_check }` — conferência de um resumo SHA-256 já calculado (§2.3).                        |
+| Rota                                       | Nome                     | Limite                            | O que devolve                                                                                          |
+| ------------------------------------------ | ------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET /api/site/planos`                     | `site.plans`             | `throttle:public` (60/min por IP) | `{ data: [plano…] }` — ver §2.1. `Cache-Control: public, max-age=300`.                                 |
+| `GET /api/site/verificar/{code}`           | `site.verify.show`       | + `20/min` por IP                 | `{ code, found, result }` — o mesmo `result` da página `/verificar` (§2.2). `Cache-Control: no-store`. |
+| `POST /api/site/verificar/{code}/conferir` | `site.verify.check_file` | + `10/min` por IP                 | `{ code, file_check }` — conferência de um resumo SHA-256 já calculado (§2.3).                         |
 
 ### 2.1 Catálogo de planos
 
@@ -46,23 +46,28 @@ oferta. Cada item:
 
 ```json
 {
-  "code": "free",
-  "name": "Grátis",
-  "description": "Para experimentar: 5 documentos por mês e 1 usuário.",
-  "currency": "BRL",
-  "billing_period": "monthly",
-  "billing_period_label": "Mensal",
-  "price_cents": 0,
-  "price_cents_monthly": 0,
-  "price_formatted": "Grátis",
-  "is_free": true,
-  "features": ["5 documentos/mês", "Código por e-mail", "Página de evidências", "1 usuário"],
-  "limits": { "envelopes_per_month": 5, "members": 1 },
-  "highlighted": false,
-  "is_sandbox": false,
-  "price_is_placeholder": false,
-  "cta": "register",
-  "register_url": "https://app.assinavelox.com.br/register"
+    "code": "free",
+    "name": "Grátis",
+    "description": "Para experimentar: 5 documentos por mês e 1 usuário.",
+    "currency": "BRL",
+    "billing_period": "monthly",
+    "billing_period_label": "Mensal",
+    "price_cents": 0,
+    "price_cents_monthly": 0,
+    "price_formatted": "Grátis",
+    "is_free": true,
+    "features": [
+        "5 documentos/mês",
+        "Código por e-mail",
+        "Página de evidências",
+        "1 usuário"
+    ],
+    "limits": { "envelopes_per_month": 5, "members": 1 },
+    "highlighted": false,
+    "is_sandbox": false,
+    "price_is_placeholder": false,
+    "cta": "register",
+    "register_url": "https://app.assinavelox.com.br/register"
 }
 ```
 
@@ -72,8 +77,8 @@ abre o cadastro do app) ou `contact` (plano Empresarial: conversa comercial, no 
 `highlighted` marca o plano Profissional.
 
 Em produção, com o catálogo do seeder, só o plano Grátis é anunciado até que os planos pagos
-sejam marcados como `is_public = true` e `is_sandbox = false` — configuração comercial, não
-código. O site completa a grade com um cartão "Empresarial · sob consulta" quando o catálogo não
+sejam marcados como públicos e não sandbox — pela tela Painel interno › Planos
+(`docs/cobranca.md` §18), não por código. O site completa a grade com um cartão "Empresarial · sob consulta" quando o catálogo não
 traz o plano Empresarial, porque esse cartão é um convite à conversa, não um preço.
 
 ### 2.2 Verificação por código
@@ -99,10 +104,10 @@ ou `none` — para quem colou um resumo calculado por conta própria.
 
 ## 3. Configuração
 
-| Onde     | Variável                | Padrão                            | Papel                                                          |
-| -------- | ----------------------- | --------------------------------- | -------------------------------------------------------------- |
-| app      | `ASSINAVELOX_SITE_URL`  | `https://assinavelox.com.br`      | destino do logo (§1)                                           |
-| site     | `VITE_APP_URL`          | `https://app.assinavelox.com.br`  | base de `/login`, `/register` e `/api/site/*` (§2)             |
+| Onde | Variável               | Padrão                           | Papel                                              |
+| ---- | ---------------------- | -------------------------------- | -------------------------------------------------- |
+| app  | `ASSINAVELOX_SITE_URL` | `https://assinavelox.com.br`     | destino do logo (§1)                               |
+| site | `VITE_APP_URL`         | `https://app.assinavelox.com.br` | base de `/login`, `/register` e `/api/site/*` (§2) |
 
 Em desenvolvimento, `VITE_APP_URL=http://localhost:8000` no `.env` do site aponta o catálogo e a
 verificação para o `php artisan serve` local.

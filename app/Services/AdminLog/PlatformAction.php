@@ -18,6 +18,9 @@ enum PlatformAction: string
     case RiskStatusChanged = 'risk.status_changed';
     case RiskReviewDecided = 'risk.review_decided';
     case RiskReviewRequested = 'risk.review_requested';
+    // Catálogo de planos pelo painel interno (docs/cobranca.md §18).
+    case PlanCreated = 'plan.created';
+    case PlanUpdated = 'plan.updated';
 
     public function label(): string
     {
@@ -30,6 +33,8 @@ enum PlatformAction: string
             self::RiskStatusChanged => 'Estado de risco da organização alterado',
             self::RiskReviewDecided => 'Caso de antifraude decidido',
             self::RiskReviewRequested => 'Revisão de antifraude pedida pela organização',
+            self::PlanCreated => 'Plano criado',
+            self::PlanUpdated => 'Plano alterado',
         };
     }
 
@@ -41,7 +46,7 @@ enum PlatformAction: string
         return match ($this) {
             self::UserBlocked, self::ImpersonationStarted, self::ImpersonationDenied, self::RiskStatusChanged => 'warn',
             self::UserUnblocked => 'ok',
-            self::ImpersonationEnded, self::RiskReviewDecided, self::RiskReviewRequested => 'info',
+            self::ImpersonationEnded, self::RiskReviewDecided, self::RiskReviewRequested, self::PlanCreated, self::PlanUpdated => 'info',
         };
     }
 

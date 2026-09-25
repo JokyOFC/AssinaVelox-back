@@ -124,12 +124,19 @@ class AuditController extends Controller
             'reason' => 'Motivo',
             'end_reason' => 'Encerramento',
             'pages_viewed' => 'Páginas visitadas',
+            'plan' => 'Plano',
+            'changes' => 'Alterações',
         ];
 
         $details = [];
 
         foreach ($labels as $key => $label) {
             $value = $payload[$key] ?? null;
+
+            // Lista de alterações do catálogo de planos ("Preço: R$ 49,00 → R$ 79,90", …).
+            if (is_array($value)) {
+                $value = implode('; ', array_filter($value, 'is_scalar'));
+            }
 
             if (! is_scalar($value) || $value === '') {
                 continue;

@@ -19,6 +19,7 @@ import {
     Tablet,
     type LucideIcon,
     Users,
+    Package,
 } from 'lucide-react';
 import { AccountMenu } from '@/components/account-menu';
 import AppLogo from '@/components/app-logo';
@@ -45,6 +46,7 @@ import { index as adminAffiliates } from '@/routes/admin/affiliates';
 import { index as adminAudit } from '@/routes/admin/audit';
 import { index as adminBilling } from '@/routes/admin/billing';
 import { index as adminOrganizations } from '@/routes/admin/organizations';
+import { index as adminPlans } from '@/routes/admin/plans';
 import { index as adminRisk } from '@/routes/admin/risk';
 import { index as adminSettings } from '@/routes/admin/settings';
 import { index as adminUsers } from '@/routes/admin/users';
@@ -293,6 +295,14 @@ export function AppSidebar({ mode }: { mode: SidebarMode }) {
                     title: 'Clientes',
                     href: adminOrganizations(),
                     icon: Building2,
+                },
+                {
+                    // Catálogo de planos (docs/cobranca.md §18): preço, cotas, recursos e
+                    // visibilidade do que o app e o site anunciam.
+                    key: 'admin-plans',
+                    title: 'Planos',
+                    href: adminPlans(),
+                    icon: Package,
                 },
                 {
                     key: 'admin-billing',

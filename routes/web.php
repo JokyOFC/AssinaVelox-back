@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\BillingController as AdminBillingController;
 use App\Http\Controllers\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\PlaceholderController as AdminPlaceholderController;
+use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Admin\RiskAppealController;
 use App\Http\Controllers\Admin\RiskReportController as AdminRiskReportController;
 use App\Http\Controllers\Admin\RiskReviewController as AdminRiskReviewController;
@@ -610,6 +611,12 @@ Route::middleware(['auth', 'verified', 'platform-admin'])->prefix('admin')->name
     Route::get('clientes', [AdminOrganizationController::class, 'index'])->name('organizations.index');
     Route::get('clientes/exportar', [AdminOrganizationController::class, 'export'])->name('organizations.export');
     Route::get('clientes/{organization}', [AdminOrganizationController::class, 'show'])->name('organizations.show');
+
+    // Catálogo de planos (docs/cobranca.md §18): a oferta que o app e o site anunciam. Criar e
+    // editar exigem senha confirmada e ficam em platform_audit_events. Sem exclusão.
+    Route::get('planos', [AdminPlanController::class, 'index'])->name('plans.index');
+    Route::post('planos', [AdminPlanController::class, 'store'])->middleware(['password.confirm', 'throttle:20,1'])->name('plans.store');
+    Route::patch('planos/{plan}', [AdminPlanController::class, 'update'])->middleware(['password.confirm', 'throttle:30,1'])->name('plans.update');
 
     // Fase 2, onda D (D-PAY — docs/fase-2/pagamentos-e-fiscal.md): flag `extended_payments`;
     // desligada, a página é o placeholder da Fase 1 e as ações respondem 404. Leitura sem

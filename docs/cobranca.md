@@ -551,7 +551,8 @@ desenvolvimento, **não** uma oferta comercial.
   fictício de desenvolvimento — não é oferta" e mostra o aviso do topo da página.
 
 Antes de anunciar qualquer plano como oferta real, é preciso definir os preços comerciais
-e trocar `is_sandbox` para `false` e `is_public` para `true` no seeder.
+e trocar `is_sandbox` para `false` e `is_public` para `true` — pela tela **Painel interno ›
+Planos** (§18), que é a fonte de verdade do catálogo; o seeder só cria o catálogo inicial.
 
 ---
 
@@ -574,3 +575,41 @@ e trocar `is_sandbox` para `false` e `is_public` para `true` no seeder.
 `tests/Feature/Billing/Support/receipt_text.py` roda no venv do pdftool (só `pypdf`) para
 ler o texto do PDF: o DOMPDF embute a DejaVu Sans com `Identity-H`, então o texto fica em
 identificadores de glifo e uma leitura ingênua do arquivo não encontraria a frase impressa.
+
+---
+
+## 18. Catálogo de planos no painel interno
+
+`GET /admin/planos` (`admin.plans.index`, `Admin\PlanController`, página
+`admin/plans/index.tsx`), só para `platform-admin`. É onde a operadora define a oferta: a
+tabela `plans` é a fonte de verdade e o `PlanSeeder` apenas cria o catálogo inicial.
+
+Por plano: nome, descrição, **preço** (em reais na tela, `price_cents` no banco), período
+(`monthly`/`yearly`), cotas de documentos/mês e usuários (vazio = ilimitado), armazenamento
+em GB (`features.storage_bytes`), visibilidade (`is_active`, `is_public`, `is_sandbox`) e
+os **recursos** — os booleanos de `plans.features` que a plataforma entende, listados em
+`App\Services\Plans\PlanFeatureCatalog`. Para cada recurso com interruptor global
+(`config('assinavelox.features.*')`) a tela mostra se a instalação está com ele ligado: um
+plano pode "incluir" o recurso, mas ele só existe quando o interruptor E o plano dizem sim
+(roadmap §1 T8). A assinatura criptográfica da operadora ganha o aviso "sem certificado
+ativo" quando `PlanFeatures::isOffered()` é falso.
+
+Regras (`SavePlanRequest`):
+
+- o código (`^[a-z][a-z0-9_]{1,31}$`, único) só existe na criação — depois é a identidade
+  do plano (rota, `Plan::CODE_*`, assinaturas) e não muda;
+- `features` aceita só as chaves do catálogo; chaves fora dele (`bulk_generation_limits`) são
+  preservadas como estão ao salvar (`PlanCatalogEditor::mergeFeatures`);
+- o plano Grátis (`free`) é o plano inicial de toda organização nova (`CreateOrganization`):
+  não pode ser desativado nem deixar de custar R$ 0,00;
+- não há exclusão: um plano com assinaturas é desativado e some das ofertas, sem tocar em quem
+  já o contratou.
+
+Criar (`POST admin.plans.store`) e editar (`PATCH admin.plans.update`) exigem senha confirmada
+(`password.confirm`) e gravam `plan.created` / `plan.updated` em `platform_audit_events`
+com a lista legível do que mudou ("Preço: R$ 49,00 → R$ 79,90"); salvar sem alteração não
+gera evento. Testes em `tests/Feature/Admin/AdminPlansTest.php`.
+
+O que a tela publica é o que `plans.index` (app), `GET /api/site/planos` (site,
+`docs/site-institucional.md`) e o checkout consomem — mudar aqui muda a oferta para todas
+as contratações novas, imediatamente.
